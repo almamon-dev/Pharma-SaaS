@@ -1,0 +1,229 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+@source '../js/**/*.tsx';
+@source '../js/**/*.ts';
+
+@theme {
+    --font-sans: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-brand: #FF4A1F;
+    --color-brand-hover: #D13915;
+    --color-brand-light: #FFF0ED;
+    --color-brand-50: #fff0ed;
+    --color-brand-100: #ffdcd4;
+    --color-brand-500: #ff4a1f;
+    --color-brand-600: #e03e15;
+    --color-brand-700: #d13915;
+}
+
+@layer base {
+    html,
+    body {
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]),
+    a[href],
+    select:not(:disabled) {
+        cursor: pointer;
+    }
+
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    input[type="number"] {
+        -moz-appearance: textfield;
+    }
+}
+
+.main-auth-card {
+    border: 1px solid #e2e8f0;
+}
+
+html.dark .main-auth-card {
+    border: 1px solid #384150;
+}
+
+@keyframes equalizer {
+    0%,
+    100% {
+        height: 4px;
+        opacity: 0.35;
+    }
+    50% {
+        height: 16px;
+        opacity: 1;
+    }
+}
+
+.animate-equalizer {
+    animation: equalizer 0.75s infinite ease-in-out;
+}
+
+.custom-scrollbar::-webkit-scrollbar,
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.custom-scrollbar:hover {
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.no-scrollbar,
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+input[type="checkbox"].table-checkbox,
+.table-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border: 1px solid #d4d8de;
+    border-radius: 3px;
+    outline: none;
+    background-color: #ffffff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.15s ease-in-out;
+}
+
+input[type="checkbox"].table-checkbox:hover {
+    border-color: #b0b8c4;
+}
+
+input[type="checkbox"].table-checkbox:checked {
+    background-color: #FF4A1F;
+    border-color: #FF4A1F;
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+input[type="checkbox"].table-checkbox:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 74, 31, 0.25);
+}
+
+html.dark input[type="checkbox"].table-checkbox {
+    background-color: #1e2329 !important;
+    border-color: #2e3540 !important;
+}
+
+html.dark input[type="checkbox"].table-checkbox:checked {
+    background-color: #FF4A1F !important;
+    border-color: #FF4A1F !important;
+}
+
+@keyframes liveShimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.animate-live-shimmer {
+    background: linear-gradient(
+        90deg,
+        #e2e8f0 0%,
+        #f1f5f9 25%,
+        #ffffff 50%,
+        #f1f5f9 75%,
+        #e2e8f0 100%
+    );
+    background-size: 200% 100%;
+    animation: liveShimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    will-change: opacity, background-position;
+}
+
+.dark .animate-live-shimmer,
+html.dark .animate-live-shimmer {
+    background: linear-gradient(
+        90deg,
+        #1e293b 0%,
+        #334155 25%,
+        #475569 50%,
+        #334155 75%,
+        #1e293b 100%
+    );
+    background-size: 200% 100%;
+    animation: liveShimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    will-change: opacity, background-position;
+}
+
+.table-wrap-cells td {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    vertical-align: top !important;
+}
+
+.table-wrap-cells td *,
+.table-wrap-cells td .truncate,
+.table-wrap-cells td span.truncate,
+.table-wrap-cells td p.truncate,
+.table-wrap-cells td div.truncate,
+.table-wrap-cells td a.truncate {
+    white-space: normal !important;
+    text-overflow: clip !important;
+    overflow: visible !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+table:not(.table-wrap-cells) tbody td:not(:first-child):not(:last-child) {
+    white-space: nowrap;
+}
