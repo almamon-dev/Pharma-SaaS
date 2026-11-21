@@ -48,10 +48,13 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
     const [showModal, setShowModal] = useState(false);
     const [showQuickFeature, setShowQuickFeature] = useState(false);
     const [editingPlan, setEditingPlan] = useState<AdminPlanRow | null>(null);
+    const [modalLangTab, setModalLangTab] = useState<'en' | 'bn'>('en');
 
     const form = useForm<{
         name: string;
+        name_bn: string;
         description: string;
+        description_bn: string;
         monthly_price: string;
         annual_price: string;
         trial_days: string;
@@ -60,11 +63,14 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
         max_users: string;
         max_medicines: string;
         features_text: string;
+        features_bn_text: string;
         module_ids: number[];
         is_popular: boolean;
     }>({
         name: '',
+        name_bn: '',
         description: '',
+        description_bn: '',
         monthly_price: '29',
         annual_price: '290',
         trial_days: '14',
@@ -73,6 +79,7 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
         max_users: '5',
         max_medicines: '1500',
         features_text: '',
+        features_bn_text: '',
         module_ids: [],
         is_popular: false,
     });
@@ -87,9 +94,12 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
     const openCreate = () => {
         setEditingPlan(null);
         setShowQuickFeature(false);
+        setModalLangTab('en');
         form.setData({
             name: '',
+            name_bn: '',
             description: '',
+            description_bn: '',
             monthly_price: '29',
             annual_price: '290',
             trial_days: '14',
@@ -98,6 +108,7 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
             max_users: '5',
             max_medicines: '1500',
             features_text: '',
+            features_bn_text: '',
             module_ids: modules
                 .filter((m) => m.is_active !== false && !m.is_core)
                 .map((m) => m.id),
@@ -109,9 +120,12 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
     const openEdit = (plan: AdminPlanRow) => {
         setEditingPlan(plan);
         setShowQuickFeature(false);
+        setModalLangTab('en');
         form.setData({
             name: plan.name,
+            name_bn: plan.name_bn ?? '',
             description: plan.description ?? '',
+            description_bn: plan.description_bn ?? '',
             monthly_price: String(plan.monthly_price ?? 0),
             annual_price: String(plan.annual_price ?? 0),
             trial_days: String(plan.trial_days ?? 14),
@@ -120,6 +134,7 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
             max_users: String(plan.max_users),
             max_medicines: String(plan.max_medicines),
             features_text: (plan.features ?? []).join('\n'),
+            features_bn_text: (plan.features_bn ?? []).join('\n'),
             module_ids: (plan.modules ?? []).map((m) => m.id),
             is_popular: Boolean(plan.is_popular),
         });
@@ -179,14 +194,21 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                 sortable: true,
                 render: (row) => (
                     <div
-                        className="flex items-center gap-2 whitespace-nowrap"
+                        className="flex flex-col gap-0.5"
                         title={row.description ?? ''}
                     >
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {row.name}
-                        </span>
-                        {row.is_popular && (
-                            <StatusDot variant="brand">Popular</StatusDot>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                {row.name}
+                            </span>
+                            {row.is_popular && (
+                                <StatusDot variant="brand">Popular</StatusDot>
+                            )}
+                        </div>
+                        {row.name_bn && (
+                            <span className="text-[11px] font-medium text-[#FF4A1F] dark:text-[#ff7450]">
+                                {row.name_bn}
+                            </span>
                         )}
                     </div>
                 ),
@@ -355,22 +377,87 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
-                            <Input
-                                label="Plan Name"
-                                required
-                                value={form.data.name}
-                                onChange={(e) =>
-                                    form.setData('name', e.target.value)
-                                }
-                                error={form.errors.name}
-                            />
-                            <Input
-                                label="Description"
-                                value={form.data.description}
-                                onChange={(e) =>
-                                    form.setData('description', e.target.value)
-                                }
-                            />
+                            {/* Bilingual Plan Information Header/Tabs */}
+                            <div className="rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-3 space-y-3">
+                                <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                            Plan Content & Identity (দ্বিভাষিক / Bilingual)
+                                        </p>
+                                        <p className="text-[11px] text-slate-400">
+                                            Manage plan title, description and feature bullet highlights in English and বাংলা.
+                                        </p>
+                                    </div>
+                                    <div className="inline-flex rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] p-0.5 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setModalLangTab('en')}
+                                            className={`px-3 py-1 text-xs font-semibold rounded-[3px] transition-colors cursor-pointer ${
+                                                modalLangTab === 'en'
+                                                    ? 'bg-[#FF4A1F] text-white'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            English
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setModalLangTab('bn')}
+                                            className={`px-3 py-1 text-xs font-semibold rounded-[3px] transition-colors cursor-pointer ${
+                                                modalLangTab === 'bn'
+                                                    ? 'bg-[#FF4A1F] text-white'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            বাংলা (Bengali)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {modalLangTab === 'en' ? (
+                                    <div className="space-y-3">
+                                        <Input
+                                            label="Plan Name (English)"
+                                            required
+                                            placeholder="e.g. Starter Dispensary"
+                                            value={form.data.name}
+                                            onChange={(e) =>
+                                                form.setData('name', e.target.value)
+                                            }
+                                            error={form.errors.name}
+                                        />
+                                        <Input
+                                            label="Description (English)"
+                                            placeholder="Brief overview of who this plan is for..."
+                                            value={form.data.description}
+                                            onChange={(e) =>
+                                                form.setData('description', e.target.value)
+                                            }
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <Input
+                                            label="প্ল্যানের নাম (বাংলা / Bengali Name)"
+                                            placeholder="যেমন: স্টার্টার ডিসপেনসারি"
+                                            value={form.data.name_bn}
+                                            onChange={(e) =>
+                                                form.setData('name_bn', e.target.value)
+                                            }
+                                            error={form.errors.name_bn}
+                                        />
+                                        <Input
+                                            label="প্ল্যানের বিবরণ (বাংলা / Bengali Description)"
+                                            placeholder="যেমন: একক ফার্মেসি ব্যবসা ও শাখার জন্য প্রয়োজনীয় পিওএস ও ইনভেন্টরি..."
+                                            value={form.data.description_bn}
+                                            onChange={(e) =>
+                                                form.setData('description_bn', e.target.value)
+                                            }
+                                            error={form.errors.description_bn}
+                                        />
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="grid grid-cols-3 gap-3">
                                 <Input
@@ -623,17 +710,43 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                                 </div>
                             </div>
 
-                            <Textarea
-                                label="Plan Highlight Bullets (1 bullet per line)"
-                                rows={3}
-                                value={form.data.features_text}
-                                onChange={(e) =>
-                                    form.setData(
-                                        'features_text',
-                                        e.target.value
-                                    )
-                                }
-                            />
+                            <div className="rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-3 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                        {modalLangTab === 'en'
+                                            ? 'Plan Highlight Bullets (English - 1 bullet per line)'
+                                            : 'প্ল্যানের মূল সুবিধাসমূহ (বাংলা - প্রতি লাইনে ১টি বুলেট)'}
+                                    </label>
+                                    <span className="text-[10.5px] font-medium text-slate-400">
+                                        Active: {modalLangTab === 'en' ? 'English Bullets' : 'বাংলা বুলেট'}
+                                    </span>
+                                </div>
+                                {modalLangTab === 'en' ? (
+                                    <Textarea
+                                        rows={3}
+                                        placeholder="1 Business Tenant & Head Office Branch&#10;Up to 5 Employee Accounts&#10;Batch & Expiry Date Tracking (FEFO)"
+                                        value={form.data.features_text}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'features_text',
+                                                e.target.value
+                                            )
+                                        }
+                                    />
+                                ) : (
+                                    <Textarea
+                                        rows={3}
+                                        placeholder="১টি ফার্মেসি ব্যবসা এবং হেড অফিস শাখা&#10;সর্বোচ্চ ৫ জন কর্মী অ্যাকাউন্ট&#10;ব্যাচ ও মেয়াদোত্তীর্ণ ট্র্যাকিং (FEFO)"
+                                        value={form.data.features_bn_text}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'features_bn_text',
+                                                e.target.value
+                                            )
+                                        }
+                                    />
+                                )}
+                            </div>
 
                             <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
                                 <input

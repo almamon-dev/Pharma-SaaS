@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Actions\Tenancy\ProvisionTenantAccess;
+use App\Enums\StockMovementType;
 use App\Enums\TenantRole;
 use App\Models\AuditLog;
 use App\Models\Branch;
@@ -14,6 +15,7 @@ use App\Models\Role;
 use App\Models\SaasPlan;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
@@ -271,7 +273,7 @@ class DemoPharmacySeeder extends Seeder
         $provisionAccess->execute($careplus);
 
         if ($growthPlan) {
-            $subscriptionService->activate(
+            $growthSub = $subscriptionService->activate(
                 admin: $admin,
                 plan: $growthPlan,
                 billingCycle: 'monthly',
@@ -279,6 +281,9 @@ class DemoPharmacySeeder extends Seeder
                 primaryTenant: $greenlife,
                 idempotencyKey: 'seed-growth-admin-1',
             );
+
+            $subscriptionService->syncModulesForTenant($greenlife, $growthPlan, $growthSub->status);
+            $subscriptionService->syncModulesForTenant($careplus, $growthPlan, $growthSub->status);
         }
 
         // 3. Independent Second Subscriber Admin (Metro Health Pharma)
@@ -346,7 +351,7 @@ class DemoPharmacySeeder extends Seeder
         $provisionAccess->execute($metroTenant);
 
         if ($starterPlan) {
-            $subscriptionService->activate(
+            $starterSub = $subscriptionService->activate(
                 admin: $subscriberTwo,
                 plan: $starterPlan,
                 billingCycle: 'monthly',
@@ -354,6 +359,8 @@ class DemoPharmacySeeder extends Seeder
                 primaryTenant: $metroTenant,
                 idempotencyKey: 'seed-starter-metro-1',
             );
+
+            $subscriptionService->syncModulesForTenant($metroTenant, $starterPlan, $starterSub->status);
         }
 
         // Seed inventory, customers, suppliers & sample invoices inside TenantScope
@@ -561,6 +568,25 @@ class DemoPharmacySeeder extends Seeder
                 ]
             );
 
+            if (! StockMovement::query()->where('medicine_batch_id', $batch->id)->exists()) {
+                StockMovement::query()->create([
+                    'branch_id' => $branch->id,
+                    'medicine_id' => $medicine->id,
+                    'medicine_batch_id' => $batch->id,
+                    'user_id' => $user->id,
+                    'movement_type' => StockMovementType::OPENING->value,
+                    'quantity_change' => (int) $batch->quantity_received,
+                    'balance_before' => 0,
+                    'balance_after' => (int) $batch->quantity_received,
+                    'unit_cost' => (float) $batch->purchase_price,
+                    'total_cost' => round((int) $batch->quantity_received * (float) $batch->purchase_price, 2),
+                    'reference_type' => MedicineBatch::class,
+                    'reference_id' => $batch->id,
+                    'reason' => 'Seeded opening FEFO batch',
+                    'occurred_at' => now()->subDays(5),
+                ]);
+            }
+
             if ($idx === 0) {
                 $firstMed = $medicine;
                 $firstBatch = $batch;
@@ -655,7 +681,7 @@ class DemoPharmacySeeder extends Seeder
             ]
         );
 
-        MedicineBatch::query()->updateOrCreate(
+        $cpBatch = MedicineBatch::query()->updateOrCreate(
             [
                 'tenant_id' => $tenant->id,
                 'branch_id' => $branch->id,
@@ -672,6 +698,25 @@ class DemoPharmacySeeder extends Seeder
                 'status' => 'active',
             ]
         );
+
+        if (! StockMovement::query()->where('medicine_batch_id', $cpBatch->id)->exists()) {
+            StockMovement::query()->create([
+                'branch_id' => $branch->id,
+                'medicine_id' => $med->id,
+                'medicine_batch_id' => $cpBatch->id,
+                'user_id' => $user->id,
+                'movement_type' => StockMovementType::OPENING->value,
+                'quantity_change' => 300,
+                'balance_before' => 0,
+                'balance_after' => 300,
+                'unit_cost' => 5.00,
+                'total_cost' => 1500.00,
+                'reference_type' => MedicineBatch::class,
+                'reference_id' => $cpBatch->id,
+                'reason' => 'Seeded opening FEFO batch',
+                'occurred_at' => now()->subDays(4),
+            ]);
+        }
 
         if (! AuditLog::query()->where('action', 'tenant.initialized')->exists()) {
             AuditLog::record(

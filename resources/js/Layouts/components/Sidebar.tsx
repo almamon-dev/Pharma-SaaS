@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    Building2,
     Contact2,
     CreditCard,
+    GitBranch,
     Layers,
     LayoutDashboard,
     LogOut,
@@ -139,12 +139,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   ]
                 : []),
             ...(hasFeature('inventory') &&
-            hasPerm('inventory.view', 'inventory.manage')
+            hasPerm('inventory.view', 'inventory.manage', 'inventory.adjust')
                 ? [
                       {
                           name: 'Inventory & FEFO',
                           href: route('inventory.index'),
-                          active: route().current('inventory.*'),
+                          active: route().current('inventory.index'),
+                      },
+                      {
+                          name: 'Batches & Expiry',
+                          href: route('inventory.batches'),
+                          active: route().current('inventory.batches'),
+                      },
+                      {
+                          name: 'Stock Movements',
+                          href: route('inventory.movements'),
+                          active: route().current('inventory.movements'),
                       },
                   ]
                 : []),
@@ -167,31 +177,37 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 : []),
         ];
 
-        const organizationItems = [
+        const organizationEntries: SidebarEntry[] = [
             ...(isSubscriberAdmin
                 ? [
                       {
+                          category: 'Organization',
                           name: 'Business Tenants',
                           href: route('tenants.index'),
                           active: route().current('tenants.*'),
+                          icon: Store,
                       },
                   ]
                 : []),
             ...(hasFeature('branches')
                 ? [
                       {
+                          category: 'Organization',
                           name: 'Branches',
                           href: route('branches.index'),
                           active: route().current('branches.*'),
+                          icon: GitBranch,
                       },
                   ]
                 : []),
             ...(hasFeature('team_rbac') && hasPerm('team.manage')
                 ? [
                       {
+                          category: 'Organization',
                           name: 'Employees & Roles',
                           href: route('team.index'),
                           active: route().current('team.*'),
+                          icon: Users,
                       },
                   ]
                 : []),
@@ -225,16 +241,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       },
                   ]
                 : []),
-            ...(organizationItems.length > 0
-                ? [
-                      {
-                          category: 'Organization',
-                          group: 'Tenants & Team',
-                          icon: Building2,
-                          items: organizationItems,
-                      },
-                  ]
-                : []),
+            ...organizationEntries,
             ...(isSubscriberAdmin
                 ? [
                       {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowRightLeft,
     Building2,
@@ -25,7 +25,7 @@ import {
     EmptyState,
     TableActionMenu,
 } from '@/Components/tables';
-import { SubscriptionUsage } from '@/types';
+import { SharedPageProps, SubscriptionUsage } from '@/types';
 
 interface TenantRow {
     id: number;
@@ -67,6 +67,10 @@ export default function TenantsIndex({
     canManageTenants,
     baseDomain,
 }: TenantsIndexProps) {
+    const { tenant: sharedTenant } = usePage<SharedPageProps>().props;
+    const canManageBranches = (sharedTenant?.enabledFeatures ?? []).includes(
+        'branches'
+    );
     const [showCreateModal, setShowCreateModal] = useState(
         tenants.length === 0
     );
@@ -305,6 +309,16 @@ export default function TenantsIndex({
                                 onClick: () => switchWorkspace(row.id),
                                 variant: 'brand',
                                 hidden: row.is_current || row.status !== 'active',
+                            },
+                            {
+                                key: 'branches',
+                                label: `Manage Branches (${row.branches_count})`,
+                                icon: <GitBranch className="h-3.5 w-3.5" />,
+                                onClick: () =>
+                                    router.visit(
+                                        `${route('branches.index')}?tenant_id=${row.id}`
+                                    ),
+                                hidden: !canManageBranches,
                             },
                             {
                                 key: 'edit',

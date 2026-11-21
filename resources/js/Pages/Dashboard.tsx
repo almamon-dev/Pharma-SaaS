@@ -237,6 +237,23 @@ export default function Dashboard({
             }`}
             actions={
                 <>
+                    {hasFeature('branches') &&
+                        tenant?.canManageOrganization && (
+                            <Link
+                                href={
+                                    usage.branches.used < usage.branches.limit
+                                        ? `${route('branches.index')}?create=1`
+                                        : route('branches.index')
+                                }
+                            >
+                                <Button variant="outline" size="sm">
+                                    <GitBranch className="h-3.5 w-3.5" />
+                                    {usage.branches.used < usage.branches.limit
+                                        ? 'Add Branch'
+                                        : 'Branches'}
+                                </Button>
+                            </Link>
+                        )}
                     <Link href={route('inventory.index')}>
                         <Button variant="outline" size="sm">
                             <Plus className="h-3.5 w-3.5" />

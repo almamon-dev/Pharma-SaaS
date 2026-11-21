@@ -59,6 +59,7 @@ class ProvisionTenantAccess
     {
         $catalog = self::modulesCatalog();
         $order = 1;
+        $existingModuleIds = $tenant->modules()->pluck('modules.id')->all();
 
         foreach ($catalog as $key => $definition) {
             $module = Module::query()->updateOrCreate(
@@ -72,12 +73,12 @@ class ProvisionTenantAccess
                 ]
             );
 
-            $tenant->modules()->syncWithoutDetaching([
-                $module->id => [
+            if (! in_array($module->id, $existingModuleIds, true)) {
+                $tenant->modules()->attach($module->id, [
                     'is_enabled' => $definition['core'] && $module->is_active,
                     'enabled_at' => ($definition['core'] && $module->is_active) ? now() : null,
-                ],
-            ]);
+                ]);
+            }
         }
 
         foreach (array_keys(TenantRole::PERMISSION_CATALOG) as $permissionName) {

@@ -23,6 +23,7 @@ class Medicine extends Model
         'barcode',
         'dosage_form',
         'strength',
+        'description',
         'unit',
         'units_per_strip',
         'units_per_box',
@@ -72,6 +73,20 @@ class Medicine extends Model
         return null;
     }
 
+    public function resolvedBoxPurchasePrice(): ?float
+    {
+        if ($this->box_purchase_price !== null && (float) $this->box_purchase_price > 0) {
+            return (float) $this->box_purchase_price;
+        }
+
+        $unitsPerBox = (int) ($this->units_per_box ?: 1);
+        if ($unitsPerBox > 1) {
+            return round((float) $this->default_purchase_price * $unitsPerBox, 2);
+        }
+
+        return null;
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(MedicineCategory::class, 'category_id');
@@ -80,5 +95,10 @@ class Medicine extends Model
     public function batches(): HasMany
     {
         return $this->hasMany(MedicineBatch::class);
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
     }
 }

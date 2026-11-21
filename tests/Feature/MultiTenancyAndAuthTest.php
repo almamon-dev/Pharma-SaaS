@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Tenancy\ProvisionTenantAccess;
 use App\Enums\TenantRole;
 use App\Models\Branch;
 use App\Models\Customer;
@@ -15,6 +16,7 @@ use App\Models\TenantDomain;
 use App\Models\User;
 use App\Services\TenantProvisioningService;
 use App\Tenancy\CurrentTenant;
+use Database\Seeders\DemoPharmacySeeder;
 use Database\Seeders\PlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -498,6 +500,50 @@ class MultiTenancyAndAuthTest extends TestCase
             'quantity' => 10,
             'line_total' => 20.00,
         ]);
+
+        // Percentage discount (10% on 10.00 subtotal = 1.00 off -> 9.00 total)
+        $this->actingAs($admin)->post('/pos/checkout', [
+            'customer_name' => 'Percent Buyer',
+            'payment_method' => 'cash',
+            'discount' => 10,
+            'discount_type' => 'percent',
+            'items' => [
+                [
+                    'medicine_id' => $medicine->id,
+                    'quantity' => 5,
+                    'sale_unit' => 'piece',
+                ],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertDatabaseHas('sales', [
+            'tenant_id' => $tenant->id,
+            'subtotal' => 10.00,
+            'discount_amount' => 1.00,
+            'total_amount' => 9.00,
+        ]);
+
+        // Fixed Taka discount (2.50 off on 10.00 subtotal -> 7.50 total)
+        $this->actingAs($admin)->post('/pos/checkout', [
+            'customer_name' => 'Fixed Buyer',
+            'payment_method' => 'cash',
+            'discount' => 2.50,
+            'discount_type' => 'fixed',
+            'items' => [
+                [
+                    'medicine_id' => $medicine->id,
+                    'quantity' => 5,
+                    'sale_unit' => 'piece',
+                ],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertDatabaseHas('sales', [
+            'tenant_id' => $tenant->id,
+            'subtotal' => 10.00,
+            'discount_amount' => 2.50,
+            'total_amount' => 7.50,
+        ]);
     }
 
     public function test_saas_super_admin_manages_plans_and_subscribers_while_store_admin_is_blocked(): void
@@ -521,10 +567,12 @@ class MultiTenancyAndAuthTest extends TestCase
         $this->actingAs($superAdmin)->get('/admin/plans')->assertOk();
         $this->actingAs($superAdmin)->get('/admin/subscribers')->assertOk();
 
-        // Super admin creates a new SaaS plan
+        // Super admin creates a new SaaS plan with bilingual fields
         $this->actingAs($superAdmin)->post('/admin/plans', [
             'name' => 'Regional Chain Pro',
+            'name_bn' => 'রিজিওনাল চেইন প্রো',
             'description' => '5 business tenants & 15 branches',
+            'description_bn' => '৫টি ফার্মেসি ব্যবসা ও ১৫টি শাখা',
             'monthly_price' => 129,
             'annual_price' => 1290,
             'trial_days' => 14,
@@ -533,11 +581,17 @@ class MultiTenancyAndAuthTest extends TestCase
             'max_users' => 60,
             'max_medicines' => 25000,
             'features_text' => "5 Business Tenants\n15 Retail Branches",
+            'features_bn_text' => "৫টি ব্যবসা টেন্যান্ট\n১৫টি রিটেল শাখা",
             'is_popular' => true,
         ])->assertRedirect();
 
         $plan = SaasPlan::where('key', 'regional-chain-pro')->firstOrFail();
         $this->assertSame(5, $plan->max_pharmacies);
+        $this->assertSame('রিজিওনাল চেইন প্রো', $plan->name_bn);
+        $this->assertSame('৫টি ফার্মেসি ব্যবসা ও ১৫টি শাখা', $plan->description_bn);
+        $this->assertEquals(['৫টি ব্যবসা টেন্যান্ট', '১৫টি রিটেল শাখা'], $plan->features_bn);
+        $this->assertSame('রিজিওনাল চেইন প্রো', $plan->localizedName('bn'));
+        $this->assertSame('Regional Chain Pro', $plan->localizedName('en'));
 
         // Super admin assigns subscription to a subscriber admin
         $this->actingAs($superAdmin)->patch("/admin/subscribers/{$storeAdmin->id}", [
@@ -1017,6 +1071,64 @@ class MultiTenancyAndAuthTest extends TestCase
                 ->component('Auth/Login')
                 ->where('domainTenant.id', $apolloTenant->id)
                 ->where('domainTenant.domain', 'apollo-care.127.0.0.1.nip.io')
+            );
+    }
+
+    public function test_pharmacy_owner_retains_branch_entitlements_across_reseed_and_creates_multiple_branches(): void
+    {
+        $this->seed(DemoPharmacySeeder::class);
+        // Re-running DemoPharmacySeeder must preserve branches, crm, and team_rbac entitlements
+        $this->seed(DemoPharmacySeeder::class);
+
+        $growthOwner = User::where('email', 'admin@pharmacore.test')->firstOrFail();
+        $greenlife = Tenant::where('slug', 'greenlife-pharmacy')->firstOrFail();
+
+        $this->assertTrue($greenlife->hasFeature('branches'));
+        $this->assertTrue($greenlife->hasFeature('crm'));
+        $this->assertTrue($greenlife->hasFeature('team_rbac'));
+
+        // Calling ProvisionTenantAccess directly on an already-subscribed tenant preserves entitlements
+        app(ProvisionTenantAccess::class)->execute($greenlife);
+        $this->assertTrue($greenlife->fresh()->hasFeature('branches'));
+        $this->assertTrue($greenlife->fresh()->hasFeature('team_rbac'));
+
+        $this->actingAs($growthOwner)
+            ->get('http://demo.localhost/branches')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Branches/Index')
+                ->where('usage.branches', 3)
+                ->where('usage.max_branches', 8)
+            );
+
+        // Pharmacy owner creates a new branch directly after login
+        $this->actingAs($growthOwner)
+            ->post('http://demo.localhost/branches', [
+                'tenant_id' => $greenlife->id,
+                'name' => 'Uttara Sector 7',
+                'code' => 'DHK-07',
+                'city' => 'Dhaka',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('branches', [
+            'tenant_id' => $greenlife->id,
+            'code' => 'DHK-07',
+            'name' => 'Uttara Sector 7',
+            'is_active' => true,
+        ]);
+
+        // Single-branch Starter owner (metro) can view their 1 branch cleanly without 403 and gets clear quota guard on extra branch
+        $starterOwner = User::where('email', 'metro@pharmacore.test')->firstOrFail();
+        $this->actingAs($starterOwner)
+            ->get('http://metro-health-pharma.localhost/branches')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Branches/Index')
+                ->has('branches', 1)
+                ->where('usage.branches', 1)
+                ->where('usage.max_branches', 1)
             );
     }
 }

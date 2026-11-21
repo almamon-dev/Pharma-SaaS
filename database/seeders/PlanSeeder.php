@@ -7,12 +7,14 @@ use App\Enums\TenantRole;
 use App\Models\Module;
 use App\Models\Permission;
 use App\Models\SaasPlan;
+use App\Services\Commercial\SubscriptionService;
 use Illuminate\Database\Seeder;
 
 class PlanSeeder extends Seeder
 {
     public function run(): void
     {
+        $subscriptionService = app(SubscriptionService::class);
         $order = 1;
         $moduleIds = [];
         foreach (ProvisionTenantAccess::modulesCatalog() as $key => $definition) {
@@ -41,7 +43,9 @@ class PlanSeeder extends Seeder
             [
                 'key' => 'starter',
                 'name' => 'Starter Dispensary',
+                'name_bn' => 'স্টার্টার ডিসপেনসারি',
                 'description' => 'Essential POS, CRM & inventory control for a single pharmacy business and branch.',
+                'description_bn' => 'একক ফার্মেসি ব্যবসা ও শাখার জন্য প্রয়োজনীয় পিওএস, সিআরএম এবং ইনভেন্টরি নিয়ন্ত্রণ।',
                 'currency_code' => 'USD',
                 'monthly_price' => 29.00,
                 'annual_price' => 290.00,
@@ -58,6 +62,13 @@ class PlanSeeder extends Seeder
                     'Customer CRM & Allergy Profiles',
                     'Standard Daily Sales & POS Invoices',
                 ],
+                'features_bn' => [
+                    '১টি ফার্মেসি ব্যবসা এবং হেড অফিস শাখা',
+                    'সর্বোচ্চ ৫ জন কর্মী অ্যাকাউন্ট',
+                    'ব্যাচ ও মেয়াদোত্তীর্ণ ট্র্যাকিং (FEFO)',
+                    'কাস্টমার সিআরএম ও রোগীর অ্যালার্জি প্রোফাইল',
+                    'দৈনিক সেলস ও স্ট্যান্ডার্ড পিওএস ইনভয়েস',
+                ],
                 'module_keys' => ['pos', 'inventory', 'branches', 'crm'],
                 'is_popular' => false,
                 'is_active' => true,
@@ -67,7 +78,9 @@ class PlanSeeder extends Seeder
             [
                 'key' => 'growth',
                 'name' => 'Growth Chain',
+                'name_bn' => 'গ্রোথ চেইন',
                 'description' => 'Run multiple pharmacy tenants & branches with multi-role RBAC, CRM & supplier automation.',
+                'description_bn' => 'মাল্টি-রোল RBAC, রোগী সিআরএম ও সরবরাহকারী অটোমেশন সহ একাধিক ফার্মেসি ও শাখা পরিচালনা করুন।',
                 'currency_code' => 'USD',
                 'monthly_price' => 79.00,
                 'annual_price' => 790.00,
@@ -84,6 +97,13 @@ class PlanSeeder extends Seeder
                     'Customers, Loyalty CRM & Suppliers Directory',
                     'Compliance & Dispensing Audit Trail',
                 ],
+                'features_bn' => [
+                    '১টি সাবস্ক্রিপশনে সর্বোচ্চ ৩টি ফার্মেসি ব্যবসা',
+                    'সর্বোচ্চ ৮টি শাখা ও আন্তঃশাখা স্টক স্থানান্তর',
+                    'মাল্টি-রোল কর্মী নিয়োগ ও কাস্টম রোল তৈরি',
+                    'কাস্টমার লয়্যালটি সিআরএম ও সাপ্লায়ার ডিরেক্টরি',
+                    'কমপ্লায়েন্স ও ডিসপেনসিং অডিট ট্রেইল',
+                ],
                 'module_keys' => ['pos', 'inventory', 'branches', 'crm', 'team_rbac'],
                 'is_popular' => true,
                 'is_active' => true,
@@ -93,7 +113,9 @@ class PlanSeeder extends Seeder
             [
                 'key' => 'enterprise',
                 'name' => 'Enterprise Hospital',
+                'name_bn' => 'এন্টারপ্রাইজ হসপিটাল',
                 'description' => 'Unlimited pharmacy businesses, branches & teams with dedicated compliance controls.',
+                'description_bn' => 'ডেডিকেটেড কমপ্লায়েন্স কন্ট্রোল সহ সীমাহীন ফার্মেসি ব্যবসা, শাখা ও কর্মী পরিচালনার সম্পূর্ণ সমাধান।',
                 'currency_code' => 'USD',
                 'monthly_price' => 199.00,
                 'annual_price' => 1990.00,
@@ -109,6 +131,13 @@ class PlanSeeder extends Seeder
                     'Priority SLA & Dedicated Account Onboarding',
                     'Full CRM, FEFO Dispensing & Ledger Exports',
                     'Enterprise Audit & Compliance Controls',
+                ],
+                'features_bn' => [
+                    'সীমাহীন ফার্মেসি ব্যবসা ও শাখা পরিচালনা',
+                    'সীমাহীন কাস্টম রোল ও বিস্তারিত RBAC পারমিশন',
+                    'অগ্রাধিকারযুক্ত ২৪/৭ সাপোর্ট ও ডেডিকেটেড অনবোর্ডিং',
+                    'সম্পূর্ণ সিআরএম, FEFO ডিসপেনসিং ও লেজার এক্সপোর্ট',
+                    'এন্টারপ্রাইজ অডিট ও কমপ্লায়েন্স কন্ট্রোল',
                 ],
                 'module_keys' => ['pos', 'inventory', 'branches', 'crm', 'team_rbac'],
                 'is_popular' => false,
@@ -129,6 +158,7 @@ class PlanSeeder extends Seeder
 
             $syncIds = array_values(array_intersect_key($moduleIds, array_flip($keys)));
             $plan->modules()->sync($syncIds);
+            $subscriptionService->syncPlanEntitlementsToSubscribers($plan);
         }
     }
 }

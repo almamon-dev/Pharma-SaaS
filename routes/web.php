@@ -84,11 +84,40 @@ Route::middleware(['auth', 'subscription.active', 'tenant'])->group(function ():
         ->name('pos.checkout');
 
     Route::get('/inventory', [InventoryController::class, 'index'])
-        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,admin,manager,pharmacist,inventory_clerk'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
         ->name('inventory.index');
+    Route::get('/inventory/batches', [InventoryController::class, 'batches'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.batches');
+    Route::get('/inventory/movements', [InventoryController::class, 'movements'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.movements');
+    Route::get('/inventory/{medicineId}/batches', [InventoryController::class, 'medicineBatches'])
+        ->whereNumber('medicineId')
+        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.medicine.batches');
     Route::post('/inventory', [InventoryController::class, 'store'])
         ->middleware(['feature:inventory', 'tenant.role:inventory.manage,admin,manager,pharmacist,inventory_clerk'])
         ->name('inventory.store');
+    Route::put('/inventory/{medicineId}', [InventoryController::class, 'update'])
+        ->whereNumber('medicineId')
+        ->middleware(['feature:inventory', 'tenant.role:inventory.manage,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.update');
+    Route::patch('/inventory/{medicineId}/toggle', [InventoryController::class, 'toggleArchive'])
+        ->whereNumber('medicineId')
+        ->middleware(['feature:inventory', 'tenant.role:inventory.manage,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.toggle');
+    Route::post('/inventory/categories', [InventoryController::class, 'storeCategory'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.manage,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.categories.store');
+    Route::post('/inventory/{medicineId}/batches', [InventoryController::class, 'storeBatch'])
+        ->whereNumber('medicineId')
+        ->middleware(['feature:inventory', 'tenant.role:inventory.manage,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.batches.store');
+    Route::post('/inventory/batches/{batchId}/adjust', [InventoryController::class, 'adjustBatch'])
+        ->whereNumber('batchId')
+        ->middleware(['feature:inventory', 'tenant.role:inventory.adjust,admin'])
+        ->name('inventory.batches.adjust');
 
     Route::get('/branches', [BranchController::class, 'index'])
         ->middleware('feature:branches')

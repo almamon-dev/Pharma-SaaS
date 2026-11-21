@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { router, useForm, usePage } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import {
+    ArrowRightLeft,
+    ArrowUpRight,
     GitBranch,
+    Layers,
     MapPin,
     Plus,
     Power,
@@ -43,12 +46,33 @@ export default function BranchesIndex({
     usage,
 }: BranchesProps) {
     const { tenant } = usePage<SharedPageProps>().props;
-    const [showModal, setShowModal] = useState(false);
-    const [tenantFilter, setTenantFilter] = useState('');
+    const searchParams =
+        typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search)
+            : null;
+    const queryTenantId = searchParams?.get('tenant_id') ?? '';
+    const hasValidQueryTenant =
+        Boolean(queryTenantId) &&
+        tenants.some((t) => String(t.id) === queryTenantId);
+    const canAddBranch = !usage || usage.branches < usage.max_branches;
+    const [showModal, setShowModal] = useState(
+        Boolean(
+            searchParams?.get('create') === '1' &&
+            canAddBranch &&
+            tenant?.canManageOrganization
+        )
+    );
+    const [tenantFilter, setTenantFilter] = useState(
+        hasValidQueryTenant ? queryTenantId : ''
+    );
 
     const { data, setData, post, processing, errors, reset } = useForm({
         tenant_id: String(
-            currentTenantId ?? tenants[0]?.id ?? tenant?.currentTenant?.id ?? ''
+            (hasValidQueryTenant ? queryTenantId : null) ??
+                currentTenantId ??
+                tenants[0]?.id ??
+                tenant?.currentTenant?.id ??
+                ''
         ),
         name: '',
         code: '',
@@ -82,6 +106,14 @@ export default function BranchesIndex({
         router.patch(
             route('branches.toggle', branch.id),
             {},
+            { preserveScroll: true }
+        );
+    };
+
+    const switchActiveBranch = (branch: BranchItem) => {
+        router.post(
+            route('branch.switch'),
+            { branch_id: branch.id },
             { preserveScroll: true }
         );
     };
@@ -181,8 +213,6 @@ export default function BranchesIndex({
         [tenant]
     );
 
-    const canAddBranch = !usage || usage.branches < usage.max_branches;
-
     return (
         <AppLayout
             title="Business Branches"
@@ -233,6 +263,31 @@ export default function BranchesIndex({
                 />
             </div>
 
+            {!canAddBranch && tenant?.canManageOrganization && usage && (
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[4px] border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3 text-xs">
+                    <div className="flex items-start gap-2.5">
+                        <Layers className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-bold text-slate-900 dark:text-slate-100">
+                                Branch Limit Reached ({usage.branches} /{' '}
+                                {usage.max_branches} used)
+                            </p>
+                            <p className="mt-0.5 text-slate-600 dark:text-slate-300">
+                                {usage.max_branches === 1
+                                    ? 'Your current plan covers a single-branch pharmacy (1 outlet). To create multiple branches, upgrade your subscription plan.'
+                                    : 'You have used all branches allowed on your current plan. Upgrade on Plans to add more outlets.'}
+                            </p>
+                        </div>
+                    </div>
+                    <Link href={route('plans.index')} className="shrink-0">
+                        <Button variant="primary" size="sm">
+                            Upgrade Plan
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Button>
+                    </Link>
+                </div>
+            )}
+
             <DataTable<BranchItem>
                 data={filteredBranches}
                 columns={columns}
@@ -261,6 +316,26 @@ export default function BranchesIndex({
                         ? (row) => (
                               <TableActionMenu
                                   items={[
+                                      {
+                                          key: 'switch',
+                                          label: 'Switch Active POS',
+                                          icon: (
+                                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                                          ),
+                                          variant: 'brand',
+                                          onClick: () =>
+                                              switchActiveBranch(row),
+                                          hidden:
+                                              !row.is_active ||
+                                              Number(row.tenant_id) !==
+                                                  Number(
+                                                      tenant?.currentTenant?.id
+                                                  ) ||
+                                              Number(row.id) ===
+                                                  Number(
+                                                      tenant?.currentBranch?.id
+                                                  ),
+                                      },
                                       {
                                           key: 'toggle',
                                           label: row.is_active

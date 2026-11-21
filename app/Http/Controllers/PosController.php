@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BatchStatus;
+use App\Enums\StockMovementType;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Medicine;
 use App\Models\MedicineBatch;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\InventoryService;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,11 +21,19 @@ use Inertia\Response;
 
 class PosController extends Controller
 {
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+    ) {}
+
     public function index(TenantContext $tenantContext): Response
     {
+        $branchId = $tenantContext->branchId();
+
         $medicines = Medicine::query()
             ->where('is_active', true)
-            ->withSum(['batches as available_stock' => fn ($q) => $q->where('status', 'active')], 'quantity_available')
+            ->withSum([
+                'batches as available_stock' => fn ($q) => $q->sellable($branchId),
+            ], 'quantity_available')
             ->orderBy('name')
             ->limit(500)
             ->get()
@@ -76,6 +87,7 @@ class PosController extends Controller
             'customer_name' => ['nullable', 'string', 'max:255'],
             'payment_method' => ['required', Rule::in(['cash', 'card', 'bkash'])],
             'discount' => ['nullable', 'numeric', 'min:0'],
+            'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])],
             'items' => ['required', 'array', 'min:1'],
             'items.*.medicine_id' => [
                 'required',
@@ -91,23 +103,25 @@ class PosController extends Controller
 
             foreach ($validated['items'] as $itemInput) {
                 $medicine = Medicine::query()->findOrFail($itemInput['medicine_id']);
+                if (! $medicine->is_active) {
+                    abort(422, "{$medicine->name} is archived and cannot be dispensed at POS.");
+                }
+
                 $packQty = (int) $itemInput['quantity'];
                 $saleUnit = (string) ($itemInput['sale_unit'] ?? 'piece');
                 $packSize = $medicine->packMultiplierFor($saleUnit);
                 $requestedUnits = $packQty * $packSize;
 
                 $batches = MedicineBatch::query()
+                    ->sellable($branch->id)
                     ->where('medicine_id', $medicine->id)
-                    ->where('status', 'active')
-                    ->where('quantity_available', '>', 0)
-                    ->orderByRaw('CASE WHEN branch_id = ? THEN 0 ELSE 1 END', [$branch->id])
                     ->orderBy('expiry_date')
                     ->lockForUpdate()
                     ->get();
 
                 $totalAvailable = $batches->sum('quantity_available');
                 if ($totalAvailable < $requestedUnits) {
-                    abort(422, "Insufficient stock for {$medicine->name}. Available: {$totalAvailable} {$medicine->unit} (requested {$requestedUnits}).");
+                    abort(422, "Insufficient unexpired stock in {$branch->name} for {$medicine->name}. Available: {$totalAvailable} {$medicine->unit} (requested {$requestedUnits}).");
                 }
 
                 $boxPrice = $saleUnit === 'box' ? $medicine->resolvedBoxSellingPrice() : null;
@@ -119,7 +133,9 @@ class PosController extends Controller
                     if ($remaining <= 0) {
                         break;
                     }
-                    $take = min($remaining, (int) $batch->quantity_available);
+                    $before = (int) $batch->quantity_available;
+                    $take = min($remaining, $before);
+                    $after = max(0, $before - $take);
 
                     if ($expectedPackTotal !== null) {
                         $lineTotal = ($remaining === $take)
@@ -134,7 +150,12 @@ class PosController extends Controller
 
                     $subtotal += $lineTotal;
 
-                    $batch->decrement('quantity_available', $take);
+                    $batch->quantity_available = $after;
+                    if ($after === 0) {
+                        $batch->status = BatchStatus::DEPLETED->value;
+                    }
+                    $batch->save();
+
                     $allocatedLines[] = [
                         'medicine_id' => $medicine->id,
                         'medicine_batch_id' => $batch->id,
@@ -144,13 +165,21 @@ class PosController extends Controller
                         'quantity' => $take,
                         'unit_price' => $unitPrice,
                         'line_total' => $lineTotal,
+                        'balance_before' => $before,
+                        'balance_after' => $after,
+                        'purchase_price' => (float) $batch->purchase_price,
                     ];
 
                     $remaining -= $take;
                 }
             }
 
-            $discountAmount = min($subtotal, max(0, (float) ($validated['discount'] ?? 0)));
+            $discountType = (string) ($validated['discount_type'] ?? 'fixed');
+            $rawDiscount = max(0, (float) ($validated['discount'] ?? 0));
+            $discountAmount = $discountType === 'percent'
+                ? round($subtotal * min(100, $rawDiscount) / 100, 2)
+                : $rawDiscount;
+            $discountAmount = min($subtotal, max(0, round($discountAmount, 2)));
             $totalAmount = max(0, round($subtotal - $discountAmount, 2));
 
             $invoiceNumber = 'INV-'.now()->format('ymd').'-'.strtoupper(substr(uniqid(), -5));
@@ -184,6 +213,20 @@ class PosController extends Controller
                     'discount' => 0,
                     'line_total' => $line['line_total'],
                 ]);
+
+                $this->inventoryService->recordMovement(
+                    branchId: $branch->id,
+                    medicineId: $line['medicine_id'],
+                    batchId: $line['medicine_batch_id'],
+                    movementType: StockMovementType::SALE,
+                    quantityChange: -$line['quantity'],
+                    balanceBefore: $line['balance_before'],
+                    balanceAfter: $line['balance_after'],
+                    unitCost: $line['purchase_price'],
+                    reason: "POS Invoice {$sale->invoice_number}",
+                    actor: $request->user(),
+                    reference: $sale,
+                );
             }
 
             if (! empty($validated['customer_id'])) {
@@ -197,7 +240,12 @@ class PosController extends Controller
                 action: 'pos.sale_completed',
                 description: "Completed POS invoice {$invoiceNumber} for {$totalAmount}.",
                 subject: $sale,
-                metadata: ['total' => $totalAmount, 'payment_method' => $validated['payment_method']],
+                metadata: [
+                    'total' => $totalAmount,
+                    'discount_type' => $discountType,
+                    'discount_amount' => round($discountAmount, 2),
+                    'payment_method' => $validated['payment_method'],
+                ],
             );
 
             return $sale;

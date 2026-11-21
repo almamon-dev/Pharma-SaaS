@@ -123,7 +123,9 @@ class SuperAdminController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            'name_bn' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:500'],
+            'description_bn' => ['nullable', 'string', 'max:500'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'annual_price' => ['required', 'numeric', 'min:0'],
             'trial_days' => ['nullable', 'integer', 'min:0', 'max:90'],
@@ -132,6 +134,7 @@ class SuperAdminController extends Controller
             'max_users' => ['required', 'integer', 'min:1'],
             'max_medicines' => ['required', 'integer', 'min:50'],
             'features_text' => ['nullable', 'string'],
+            'features_bn_text' => ['nullable', 'string'],
             'module_ids' => ['nullable', 'array'],
             'module_ids.*' => ['integer', Rule::exists('modules', 'id')],
             'is_popular' => ['boolean'],
@@ -151,10 +154,18 @@ class SuperAdminController extends Controller
             ->values()
             ->all();
 
+        $featuresBn = collect(explode("\n", (string) ($validated['features_bn_text'] ?? '')))
+            ->map(fn ($line) => trim($line))
+            ->filter()
+            ->values()
+            ->all();
+
         $plan = SaasPlan::query()->create([
             'key' => $key,
             'name' => trim($validated['name']),
+            'name_bn' => ! empty($validated['name_bn']) ? trim($validated['name_bn']) : null,
             'description' => $validated['description'] ?? null,
+            'description_bn' => $validated['description_bn'] ?? null,
             'currency_code' => 'USD',
             'monthly_price' => $validated['monthly_price'],
             'annual_price' => $validated['annual_price'],
@@ -164,6 +175,7 @@ class SuperAdminController extends Controller
             'max_users' => $validated['max_users'],
             'max_medicines' => $validated['max_medicines'],
             'features' => $features,
+            'features_bn' => ! empty($featuresBn) ? $featuresBn : null,
             'is_popular' => (bool) ($validated['is_popular'] ?? false),
             'is_active' => true,
             'is_public' => true,
@@ -182,7 +194,9 @@ class SuperAdminController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            'name_bn' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:500'],
+            'description_bn' => ['nullable', 'string', 'max:500'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'annual_price' => ['required', 'numeric', 'min:0'],
             'trial_days' => ['nullable', 'integer', 'min:0', 'max:90'],
@@ -191,6 +205,7 @@ class SuperAdminController extends Controller
             'max_users' => ['required', 'integer', 'min:1'],
             'max_medicines' => ['required', 'integer', 'min:50'],
             'features_text' => ['nullable', 'string'],
+            'features_bn_text' => ['nullable', 'string'],
             'module_ids' => ['nullable', 'array'],
             'module_ids.*' => ['integer', Rule::exists('modules', 'id')],
             'is_popular' => ['boolean'],
@@ -202,9 +217,17 @@ class SuperAdminController extends Controller
             ->values()
             ->all();
 
+        $featuresBn = collect(explode("\n", (string) ($validated['features_bn_text'] ?? '')))
+            ->map(fn ($line) => trim($line))
+            ->filter()
+            ->values()
+            ->all();
+
         $plan->update([
             'name' => trim($validated['name']),
+            'name_bn' => ! empty($validated['name_bn']) ? trim($validated['name_bn']) : null,
             'description' => $validated['description'] ?? null,
+            'description_bn' => $validated['description_bn'] ?? null,
             'monthly_price' => $validated['monthly_price'],
             'annual_price' => $validated['annual_price'],
             'trial_days' => (int) ($validated['trial_days'] ?? $plan->trial_days),
@@ -213,6 +236,7 @@ class SuperAdminController extends Controller
             'max_users' => $validated['max_users'],
             'max_medicines' => $validated['max_medicines'],
             'features' => $features,
+            'features_bn' => ! empty($featuresBn) ? $featuresBn : null,
             'is_popular' => (bool) ($validated['is_popular'] ?? false),
         ]);
 

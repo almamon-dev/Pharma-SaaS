@@ -35,8 +35,10 @@ export interface TenantFeatureItem {
 export interface PlanSummary {
     id?: number;
     name: string;
+    name_bn?: string | null;
     key: string;
     description?: string | null;
+    description_bn?: string | null;
     monthly_price?: string | number;
     annual_price?: string | number;
     currency_code?: string;
@@ -46,6 +48,7 @@ export interface PlanSummary {
     max_users: number;
     max_medicines: number;
     features?: string[];
+    features_bn?: string[];
     modules?: PlanModuleSummary[];
     is_popular?: boolean;
     is_active?: boolean;
@@ -137,6 +140,8 @@ export interface TenantSharedData {
     roleLabel: string | null;
     canManageOrganization: boolean;
     canManageInventory: boolean;
+    canEditInventory?: boolean;
+    canAdjustInventory?: boolean;
     canManageCrm: boolean;
     canManageBilling: boolean;
     enabledFeatures?: string[];

@@ -239,11 +239,18 @@ export default function PlansIndex({
                         >
                             <div>
                                 <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <Layers className="h-4 w-4 text-[#FF4A1F] shrink-0" />
-                                        <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
-                                            {plan.name}
-                                        </h3>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2">
+                                            <Layers className="h-4 w-4 text-[#FF4A1F] shrink-0" />
+                                            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+                                                {plan.name}
+                                            </h3>
+                                        </div>
+                                        {plan.name_bn && (
+                                            <span className="text-[11px] font-medium text-[#FF4A1F] dark:text-[#ff7450] pl-6">
+                                                {plan.name_bn}
+                                            </span>
+                                        )}
                                     </div>
                                     {isCurrent ? (
                                         <StatusDot variant="emerald">

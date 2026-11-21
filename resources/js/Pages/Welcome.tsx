@@ -1,189 +1,366 @@
-import React, { useState } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
-import {
-    Activity,
-    ArrowRight,
-    Building2,
-    Check,
-    GitBranch,
-    Globe,
-    Package,
-    ShieldCheck,
-    ShoppingCart,
-    Users,
-    X,
-} from 'lucide-react';
-import { BrandLogo } from '@/Components/BrandLogo';
-import { Button } from '@/Components/ui/Button';
-import { Input } from '@/Components/ui/Input';
-import { StatusDot } from '@/Components/ui/StatusDot';
-import { PlanSummary, SharedPageProps } from '@/types';
-import { formatCurrency, formatQuotaLimit } from '@/lib/format';
+import { useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Check, Languages } from 'lucide-react';
+import { SharedPageProps } from '@/types';
 
-interface WelcomeProps {
-    plans: PlanSummary[];
+interface PlanModule {
+    id: number;
+    key: string;
+    name: string;
 }
 
-const platformHighlights = [
+interface PlanSummary {
+    id: number;
+    key: string;
+    name: string;
+    name_bn?: string | null;
+    description?: string | null;
+    description_bn?: string | null;
+    monthly_price?: number | string | null;
+    annual_price?: number | string | null;
+    price_monthly?: number | string | null;
+    price_yearly?: number | string | null;
+    max_branches?: number;
+    max_users?: number;
+    max_medicines?: number;
+    features?: string[] | null;
+    features_bn?: string[] | null;
+    modules?: PlanModule[];
+    badge?: string | null;
+}
+
+interface WelcomeProps {
+    plans?: PlanSummary[];
+}
+
+interface RoleDemoItem {
+    id: string;
+    roleKey: string;
+    titleBn: string;
+    titleEn: string;
+    subtitleBn: string;
+    subtitleEn: string;
+    email: string;
+    tagsBn: string[];
+    tagsEn: string[];
+    canDoBn: string[];
+    canDoEn: string[];
+    cannotDoBn: string[];
+    cannotDoEn: string[];
+}
+
+const roleDemoItems: RoleDemoItem[] = [
     {
-        step: '01',
-        title: 'Multi-Tenant Pharmacy Ownership',
-        description:
-            'Pharmacy Store Admins subscribe once to provision and operate multiple isolated business tenants and retail outlets from one account.',
-        highlight: 'Row-level tenant_id & workspace switching',
-        icon: Building2,
+        id: 'owner',
+        roleKey: 'admin',
+        titleBn: 'মালিক / অ্যাডমিন',
+        titleEn: 'Owner / Admin',
+        subtitleBn: 'সব শাখা ও রিপোর্ট',
+        subtitleEn: 'All branches & reports',
+        email: 'admin@pharmacore.test',
+        tagsBn: ['ড্যাশবোর্ড', 'শাখা ব্যবস্থাপনা', 'কর্মী ও রোল', 'রিপোর্ট', 'সাবস্ক্রিপশন'],
+        tagsEn: ['Dashboard', 'Branch Management', 'Staff & Roles', 'Reports', 'Subscription'],
+        canDoBn: [
+            'সব শাখার বিক্রি এক পর্দায় দেখুন',
+            'নতুন কর্মী ও রোল বানান',
+            'মুনাফা ও স্টকের রিপোর্ট খুলুন',
+        ],
+        canDoEn: [
+            'Monitor multi-branch revenue on one screen',
+            'Create staff members and assign custom roles',
+            'Inspect gross profit and dead stock reports',
+        ],
+        cannotDoBn: [
+            'অন্য ব্যবসার ডেটা দেখা যায় না',
+            'বিলিং তথ্য ডেমোতে লুকানো',
+        ],
+        cannotDoEn: [
+            'Other subscriber tenant data is isolated',
+            'Billing & payment gateway keys hidden in demo',
+        ],
     },
     {
-        step: '02',
-        title: 'Granular Multi-Role RBAC',
-        description:
-            'Combine built-in operational roles or define custom permission matrices per pharmacy team member and branch assignment.',
-        highlight: 'Plan-gated feature & role enforcement',
-        icon: ShieldCheck,
+        id: 'pharmacist',
+        roleKey: 'pharmacist',
+        titleBn: 'ফার্মাসিস্ট',
+        titleEn: 'Pharmacist',
+        subtitleBn: 'প্রেসক্রিপশন ও ডিসপেনসিং',
+        subtitleEn: 'Prescriptions & dispensing',
+        email: 'pharmacist@pharmacore.test',
+        tagsBn: ['প্রেসক্রিপশন ভেরিফিকেশন', 'FEFO স্টক', 'ওষুধ ডিসপেনসিং', 'অ্যালার্জি চেক'],
+        tagsEn: ['Prescription Verification', 'FEFO Stock', 'Medicine Dispensing', 'Allergy Alerts'],
+        canDoBn: [
+            'কাউন্টারে প্রেসক্রিপশন-অনলি ওষুধ অনুমোদন',
+            'রোগীর অ্যালার্জি ও ড্রাগ রিয়েকশন যাচাই',
+            'ব্যাচ মেয়াদ ও FEFO অগ্রাধিকার পর্যবেক্ষণ',
+        ],
+        canDoEn: [
+            'Approve and dispense prescription-only drugs',
+            'Verify patient allergy notes and contraindications',
+            'Track nearest expiry batches with FEFO priority',
+        ],
+        cannotDoBn: [
+            'পাইকারি ক্রয়মূল্য বা মার্জিন দেখতে পারবে না',
+            'সিস্টেম সেটিং ও ব্রাঞ্চ কনফিগারেশন বন্ধ',
+        ],
+        cannotDoEn: [
+            'Wholesale COGS purchase cost is concealed',
+            'Business settings and branch setup are locked',
+        ],
     },
     {
-        step: '03',
-        title: 'High-Speed POS & Patient CRM',
-        description:
-            'Process counter checkouts with automatic FEFO batch deduction, customer allergy warnings, loyalty balances, and supplier history.',
-        highlight: 'Sub-second counter & ledger sync',
-        icon: ShoppingCart,
+        id: 'cashier',
+        roleKey: 'cashier',
+        titleBn: 'ক্যাশিয়ার',
+        titleEn: 'Cashier',
+        subtitleBn: 'দ্রুত বিক্রি ও বিল',
+        subtitleEn: 'Fast counter & billing',
+        email: 'cashier@pharmacore.test',
+        tagsBn: ['দ্রুত POS টার্মিনাল', 'বারকোড স্ক্যান', 'ক্যাশ ও ওয়ালেট', 'রসিদ প্রিন্ট'],
+        tagsEn: ['Fast POS Terminal', 'Barcode Scan', 'Cash & Mobile Wallet', 'Receipt Print'],
+        canDoBn: [
+            'বারকোড স্ক্যান করে সেকেন্ডে বিল তৈরি',
+            'ক্যাশ, কার্ড ও বিকাশ/নগদ পেমেন্ট কালেকশন',
+            'রেজিস্টার্ড ও ওয়াক-ইন গ্রাহক বিলিং',
+        ],
+        canDoEn: [
+            'Sub-second barcode scan & instant checkout',
+            'Collect Cash, Card, bKash & Nagad payments',
+            'Serve walk-in and loyalty CRM customers',
+        ],
+        cannotDoBn: [
+            'ইনভয়েস মুছে ফেলা বা রিফান্ড সরাসরি বন্ধ',
+            'স্টক সমন্বয় ও ব্যাকডেটেড ডিসকাউন্ট ব্লক',
+        ],
+        cannotDoEn: [
+            'Cannot delete sales invoices or issue unapproved refunds',
+            'Stock adjustments and bulk price changes blocked',
+        ],
     },
     {
-        step: '04',
-        title: 'Automated FEFO Expiry Control',
-        description:
-            'Track every batch arrival, rack location, reorder level, and upcoming expiry window before stock slips out of compliance.',
-        highlight: 'Real-time branch alert windows',
-        icon: Activity,
+        id: 'manager',
+        roleKey: 'manager',
+        titleBn: 'ব্রাঞ্চ ম্যানেজার',
+        titleEn: 'Branch Manager',
+        subtitleBn: 'শাখা নিয়ন্ত্রণ ও ইনভেন্টরি',
+        subtitleEn: 'Branch control & inventory',
+        email: 'manager@pharmacore.test',
+        tagsBn: ['শাখা ড্যাশবোর্ড', 'ইনভেন্টরি রিস্টক', 'স্টক মুভমেন্ট', 'দৈনিক রিপোর্ট'],
+        tagsEn: ['Branch Dashboard', 'Inventory Restock', 'Stock Movements', 'Daily Ledger'],
+        canDoBn: [
+            'শাখার দৈনিক বিক্রি ও ক্যাশ ড্রয়ার মিলানো',
+            'নতুন ব্যাচ স্টক-ইন ও সরবরাহকারী চালান এন্ট্রি',
+            'মেয়াদোত্তীর্ণ ও ড্যামেজ ওষুধ নিষ্পত্তির আবেদন',
+        ],
+        canDoEn: [
+            'Reconcile daily counter cash and branch register',
+            'Record purchase shipments and restock batches',
+            'Initiate damaged and near-expiry returns to vendor',
+        ],
+        cannotDoBn: [
+            'অন্য শাখার গোপনীয় ক্যাশ লেজার দেখা যায় না',
+            'প্ল্যাটফর্মের সাবস্ক্রিপশন পরিবর্তন বন্ধ',
+        ],
+        cannotDoEn: [
+            'Cannot view cash balances of other branches',
+            'Cannot alter master SaaS subscription plan',
+        ],
+    },
+    {
+        id: 'superadmin',
+        roleKey: 'superadmin',
+        titleBn: 'সুপার অ্যাডমিন',
+        titleEn: 'Super Admin',
+        subtitleBn: 'SaaS প্ল্যাটফর্ম ও সাবস্ক্রিপশন',
+        subtitleEn: 'SaaS platform & subscribers',
+        email: 'superadmin@pharmacore.test',
+        tagsBn: ['SaaS কনসোল', 'প্ল্যান ব্যবস্থাপনা', 'গ্রাহক ফার্মেসি', 'অডিট লগ'],
+        tagsEn: ['SaaS Console', 'Plan Management', 'Pharmacy Subscribers', 'Audit Logs'],
+        canDoBn: [
+            'নতুন SaaS প্ল্যান তৈরি ও ফিচার অনুমোদন',
+            'সরাসরি প্ল্যাটফর্মের সব সাবস্ক্রাইবার পর্যবেক্ষণ',
+            'আন্তর্জাতিক কারেন্সি ও ট্যাক্স সেটিংস কন্ট্রোল',
+        ],
+        canDoEn: [
+            'Create & assign SaaS plans and module limits',
+            'Monitor all pharmacy subscriber accounts',
+            'Configure global platform compliance & currencies',
+        ],
+        cannotDoBn: [
+            'ফার্মেসির ব্যক্তিগত রোগীর চিকিৎসা তথ্য উন্মুক্ত নয়',
+        ],
+        cannotDoEn: [
+            'Patient clinical notes remain tenant encrypted',
+        ],
     },
 ];
 
-export default function Welcome({ plans }: WelcomeProps) {
-    const { auth, tenancy } = usePage<SharedPageProps>().props;
-    const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>(
-        'monthly'
-    );
-    const [showPortalFinder, setShowPortalFinder] = useState(false);
-    const [workspaceSubdomain, setWorkspaceSubdomain] = useState('');
-    const [lookupError, setLookupError] = useState<string | null>(null);
-    const [lookingUp, setLookingUp] = useState(false);
+interface DefaultPlanItem {
+    key: string;
+    titleBn: string;
+    titleEn: string;
+    descBn: string;
+    descEn: string;
+    priceMonthly: number;
+    priceYearlyMonthly: number;
+    priceYearlyTotal: number;
+    isPopular?: boolean;
+    featuresBn: string[];
+    featuresEn: string[];
+}
 
-    const baseDomain = tenancy?.baseDomain ?? 'localhost';
-    const scheme = tenancy?.scheme ?? 'http';
-    const portSuffix = tenancy?.portSuffix ?? '';
-    const adminLoginUrl =
-        tenancy?.adminLoginUrl ??
-        `${scheme}://admin.${baseDomain}${portSuffix}/login`;
-    const demoLoginUrl =
-        tenancy?.demoLoginUrl ??
-        `${scheme}://demo.${baseDomain}${portSuffix}/login`;
+const defaultPlanItems: DefaultPlanItem[] = [
+    {
+        key: 'starter',
+        titleBn: 'স্টার্টার ডিসপেনসারি',
+        titleEn: 'Starter Dispensary',
+        descBn: 'একক ফার্মেসি ও এক শাখার জন্য পিওএস, সিআরএম ও ইনভেন্টরি।',
+        descEn: 'Single pharmacy dispensary for rapid counter POS, CRM, and batch inventory.',
+        priceMonthly: 29,
+        priceYearlyMonthly: 24,
+        priceYearlyTotal: 290,
+        featuresBn: [
+            '১টি ফার্মেসি আউটলেট',
+            'সর্বোচ্চ ৩ জন কর্মী',
+            'সর্বোচ্চ ১,০০০ ওষুধ ও ব্যাচ',
+            'গ্রাহক সিআরএম ও অ্যালার্জি প্রোফাইল',
+            'দৈনিক সেলস ও ইনভয়েস',
+        ],
+        featuresEn: [
+            '1 Pharmacy Branch',
+            'Up to 3 Staff Accounts',
+            '1,000 SKUs & Batches',
+            'Patient CRM & Allergy Warnings',
+            'Daily Sales & Invoice Printing',
+        ],
+    },
+    {
+        key: 'growth',
+        titleBn: 'গ্রোথ চেইন',
+        titleEn: 'Growth Chain',
+        descBn: 'মাল্টি-রোল RBAC ও সরবরাহকারী অটোমেশনসহ একাধিক শাখা পরিচালনা।',
+        descEn: 'Multi-branch chain management with granular RBAC and supplier automation.',
+        priceMonthly: 79,
+        priceYearlyMonthly: 65,
+        priceYearlyTotal: 790,
+        isPopular: true,
+        featuresBn: [
+            '৫টি ফার্মেসি শাখা ও আউটলেট',
+            'সর্বোচ্চ ১৫ জন কর্মী ও ক্যাশিয়ার',
+            '১০,০০০ ওষুধ ও স্বয়ংক্রিয় FEFO',
+            'আন্তঃশাখা স্টক স্থানান্তর',
+            'কাস্টম রোল ও কর্মী নিয়োগ',
+            'সরবরাহকারী ডিরেক্টরি ও কমপ্লায়েন্স অডিট',
+        ],
+        featuresEn: [
+            'Up to 5 Outlets',
+            '15 Staff Accounts',
+            '10,000 SKUs & Automated FEFO',
+            'Inter-Branch Stock Transfers',
+            'Custom Permission Matrices',
+            'Supplier Ledger & Audits',
+        ],
+    },
+    {
+        key: 'enterprise',
+        titleBn: 'এন্টারপ্রাইজ হসপিটাল',
+        titleEn: 'Enterprise Hospital',
+        descBn: 'ডেডিকেটেড কমপ্লায়েন্স কন্ট্রোলসহ সীমাহীন ব্যবসা ও শাখা।',
+        descEn: 'Unlimited business tenants, hospital dispensing compliance, and audit exports.',
+        priceMonthly: 199,
+        priceYearlyMonthly: 165,
+        priceYearlyTotal: 1990,
+        featuresBn: [
+            'সীমাহীন ফার্মেসি ব্যবসা ও শাখা',
+            'সীমাহীন কর্মী ও কাউন্টার টার্মিনাল',
+            'সীমাহীন ওষুধ, ব্যাচ ও মুভমেন্ট লগ',
+            '২৪/৭ অগ্রাধিকার সাপোর্ট',
+            'লেজার এক্সপোর্ট ও এন্টারপ্রাইজ অডিট',
+        ],
+        featuresEn: [
+            'Unlimited Branches & Tenants',
+            'Unlimited Staff & Terminals',
+            'Unlimited SKUs & Batch Logs',
+            '24/7 Priority SLA Support',
+            'Full Ledger Export & Audit',
+        ],
+    },
+];
 
-    const cleanedSubdomain = workspaceSubdomain
-        .trim()
-        .toLowerCase()
-        .replace(/^https?:\/\//, '')
-        .split('/')[0]
-        .replace(/:\d+$/, '');
-    const previewHost = cleanedSubdomain
-        ? cleanedSubdomain.includes('.')
-            ? cleanedSubdomain
-            : `${cleanedSubdomain}.${baseDomain}`
-        : `demo.${baseDomain}`;
+export default function Welcome({ plans = [] }: WelcomeProps) {
+    const { auth } = usePage<SharedPageProps>().props;
+    const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+    const [activeRoleId, setActiveRoleId] = useState<string>('owner');
+    const [lang, setLang] = useState<'bn' | 'en'>('bn');
 
-    const handleFindWorkspace = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!cleanedSubdomain) {
-            setLookupError(
-                'Enter your workspace subdomain (e.g. demo or admin).'
-            );
-            return;
-        }
+    const activeRole = roleDemoItems.find((r) => r.id === activeRoleId) || roleDemoItems[0];
 
-        setLookupError(null);
-        setLookingUp(true);
-
-        try {
-            const res = await fetch(
-                `${route('workspace.lookup')}?subdomain=${encodeURIComponent(cleanedSubdomain)}`,
-                { headers: { Accept: 'application/json' } }
-            );
-            const payload = (await res.json()) as {
-                url?: string;
-                message?: string;
-            };
-
-            if (!res.ok || !payload.url) {
-                setLookupError(
-                    payload.message ??
-                        'Workspace not found. Check your subdomain and try again.'
-                );
-                setLookingUp(false);
-                return;
-            }
-
-            window.location.href = payload.url;
-        } catch {
-            setLookupError('Unable to reach workspace lookup. Please try again.');
-            setLookingUp(false);
-        }
+    const enterDemo = (email: string) => {
+        router.post(route('login'), {
+            email,
+            password: 'password',
+            remember: true,
+        });
     };
 
-    return (
-        <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#0b0e11] text-slate-900 dark:text-slate-100 font-sans antialiased">
-            <Head title="Multi-Tenant Pharmacy SaaS" />
+    const isBn = lang === 'bn';
 
-            {/* Sticky Top Nav */}
-            <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-[#1e2329]/95 backdrop-blur-xs">
-                <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-                    <Link href={route('welcome')}>
-                        <BrandLogo subtitle="Cloud Pharmacy Platform" />
+    return (
+        <div className="min-h-screen bg-[#0e1217] text-slate-100 font-sans antialiased selection:bg-[#FF4A1C] selection:text-white overflow-x-hidden no-scrollbar">
+            <Head title={isBn ? 'PharmaCore - ডেমো অ্যাকাউন্ট' : 'PharmaCore - Interactive Demo'} />
+
+            {/* Top Amber Demo Notification Banner */}
+            <div className="bg-[#2a220e] border-b border-[#4d3c17] text-[#e5b352] text-center text-xs py-1.5 px-4 font-medium flex items-center justify-center gap-2">
+                <span>
+                    {isBn
+                        ? 'এটি ডেমো পরিবেশ। এখানকার সব রোগী, ওষুধ ও বিক্রির তথ্য নমুনা।'
+                        : 'This is a demo environment. All patient, medicine, and sales data here is sample.'}
+                </span>
+            </div>
+
+            {/* Main Header / Navigation */}
+            <header className="sticky top-0 z-40 bg-[#0e1217]/95 backdrop-blur border-b border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3">
+                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                    <Link href="/" className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-md bg-[#FF4A1C] flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                            +
+                        </div>
+                        <span className="text-lg font-bold text-white tracking-tight">
+                            PharmaCore
+                        </span>
                     </Link>
 
-                    <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-slate-600 dark:text-slate-300">
-                        <a
-                            href="#architecture"
-                            className="hover:text-[#FF4A1F] transition-colors"
-                        >
-                            Platform Architecture
-                        </a>
-                        <a
-                            href="#plans"
-                            className="hover:text-[#FF4A1F] transition-colors"
-                        >
-                            Pricing Plans
-                        </a>
-                        <a
-                            href={demoLoginUrl}
-                            className="hover:text-[#FF4A1F] transition-colors"
-                        >
-                            Demo Console
-                        </a>
-                    </nav>
-
                     <div className="flex items-center gap-2.5">
+                        {/* Language Switcher */}
+                        <button
+                            type="button"
+                            onClick={() => setLang(isBn ? 'en' : 'bn')}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:text-white bg-[#161c24] border border-slate-700/60 transition-colors cursor-pointer"
+                        >
+                            <Languages className="h-3.5 w-3.5 text-[#FF4A1C]" />
+                            <span>{isBn ? 'English' : 'বাংলা'}</span>
+                        </button>
+
                         {auth?.user ? (
-                            <Link href={route('dashboard')}>
-                                <Button variant="primary" size="md">
-                                    Open Workspace
-                                    <ArrowRight className="h-3.5 w-3.5" />
-                                </Button>
+                            <Link
+                                href={auth.user.is_super_admin ? route('admin.dashboard') : route('dashboard')}
+                                className="h-8 px-3.5 rounded bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs font-bold inline-flex items-center transition-colors shadow-sm"
+                            >
+                                {isBn ? 'ড্যাশবোর্ড' : 'Dashboard'}
                             </Link>
                         ) : (
                             <>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="md"
-                                    onClick={() => setShowPortalFinder(true)}
+                                <Link
+                                    href={route('login')}
+                                    className="h-8 px-3.5 rounded bg-[#1c232c] hover:bg-[#252f3b] text-slate-200 border border-slate-700/60 text-xs font-semibold inline-flex items-center transition-colors cursor-pointer"
                                 >
-                                    Sign In
-                                </Button>
-                                <Link href={route('register')}>
-                                    <Button variant="primary" size="md">
-                                        Start Free Trial
-                                        <ArrowRight className="h-3.5 w-3.5" />
-                                    </Button>
+                                    {isBn ? 'সাইন ইন' : 'Sign In'}
+                                </Link>
+                                <Link
+                                    href={route('register')}
+                                    className="h-8 px-3.5 rounded bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs font-bold inline-flex items-center transition-colors shadow-sm"
+                                >
+                                    {isBn ? 'ফ্রি ট্রায়াল শুরু' : 'Free Trial'}
                                 </Link>
                             </>
                         )}
@@ -191,571 +368,595 @@ export default function Welcome({ plans }: WelcomeProps) {
                 </div>
             </header>
 
-            <main className="flex-1">
-                {/* Hero Section */}
-                <section className="relative overflow-hidden border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#161a1e]">
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-55" />
-
-                    <div className="relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
-                            <div className="lg:col-span-6">
-                                <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#FF4A1F]">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-[#FF4A1F]" />
-                                    <span>
-                                        Multi-Tenant Pharmacy SaaS & FEFO Cloud
-                                    </span>
-                                </div>
-
-                                <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.12]">
-                                    Run Every Pharmacy Branch from One{' '}
-                                    <span className="text-[#FF4A1F]">
-                                        Unified Command Console
-                                    </span>
-                                </h1>
-
-                                <p className="mt-4 text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl">
-                                    Built for multi-branch retail chains and
-                                    hospital dispensaries. Manage isolated
-                                    business tenants, live batch expiries,
-                                    patient allergy CRM, and feature-gated
-                                    team permissions in real time.
-                                </p>
-
-                                <div className="mt-7 flex flex-wrap items-center gap-3">
-                                    <Link
-                                        href={
-                                            auth?.user
-                                                ? route('dashboard')
-                                                : route('register')
-                                        }
-                                    >
-                                        <Button
-                                            variant="primary"
-                                            size="lg"
-                                            className="h-10 px-5 text-xs sm:text-sm font-semibold"
-                                        >
-                                            {auth?.user
-                                                ? 'Go to Dashboard'
-                                                : 'Register Business & Start Trial'}
-                                            <ArrowRight className="h-4 w-4" />
-                                        </Button>
-                                    </Link>
-                                    {!auth?.user && (
-                                        <a href={demoLoginUrl}>
-                                            <Button
-                                                variant="outline"
-                                                size="lg"
-                                                className="h-10 px-5 text-xs sm:text-sm"
-                                            >
-                                                Sign In with Demo Account
-                                            </Button>
-                                        </a>
-                                    )}
-                                </div>
-
-                                <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
-                                    <StatusDot variant="emerald">
-                                        14-day free trial included
-                                    </StatusDot>
-                                    <span>·</span>
-                                    <span>Strict tenant_id isolation</span>
-                                    <span>·</span>
-                                    <span>Role & feature access control</span>
-                                </div>
-                            </div>
-
-                            {/* Hero 3D Pharmacy Visual */}
-                            <div className="lg:col-span-6">
-                                <div className="relative mx-auto max-w-lg lg:max-w-none">
-                                    <div className="pointer-events-none absolute -inset-4 rounded-2xl bg-gradient-to-tr from-[#FF4A1F]/10 via-transparent to-emerald-500/10 blur-2xl" />
-                                    <div className="relative overflow-hidden rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#1e2329] shadow-lg shadow-slate-900/5">
-                                        <img
-                                            src="/images/hero-pharmacy-3d.jpg"
-                                            alt="3D Cloud Pharmacy Management Hub"
-                                            className="w-full h-auto object-cover select-none"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Platform Architecture Section */}
-                <section
-                    id="architecture"
-                    className="mx-auto max-w-6xl px-4 py-14 sm:px-6"
-                >
-                    <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-                        <div>
-                            <p className="text-xs font-semibold text-[#FF4A1F]">
-                                Platform Architecture
-                            </p>
-                            <h2 className="mt-1 text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-                                Engineered for High-Throughput Dispensaries
-                            </h2>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Zero cross-tenant data leakage · Live quota &
-                            feature enforcement
+            {/* Hero Section: Demo Account & One-Click Dashboard Access */}
+            <section className="px-4 sm:px-6 lg:px-8 pt-10 pb-16 lg:pt-14 lg:pb-20 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    {/* Left Hero Pitch */}
+                    <div className="lg:col-span-7">
+                        <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-2">
+                            {isBn ? 'ডেমো অ্যাকাউন্ট' : 'Demo Account'}
+                        </span>
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 tracking-tight">
+                            {isBn ? 'নিবন্ধন ছাড়াই পুরো সিস্টেম ঘুরে দেখুন' : 'Explore the Full System Without Registration'}
+                        </h1>
+                        <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-6 max-w-xl">
+                            {isBn
+                                ? 'একটি রোল বেছে নিন, তারপর সরাসরি ড্যাশবোর্ড ঢুকুন। পিওএস, ইনভেন্টরি, রিপোর্ট সবকিছু নমুনা তথ্য দিয়ে চালু আছে। নিজের হাতে ব্যবহার করে দেখুন।'
+                                : 'Select a role, then directly enter the dashboard. POS, inventory, reports, and FEFO are live with sample data. Experience it with your own hands.'}
                         </p>
+
+                        <div className="flex flex-wrap items-center gap-3 mb-6">
+                            <a
+                                href="#roles"
+                                className="h-10 px-5 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center transition-colors shadow-md"
+                            >
+                                {isBn ? 'রোল বেছে ডেমো শুরু' : 'Pick a Role to Start Demo'}
+                            </a>
+                            <a
+                                href="#tour"
+                                className="h-10 px-5 rounded-md bg-[#161c24] hover:bg-[#1e2632] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center transition-colors"
+                            >
+                                {isBn ? 'গাইডেড ট্যুর দেখুন' : 'Watch Guided Tour'}
+                            </a>
+                        </div>
+
+                        {/* Trust Points */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-400">
+                            <span className="inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                {isBn ? 'কার্ড লাগবে না' : 'No credit card required'}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                {isBn ? 'ইমেইল লাগবে না' : 'No email required'}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                {isBn ? '২৪ ঘণ্টা পর পর রিসেট' : 'Resets every 24 hours'}
+                            </span>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {platformHighlights.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                                <div
-                                    key={item.step}
-                                    className="rounded-[6px] border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#1e2329] p-5 flex flex-col justify-between transition-colors hover:border-[#FF4A1F]/40"
-                                >
-                                    <div>
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="flex h-9 w-9 items-center justify-center rounded-[4px] bg-[#FFF0ED] dark:bg-[#ff4a1f]/15 text-[#FF4A1F]">
-                                                <Icon className="h-4 w-4" />
-                                            </div>
-                                            <span className="font-mono text-xs font-semibold text-slate-400">
-                                                {item.step}
-                                            </span>
-                                        </div>
+                    {/* Right Hero Sample Store Card */}
+                    <div className="lg:col-span-5">
+                        <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF4A1C]/5 rounded-full blur-2xl pointer-events-none" />
 
-                                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
-                                            {item.title}
-                                        </h3>
-                                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                                            {item.description}
-                                        </p>
-                                    </div>
+                            <h2 className="text-sm font-bold text-white mb-4 flex items-center justify-between">
+                                <span>{isBn ? 'ডেমো অ্যাকাউন্টে ঢুকুন' : 'Access Demo Account'}</span>
+                                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-2 py-0.5 rounded">
+                                    {isBn ? 'লাইভ সচল' : 'Live Active'}
+                                </span>
+                            </h2>
 
-                                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                                        {item.highlight}
-                                    </div>
+                            <div className="divide-y divide-slate-800/80 text-xs mb-5">
+                                <div className="py-2.5 flex items-center justify-between">
+                                    <span className="text-slate-400 font-medium">{isBn ? 'ডেমো ব্যবসা' : 'Demo Business'}</span>
+                                    <span className="text-white font-semibold font-mono">{isBn ? 'সিটি কেয়ার ফার্মেসি (নমুনা)' : 'City Care Pharmacy (Demo)'}</span>
                                 </div>
+                                <div className="py-2.5 flex items-center justify-between">
+                                    <span className="text-slate-400 font-medium">{isBn ? 'শাখা' : 'Branches'}</span>
+                                    <span className="text-white font-semibold">{isBn ? '৩টি' : '3 Outlets'}</span>
+                                </div>
+                                <div className="py-2.5 flex items-center justify-between">
+                                    <span className="text-slate-400 font-medium">{isBn ? 'নমুনা ওষুধ' : 'Sample Medicines'}</span>
+                                    <span className="text-white font-semibold">{isBn ? '৫০০+' : '500+ SKUs'}</span>
+                                </div>
+                                <div className="py-2.5 flex items-center justify-between">
+                                    <span className="text-slate-400 font-medium">{isBn ? 'নমুনা রোগী' : 'Sample Patients'}</span>
+                                    <span className="text-white font-semibold">{isBn ? '১২০ জন' : '120 Patients'}</span>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => enterDemo('admin@pharmacore.test')}
+                                className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-lg cursor-pointer"
+                            >
+                                {isBn ? 'ডেমো ড্যাশবোর্ড খুলুন' : 'Open Demo Dashboard'}
+                            </button>
+
+                            <p className="text-center text-[11px] text-slate-400 mt-2.5">
+                                {isBn
+                                    ? 'লগইন তথ্য নিজে থেকে পূরণ হয়ে যাবে। কিছু টাইপ করতে হবে না।'
+                                    : 'Login credentials autofilled instantly. No typing required.'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Step 1: Role-Based Explorer Section */}
+            <section id="roles" className="px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800/80 max-w-7xl mx-auto scroll-mt-14">
+                <div className="mb-8">
+                    <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+                        {isBn ? 'ধাপ ১' : 'Step 1'}
+                    </span>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
+                        {isBn ? 'কোন রোল হিসেবে দেখবেন?' : 'Which Role Do You Want to Explore As?'}
+                    </h2>
+                    <p className="text-slate-400 text-xs sm:text-sm">
+                        {isBn
+                            ? 'প্রতিটি রোলের মেনু ও পারমিশন আলাদা। বাঁদিকে একটি রোল বেছে নিন।'
+                            : 'Every role has isolated menus, actions, and permissions. Pick a role on the left.'}
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                    {/* Left Vertical Role Selector */}
+                    <div className="lg:col-span-4 space-y-2.5">
+                        {roleDemoItems.map((item) => {
+                            const isSelected = item.id === activeRoleId;
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setActiveRoleId(item.id)}
+                                    className={`w-full text-left p-3.5 rounded-lg border transition-all cursor-pointer ${
+                                        isSelected
+                                            ? 'border-[#FF4A1C] bg-[#1a1f27] shadow-md'
+                                            : 'border-slate-800 bg-[#141920] hover:border-slate-700 hover:bg-[#181e26]'
+                                    }`}
+                                >
+                                    <div className="text-xs sm:text-sm font-bold text-white mb-0.5">
+                                        {isBn ? item.titleBn : item.titleEn}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400">
+                                        {isBn ? item.subtitleBn : item.subtitleEn}
+                                    </div>
+                                </button>
                             );
                         })}
                     </div>
-                </section>
 
-                {/* Subscription Plans Section */}
-                <section
-                    id="plans"
-                    className="border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#161a1e] py-14"
-                >
-                    <div className="mx-auto max-w-6xl px-4 sm:px-6">
-                        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-                            <div>
-                                <p className="text-xs font-semibold text-[#FF4A1F]">
-                                    Subscription Plans
-                                </p>
-                                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-                                    Clear Tiers Built to Scale with Every Branch
-                                </h2>
-                                <p className="mt-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
-                                    Start with a full 14-day free trial. Upgrade
-                                    or unlock additional modules anytime from
-                                    your Business Owner workspace.
-                                </p>
-                            </div>
+                    {/* Right Role Detail Card */}
+                    <div className="lg:col-span-8">
+                        <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5 sm:p-6 shadow-xl">
+                            <h3 className="text-base sm:text-lg font-bold text-white mb-3">
+                                {isBn
+                                    ? `${activeRole.titleBn} হিসেবে ডেমো`
+                                    : `Demo as ${activeRole.titleEn}`}
+                            </h3>
 
-                            {/* Billing Cycle Toggle */}
-                            <div className="inline-flex self-start md:self-auto rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#1e2329] p-0.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setBillingCycle('monthly')}
-                                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-[3px] transition-colors cursor-pointer ${
-                                        billingCycle === 'monthly'
-                                            ? 'bg-[#FF4A1F] text-white'
-                                            : 'text-slate-600 dark:text-slate-300'
-                                    }`}
-                                >
-                                    Monthly
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setBillingCycle('annual')}
-                                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-[3px] transition-colors cursor-pointer ${
-                                        billingCycle === 'annual'
-                                            ? 'bg-[#FF4A1F] text-white'
-                                            : 'text-slate-600 dark:text-slate-300'
-                                    }`}
-                                >
-                                    Annual (2 months free)
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
-                            {plans.map((plan) => {
-                                const price =
-                                    billingCycle === 'annual'
-                                        ? Number(plan.annual_price ?? 0)
-                                        : Number(plan.monthly_price ?? 0);
-
-                                return (
-                                    <div
-                                        key={plan.key}
-                                        className={`rounded-[6px] border p-6 flex flex-col justify-between transition-all bg-white dark:bg-[#1e2329] ${
-                                            plan.is_popular
-                                                ? 'border-[#FF4A1F] border-t-[3px] border-t-[#FF4A1F] shadow-sm'
-                                                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                                        }`}
+                            {/* Tags */}
+                            <div className="flex flex-wrap gap-1.5 mb-5">
+                                {(isBn ? activeRole.tagsBn : activeRole.tagsEn).map((tag, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="rounded px-2.5 py-1 text-[11px] font-semibold bg-[#11151a] border border-slate-800 text-slate-300"
                                     >
-                                        <div>
-                                            <div className="flex items-center justify-between gap-2">
-                                                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                                                    {plan.name}
-                                                </h3>
-                                                {plan.is_popular && (
-                                                    <StatusDot variant="brand">
-                                                        Recommended
-                                                    </StatusDot>
-                                                )}
-                                            </div>
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
 
-                                            {plan.description && (
-                                                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed min-h-[36px]">
-                                                    {plan.description}
-                                                </p>
-                                            )}
-
-                                            <div className="mt-4 flex items-baseline gap-1.5">
-                                                <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-                                                    {formatCurrency(
-                                                        price,
-                                                        plan.currency_code ??
-                                                            'USD'
-                                                    )}
-                                                </span>
-                                                <span className="text-xs text-slate-500">
-                                                    /{' '}
-                                                    {billingCycle === 'annual'
-                                                        ? 'year'
-                                                        : 'month'}
-                                                </span>
-                                            </div>
-                                            <p className="mt-1 text-[11px] text-slate-400">
-                                                Includes {plan.trial_days ?? 14}
-                                                -day free trial
-                                            </p>
-
-                                            {/* Structured Quota Grid */}
-                                            <div className="mt-4 grid grid-cols-2 gap-2.5 rounded-[4px] border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-[#161a1e] p-3 text-xs">
-                                                <div className="flex items-center gap-2">
-                                                    <Building2 className="h-3.5 w-3.5 text-[#FF4A1F] shrink-0" />
-                                                    <span>
-                                                        <strong className="text-slate-900 dark:text-slate-100">
-                                                            {formatQuotaLimit(
-                                                                plan.max_pharmacies
-                                                            )}
-                                                        </strong>{' '}
-                                                        <span className="text-slate-500">
-                                                            Tenants
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <GitBranch className="h-3.5 w-3.5 text-[#FF4A1F] shrink-0" />
-                                                    <span>
-                                                        <strong className="text-slate-900 dark:text-slate-100">
-                                                            {formatQuotaLimit(
-                                                                plan.max_branches
-                                                            )}
-                                                        </strong>{' '}
-                                                        <span className="text-slate-500">
-                                                            Branches
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Users className="h-3.5 w-3.5 text-[#FF4A1F] shrink-0" />
-                                                    <span>
-                                                        <strong className="text-slate-900 dark:text-slate-100">
-                                                            {formatQuotaLimit(
-                                                                plan.max_users
-                                                            )}
-                                                        </strong>{' '}
-                                                        <span className="text-slate-500">
-                                                            Staff
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Package className="h-3.5 w-3.5 text-[#FF4A1F] shrink-0" />
-                                                    <span>
-                                                        <strong className="text-slate-900 dark:text-slate-100">
-                                                            {plan.max_medicines.toLocaleString()}
-                                                        </strong>{' '}
-                                                        <span className="text-slate-500">
-                                                            SKUs
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {/* Included Features */}
-                                            <ul className="mt-4 space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                                                {(plan.features ?? []).map(
-                                                    (feat) => (
-                                                        <li
-                                                            key={feat}
-                                                            className="flex items-start gap-2"
-                                                        >
-                                                            <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                                                            <span>{feat}</span>
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ul>
-
-                                            {(plan.modules ?? []).length > 0 && (
-                                                <p className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-                                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                                        Unlocked Modules:{' '}
-                                                    </span>
-                                                    {(plan.modules ?? [])
-                                                        .map((m) => m.name)
-                                                        .join(' · ')}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <Link
-                                            href={
-                                                auth?.user
-                                                    ? route('plans.index')
-                                                    : route('register')
-                                            }
-                                            className="mt-6 block"
-                                        >
-                                            <Button
-                                                variant={
-                                                    plan.is_popular
-                                                        ? 'primary'
-                                                        : 'outline'
-                                                }
-                                                fullWidth
-                                            >
-                                                {auth?.user
-                                                    ? `Choose ${plan.name}`
-                                                    : `Start ${plan.name} Trial`}
-                                                <ArrowRight className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </Link>
+                            {/* Can Do vs Cannot Do */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                                <div>
+                                    <div className="text-xs font-bold text-[#FF4A1C] uppercase tracking-wider mb-2">
+                                        {isBn ? 'যা করতে পারবেন' : 'What You Can Do'}
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </section>
-            </main>
+                                    <ul className="space-y-1.5 text-xs text-slate-300">
+                                        {(isBn ? activeRole.canDoBn : activeRole.canDoEn).map((point, idx) => (
+                                            <li key={idx} className="flex items-start gap-2">
+                                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                                <span>{point}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
 
-            {/* Full SaaS Footer */}
-            <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c]">
-                <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8">
-                        <div className="lg:col-span-5">
-                            <BrandLogo subtitle="Cloud Pharmacy Platform" />
-                            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm">
-                                Multi-tenant pharmacy SaaS engineered for strict
-                                business isolation, FEFO inventory precision,
-                                customer CRM, and subscription-gated feature
-                                access.
-                            </p>
-                            <div className="mt-4">
-                                <StatusDot variant="emerald">
-                                    All tenant clusters operational
-                                </StatusDot>
+                                <div>
+                                    <div className="text-xs font-bold text-[#FF4A1C] uppercase tracking-wider mb-2">
+                                        {isBn ? 'যা দেখা যাবে না' : 'What is Hidden / Restricted'}
+                                    </div>
+                                    <ul className="space-y-1.5 text-xs text-slate-400">
+                                        {(isBn ? activeRole.cannotDoBn : activeRole.cannotDoEn).map((point, idx) => (
+                                            <li key={idx} className="flex items-start gap-2">
+                                                <span className="text-slate-500 font-bold">•</span>
+                                                <span>{point}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="lg:col-span-2 space-y-2.5 text-xs">
-                            <p className="font-bold text-slate-900 dark:text-slate-100">
-                                Platform
-                            </p>
-                            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-                                <li>
-                                    <a
-                                        href="#architecture"
-                                        className="hover:text-[#FF4A1F] transition-colors"
-                                    >
-                                        Architecture
-                                    </a>
-                                </li>
-                                <li>
-                                    <a
-                                        href="#plans"
-                                        className="hover:text-[#FF4A1F] transition-colors"
-                                    >
-                                        Subscription Plans
-                                    </a>
-                                </li>
-                                <li>
-                                    <a
-                                        href={demoLoginUrl}
-                                        className="hover:text-[#FF4A1F] transition-colors"
-                                    >
-                                        Demo Workspace
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div className="lg:col-span-3 space-y-2.5 text-xs">
-                            <p className="font-bold text-slate-900 dark:text-slate-100">
-                                Capabilities
-                            </p>
-                            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-                                <li>Point of Sale & FEFO Checkout</li>
-                                <li>Multi-Tenant & Branch Inventory</li>
-                                <li>Patient Allergy & Loyalty CRM</li>
-                                <li>Custom Roles & Feature Access</li>
-                            </ul>
-                        </div>
-
-                        <div className="lg:col-span-2 space-y-2.5 text-xs">
-                            <p className="font-bold text-slate-900 dark:text-slate-100">
-                                Get Started
-                            </p>
-                            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-                                <li>
-                                    <Link
-                                        href={route('register')}
-                                        className="hover:text-[#FF4A1F] transition-colors"
-                                    >
-                                        Create Business Account
-                                    </Link>
-                                </li>
-                                <li>
-                                    <a
-                                        href={adminLoginUrl}
-                                        className="hover:text-[#FF4A1F] transition-colors"
-                                    >
-                                        Owner Sign In
-                                    </a>
-                                </li>
-                                <li>
-                                    {auth?.user ? (
-                                        <Link
-                                            href={route('plans.index')}
-                                            className="hover:text-[#FF4A1F] transition-colors"
-                                        >
-                                            Compare Tiers
-                                        </Link>
-                                    ) : (
-                                        <a
-                                            href="#plans"
-                                            className="hover:text-[#FF4A1F] transition-colors"
-                                        >
-                                            Compare Tiers
-                                        </a>
-                                    )}
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
-                        <p>
-                            © {new Date().getFullYear()} PharmaCore SaaS.
-                            Multi-Tenant Pharmacy Management Platform.
-                        </p>
-                        <div className="flex items-center gap-4">
-                            <span>PostgreSQL · Isolated Tenant Scope</span>
-                            <span>·</span>
-                            <span>14-Day Risk-Free Trial</span>
-                        </div>
-                    </div>
-                </div>
-            </footer>
-
-            {showPortalFinder && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-                    <div className="w-full max-w-md rounded-[6px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1e2329] shadow-xl">
-                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-3.5">
-                            <div className="flex items-center gap-2">
-                                <Globe className="h-4 w-4 text-[#FF4A1F]" />
-                                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                                    Sign In to Your Domain
-                                </h2>
-                            </div>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setShowPortalFinder(false);
-                                    setLookupError(null);
-                                }}
-                                className="text-slate-400 hover:text-slate-700"
+                                onClick={() => enterDemo(activeRole.email)}
+                                className="w-full sm:w-auto px-6 h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm inline-flex items-center justify-center transition-colors shadow-md cursor-pointer"
                             >
-                                <X className="h-4 w-4" />
+                                {isBn
+                                    ? `${activeRole.titleBn} হিসেবে ডেমোতে ঢুকুন`
+                                    : `Enter Demo as ${activeRole.titleEn}`}
                             </button>
-                        </div>
-
-                        <div className="p-5 space-y-4">
-                            <form
-                                onSubmit={handleFindWorkspace}
-                                className="space-y-3"
-                            >
-                                <div className="space-y-1.5">
-                                    <Input
-                                        label="Subdomain"
-                                        required
-                                        placeholder="demo"
-                                        value={workspaceSubdomain}
-                                        onChange={(e) => {
-                                            setWorkspaceSubdomain(e.target.value);
-                                            if (lookupError) setLookupError(null);
-                                        }}
-                                        error={lookupError ?? undefined}
-                                        icon={<Globe className="h-3.5 w-3.5" />}
-                                    />
-                                    <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                                        Enter only your subdomain name (no{' '}
-                                        <code className="text-slate-700 dark:text-slate-300">
-                                            http://
-                                        </code>{' '}
-                                        or{' '}
-                                        <code className="text-slate-700 dark:text-slate-300">
-                                            .{baseDomain}
-                                        </code>{' '}
-                                        needed).{' '}
-                                        <span className="block font-mono text-slate-700 dark:text-slate-200 mt-0.5 truncate">
-                                            {scheme}://{previewHost}
-                                            {portSuffix}/login
-                                        </span>
-                                    </p>
-                                </div>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    size="md"
-                                    fullWidth
-                                    isLoading={lookingUp}
-                                >
-                                    Continue to Workspace Login
-                                    <ArrowRight className="h-3.5 w-3.5" />
-                                </Button>
-                            </form>
-
-                            <p className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 text-center">
-                                Quick links:{' '}
-                                <a
-                                    href={demoLoginUrl}
-                                    className="font-semibold text-slate-600 dark:text-slate-300 hover:text-[#FF4A1F] underline underline-offset-2"
-                                >
-                                    Demo Pharmacy (demo)
-                                </a>
-                                {' · '}
-                                <a
-                                    href={adminLoginUrl}
-                                    className="font-semibold text-slate-600 dark:text-slate-300 hover:text-[#FF4A1F] underline underline-offset-2"
-                                >
-                                    Platform Owner (admin)
-                                </a>
+                            <p className="text-[11px] text-slate-400 mt-2">
+                                {isBn
+                                    ? 'লগইন তথ্য নিজে থেকে পূরণ হবে।'
+                                    : 'Login credentials filled automatically.'}
                             </p>
                         </div>
                     </div>
                 </div>
-            )}
+            </section>
+
+            {/* Section: "আসল সিস্টেমের মতোই সব ফিচার" */}
+            <section className="px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800/80 max-w-7xl mx-auto">
+                <div className="mb-8">
+                    <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+                        {isBn ? 'ডেমোতে যা আছে' : 'Inside the Demo'}
+                    </span>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                        {isBn ? 'আসল সিস্টেমের মতোই সব ফিচার' : 'Every Feature Works Just Like the Real System'}
+                    </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {/* Card 1 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-6 h-6 rounded bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '১' : '1'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-2">
+                            {isBn ? 'নমুনা তথ্য আগে থেকে ভরা' : 'Pre-Populated Sample Data'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'ওষুধ, ব্যাচ, মেয়াদ, রোগী ও গত ৩০ দিনের বিক্রি তৈরি করা আছে। ফাঁকা পর্দা দেখবেন না।'
+                                : 'Medicines, batches, expiries, patients, and last 30 days sales are fully populated. No empty screens.'}
+                        </p>
+                    </div>
+
+                    {/* Card 2 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-6 h-6 rounded bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '২' : '2'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-2">
+                            {isBn ? 'সব কাজ করে দেখা যায়' : 'Everything Can Be Tested Live'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'বিল বানান, ওষুধ যোগ করুন, রিটার্ন করুন, রিপোর্ট খুলুন। যা করবেন তা সত্যিই কাজ করবে।'
+                                : 'Generate invoices, add medicines, process sales returns, export reports. Everything executes for real.'}
+                        </p>
+                    </div>
+
+                    {/* Card 3 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-6 h-6 rounded bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '৩' : '3'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-2">
+                            {isBn ? 'আসল তথ্য নিরাপদ' : 'Production Data is Completely Safe'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'ডেমো আলাদা ডেটা স্পেসে চলে। এখানে কিছু বদলালে কোনো আসল ব্যবসার তথ্যে প্রভাব পড়ে না।'
+                                : 'The demo operates in an isolated workspace sandbox. Testing never affects any real subscriber data.'}
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Section: "৫ মিনিটে যা যা চেষ্টা করবেন" (Guided Tour) */}
+            <section id="tour" className="px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800/80 max-w-7xl mx-auto scroll-mt-14">
+                <div className="mb-8">
+                    <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+                        {isBn ? 'গাইডেড ট্যুর' : 'Guided Tour'}
+                    </span>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
+                        {isBn ? '৫ মিনিটে যা যা চেষ্টা করবেন' : 'What to Try in 5 Minutes'}
+                    </h2>
+                    <p className="text-slate-400 text-xs sm:text-sm">
+                        {isBn
+                            ? 'ডেমোর ভেতরে এই চারটি কাজ ধাপে ধাপে দেখানো হবে।'
+                            : 'These four core operational workflows are highlighted step by step in the demo.'}
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    {/* Step 1 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-7 h-7 rounded-full bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '১' : '1'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-1.5">
+                            {isBn ? 'বিল বানান' : 'Create an Invoice'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'পিওএসে ওষুধ স্ক্যান করুন। FEFO অনুযায়ী পুরোনো ব্যাচ নিজে বাছাই হবে।'
+                                : 'Scan barcode at POS counter. Earliest expiring batch is deducted automatically by FEFO.'}
+                        </p>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-7 h-7 rounded-full bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '২' : '2'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-1.5">
+                            {isBn ? 'অ্যালার্জি সতর্কতা দেখুন' : 'See Allergy Warning'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'অ্যালার্জি আছে এমন রোগী বেছে নিন। ভুল ওষুধ যোগ করলে সতর্কতা আসবে।'
+                                : 'Select a customer with allergy records. The system flashes instant clinical warnings on conflict.'}
+                        </p>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-7 h-7 rounded-full bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '৩' : '3'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-1.5">
+                            {isBn ? 'মেয়াদ ও স্টক দেখুন' : 'Expiry & Stock Alerts'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'মেয়াদ শেষের কাছাকাছি ব্যাচ ও কম স্টকের তালিকা খুলুন।'
+                                : 'Filter medicines by 30/60/90 days near-expiry alerts and minimum reorder stock levels.'}
+                        </p>
+                    </div>
+
+                    {/* Step 4 */}
+                    <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5">
+                        <div className="w-7 h-7 rounded-full bg-[#FF4A1C] text-white font-bold text-xs flex items-center justify-center mb-3">
+                            {isBn ? '৪' : '4'}
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-1.5">
+                            {isBn ? 'রিপোর্ট খুলুন' : 'Open Sales & Ledger Reports'}
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            {isBn
+                                ? 'শাখাভিত্তিক বিক্রি ও লাভের রিপোর্ট দেখুন এবং এক্সপোর্ট করুন।'
+                                : 'Review branch-wise daily revenue, gross profit margin, customer dues, and cash drawers.'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Scope & What Happens Next (2 Columns) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="rounded-xl border border-slate-800 bg-[#141920] p-5">
+                        <h3 className="text-sm font-bold text-white mb-3">
+                            {isBn ? 'ডেমোর সীমা' : 'Demo Environment Limits'}
+                        </h3>
+                        <ul className="space-y-2 text-xs text-slate-400">
+                            <li className="flex items-start gap-2">
+                                <span className="text-slate-500 font-bold">•</span>
+                                <span>{isBn ? 'প্রতি ২৪ ঘণ্টায় তথ্য আবার নমুনায় ফিরে যায়' : 'Sample database resets cleanly every 24 hours'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-slate-500 font-bold">•</span>
+                                <span>{isBn ? 'প্রকৃত প্রিন্টার ও পেমেন্ট গেটওয়ে বন্ধ থাকে' : 'Live physical thermal printers and payment gateways simulated'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-slate-500 font-bold">•</span>
+                                <span>{isBn ? 'ইমেইল ও এসএমএস পাঠানো যায় না' : 'Outbound live SMS and email dispatchers disabled'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-slate-500 font-bold">•</span>
+                                <span>{isBn ? 'একসাথে সর্বোচ্চ ৫০ জন ডেমো ব্যবহার করতে পারবেন' : 'Concurrently serves up to 50 active demo testers'}</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-800 bg-[#141920] p-5">
+                        <h3 className="text-sm font-bold text-white mb-3">
+                            {isBn ? 'পছন্দ হলে কী হবে' : 'Ready to Start Real Business?'}
+                        </h3>
+                        <ul className="space-y-2 text-xs text-slate-400">
+                            <li className="flex items-start gap-2">
+                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                <span>{isBn ? 'এক ক্লিকে ফ্রি ট্রায়াল শুরু করুন' : 'Start your free trial with zero setup delay'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                <span>{isBn ? 'নিজের ওষুধ ও ব্যাচ আমদানি করুন' : 'Import your own Excel catalog and medicine batches'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                <span>{isBn ? 'ডেমোতে বানানো কাস্টম রোল ট্রায়ালে আনা যাবে' : 'Easily configure your real branch employees'}</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                <span>{isBn ? '১৪ দিন পুরো ফিচার ফ্রি' : '14 days full feature access, completely free'}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            {/* Plans & Pricing Section */}
+            <section id="plans" className="px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800/80 max-w-7xl mx-auto scroll-mt-14">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+                    <div>
+                        <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+                            {isBn ? 'সাবস্ক্রিপশন প্ল্যান' : 'Subscription Plans'}
+                        </span>
+                        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
+                            {isBn ? 'ডেমো ভালো লাগলে নিজের প্ল্যান বেছে নিন' : 'Liked the Demo? Choose Your Own Plan'}
+                        </h2>
+                        <p className="text-slate-400 text-xs sm:text-sm">
+                            {isBn
+                                ? 'প্রতিটি প্ল্যানে ১৪ দিনের ফ্রি ট্রায়াল। যেকোনো সময় আপগ্রেড করা যাবে।'
+                                : '14-day free trial on all plans. Upgrade or cancel anytime.'}
+                        </p>
+                    </div>
+
+                    {/* Monthly / Yearly Toggle */}
+                    <div className="inline-flex rounded-lg border border-slate-800 bg-[#161c24] p-1 self-start md:self-auto">
+                        <button
+                            type="button"
+                            onClick={() => setBillingCycle('monthly')}
+                            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                                billingCycle === 'monthly'
+                                    ? 'bg-[#FF4A1C] text-white shadow-sm'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            {isBn ? 'মাসিক' : 'Monthly'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setBillingCycle('yearly')}
+                            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                                billingCycle === 'yearly'
+                                    ? 'bg-[#FF4A1C] text-white shadow-sm'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            {isBn ? 'বার্ষিক (২ মাস ফ্রি)' : 'Yearly (2 Months Free)'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* 3 Pricing Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {defaultPlanItems.map((planItem) => {
+                        const dynamicPlan = plans.find((p) => p.key === planItem.key);
+                        let price = planItem.priceMonthly;
+                        if (billingCycle === 'monthly') {
+                            const rawMonthly = dynamicPlan?.monthly_price ?? dynamicPlan?.price_monthly;
+                            if (rawMonthly != null) {
+                                const parsed = parseFloat(String(rawMonthly));
+                                if (!isNaN(parsed) && parsed > 0) price = parsed;
+                            }
+                        } else {
+                            const rawAnnual = dynamicPlan?.annual_price ?? dynamicPlan?.price_yearly;
+                            if (rawAnnual != null) {
+                                const parsed = parseFloat(String(rawAnnual));
+                                if (!isNaN(parsed) && parsed > 0) {
+                                    price = Math.round((parsed / 12) * 100) / 100;
+                                } else {
+                                    price = planItem.priceYearlyMonthly;
+                                }
+                            } else {
+                                price = planItem.priceYearlyMonthly;
+                            }
+                        }
+
+                        return (
+                            <div
+                                key={planItem.key}
+                                className={`rounded-xl bg-[#161c24] p-6 flex flex-col justify-between ${
+                                    planItem.isPopular
+                                        ? 'border-2 border-[#FF4A1C] shadow-2xl relative'
+                                        : 'border border-slate-800'
+                                }`}
+                            >
+                                {planItem.isPopular && (
+                                    <div className="absolute -top-3 left-6 px-2.5 py-0.5 rounded-full bg-[#FF4A1C] text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                        {isBn ? 'জনপ্রিয়' : 'Most Popular'}
+                                    </div>
+                                )}
+
+                                <div>
+                                    <h3 className={`text-base font-bold text-white mb-2 ${planItem.isPopular ? 'mt-1' : ''}`}>
+                                        {isBn
+                                            ? (dynamicPlan?.name_bn || dynamicPlan?.name || planItem.titleBn)
+                                            : (dynamicPlan?.name || planItem.titleEn)}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 min-h-[36px] mb-4 leading-relaxed">
+                                        {isBn
+                                            ? (dynamicPlan?.description_bn || dynamicPlan?.description || planItem.descBn)
+                                            : (dynamicPlan?.description || planItem.descEn)}
+                                    </p>
+
+                                    <div className="mb-6">
+                                        <div className="text-3xl font-extrabold text-white">
+                                            ${price.toFixed(2)}
+                                            <span className="text-xs font-normal text-slate-400">
+                                                {' '}/ {isBn ? 'মাস' : 'month'}
+                                            </span>
+                                        </div>
+                                        {billingCycle === 'yearly' && (
+                                            <div className="text-[11px] text-emerald-400 mt-1">
+                                                ${(price * 12).toFixed(0)} {isBn ? '/ বার্ষিক বিল' : 'billed annually'}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <ul className="space-y-2.5 text-xs text-slate-300 mb-8 border-t border-slate-800/80 pt-5">
+                                        {(isBn ? planItem.featuresBn : planItem.featuresEn).map((feat, fIdx) => (
+                                            <li key={fIdx} className="flex items-center gap-2">
+                                                <Check className="h-3.5 w-3.5 text-[#FF4A1C] shrink-0" />
+                                                <span>{feat}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <Link
+                                    href={`${route('register')}?plan=${planItem.key}`}
+                                    className={`w-full h-10 rounded-md text-xs font-bold flex items-center justify-center transition-colors ${
+                                        planItem.isPopular
+                                            ? 'bg-[#FF4A1C] hover:bg-[#e03e15] text-white shadow-lg'
+                                            : 'bg-[#1e2632] hover:bg-[#283342] text-slate-200 border border-slate-700/80'
+                                    }`}
+                                >
+                                    {isBn
+                                        ? `${planItem.titleBn} ট্রায়াল শুরু`
+                                        : `Start ${planItem.titleEn} Trial`}
+                                </Link>
+                            </div>
+                        );
+                    })}
+                </div>
+            </section>
+
+            {/* Bottom Call to Action Card Banner */}
+            <section className="px-4 sm:px-6 lg:px-8 py-14 max-w-7xl mx-auto">
+                <div className="rounded-2xl border border-slate-800 bg-gradient-to-b from-[#181d26] to-[#12161e] p-8 sm:p-12 text-center shadow-2xl relative overflow-hidden">
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3">
+                        {isBn ? 'ডেমো দেখা শেষ? এবার নিজের ফার্মেসি চালু করুন' : 'Finished Exploring? Launch Your Real Pharmacy Today'}
+                    </h2>
+                    <p className="text-slate-400 text-xs sm:text-sm mb-6">
+                        {isBn ? '১৪ দিনের ফ্রি ট্রায়াল। কোনো কার্ড লাগবে না।' : '14-day free trial. No credit card required.'}
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                        <Link
+                            href={route('register')}
+                            className="h-10 px-6 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center transition-colors shadow-lg"
+                        >
+                            {isBn ? 'ব্যবসা নিবন্ধন ও ট্রায়াল শুরু' : 'Register Business & Start Trial'}
+                        </Link>
+                        <a
+                            href="#plans"
+                            className="h-10 px-6 rounded-md bg-[#141920] hover:bg-[#1a212b] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center transition-colors"
+                        >
+                            {isBn ? 'প্ল্যান ও দাম দেখুন' : 'View Plans & Pricing'}
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="border-t border-slate-800/80 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                    {isBn
+                        ? '© ২০২৬ PharmaCore SaaS | ডেমো পরিবেশের সব তথ্য নমুনা।'
+                        : '© 2026 PharmaCore SaaS | All demo environment data is sample.'}
+                </div>
+                <div className="flex items-center gap-4 text-xs font-medium">
+                    <a href="#roles" className="hover:text-slate-200 transition-colors">
+                        {isBn ? 'রোল ডেমো' : 'Role Demo'}
+                    </a>
+                    <a href="#tour" className="hover:text-slate-200 transition-colors">
+                        {isBn ? 'গাইডেড ট্যুর' : 'Guided Tour'}
+                    </a>
+                    <a href="#plans" className="hover:text-slate-200 transition-colors">
+                        {isBn ? 'প্ল্যান ও দাম' : 'Plans & Pricing'}
+                    </a>
+                    <Link href={route('login')} className="hover:text-slate-200 transition-colors">
+                        {isBn ? 'সাইন ইন' : 'Sign In'}
+                    </Link>
+                </div>
+            </footer>
         </div>
     );
 }

@@ -22,7 +22,7 @@ import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { SharedPageProps } from '@/types';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 
 interface PosMedicine {
     id: number;
@@ -42,6 +42,7 @@ interface PosMedicine {
 }
 
 type SaleUnit = 'piece' | 'strip' | 'box';
+type DiscountType = 'fixed' | 'percent';
 
 interface CrmCustomer {
     id: number;
@@ -159,6 +160,7 @@ export default function PosIndex({
 }: PosProps) {
     const { tenant } = usePage<SharedPageProps>().props;
     const currency = tenant?.currentTenant?.currency_code ?? 'BDT';
+    const currencySymbol = getCurrencySymbol(currency);
 
     const [query, setQuery] = useState('');
     const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all');
@@ -166,6 +168,7 @@ export default function PosIndex({
     const [customerId, setCustomerId] = useState('');
     const [customerName, setCustomerName] = useState('Walk-in Customer');
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [discountType, setDiscountType] = useState<DiscountType>('fixed');
     const [discount, setDiscount] = useState('0');
     const [processing, setProcessing] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
@@ -418,11 +421,31 @@ export default function PosIndex({
             sum + getPackUnitPrice(item.medicine, item.saleUnit) * item.qty,
         0
     );
-    const discountAmount = Math.max(
+    const handleDiscountTypeChange = (nextType: DiscountType) => {
+        if (nextType === discountType) return;
+        setDiscountType(nextType);
+        const currentNum = Math.max(0, Number(discount) || 0);
+        if (nextType === 'percent' && currentNum > 100) {
+            setDiscount('100');
+        }
+    };
+
+    const rawDiscountValue = Math.max(0, Number(discount) || 0);
+    const effectiveDiscountPercent =
+        discountType === 'percent' ? Math.min(100, rawDiscountValue) : 0;
+    const discountAmount =
+        discountType === 'percent'
+            ? Math.min(
+                  subtotal,
+                  Math.round(
+                      ((subtotal * effectiveDiscountPercent) / 100) * 100
+                  ) / 100
+              )
+            : Math.min(subtotal, Math.round(rawDiscountValue * 100) / 100);
+    const grandTotal = Math.max(
         0,
-        Math.min(subtotal, Number(discount) || 0)
+        Math.round((subtotal - discountAmount) * 100) / 100
     );
-    const grandTotal = Math.max(0, subtotal - discountAmount);
 
     const handleCompleteCheckout = (e: React.FormEvent) => {
         e.preventDefault();
@@ -435,7 +458,11 @@ export default function PosIndex({
                 customer_id: customerId ? Number(customerId) : null,
                 customer_name: selectedCustomer?.name ?? customerName,
                 payment_method: paymentMethod,
-                discount: discountAmount,
+                discount:
+                    discountType === 'percent'
+                        ? effectiveDiscountPercent
+                        : rawDiscountValue,
+                discount_type: discountType,
                 items: cart.map((c) => ({
                     medicine_id: c.medicine.id,
                     quantity: c.qty,
@@ -460,9 +487,9 @@ export default function PosIndex({
             title="Point of Sale"
             subtitle={`${branchName ?? 'Active Branch'} · Compact list terminal & FEFO checkout`}
         >
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 {/* Left Catalog List */}
-                <div className="lg:col-span-7 xl:col-span-8 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden">
+                <div className="lg:col-span-8 min-w-0 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden">
                     <div className="px-3 py-2 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-[#151921] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex-1 min-w-0 flex items-center gap-1.5">
                             <div className="flex-1 min-w-0">
@@ -554,18 +581,18 @@ export default function PosIndex({
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-slate-50/80 dark:bg-[#151921] border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap select-none">
-                                    <th className="px-2.5 py-1.5">SKU</th>
-                                    <th className="px-2.5 py-1.5">Barcode</th>
-                                    <th className="px-2.5 py-1.5">Medicine</th>
-                                    <th className="px-2.5 py-1.5">Generic</th>
-                                    <th className="px-2.5 py-1.5 text-right">
+                                <tr className="bg-slate-50/80 dark:bg-[#151921] border-b border-slate-200/90 dark:border-slate-800 text-[9.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap select-none">
+                                    <th className="px-1.5 py-1 w-[52px]">SKU</th>
+                                    <th className="hidden sm:table-cell px-1 py-1 w-[48px]">Barcode</th>
+                                    <th className="px-1.5 py-1">Medicine</th>
+                                    <th className="hidden xl:table-cell px-1.5 py-1 w-[100px] 2xl:w-[130px]">Generic</th>
+                                    <th className="px-1 py-1 text-right w-[56px]">
                                         Stock
                                     </th>
-                                    <th className="px-2.5 py-1.5 text-right">
+                                    <th className="px-1 py-1 text-right w-[62px]">
                                         Price
                                     </th>
-                                    <th className="px-2.5 py-1.5 text-right w-[108px]">
+                                    <th className="px-1.5 py-1 text-right w-[60px]">
                                         Cart
                                     </th>
                                 </tr>
@@ -596,7 +623,7 @@ export default function PosIndex({
                                         return (
                                             <tr
                                                 key={med.id}
-                                                className={`min-h-[36px] transition-colors ${
+                                                className={`transition-colors ${
                                                     outOfStock
                                                         ? 'opacity-55 bg-slate-50/30 dark:bg-slate-900/20'
                                                         : cartQty > 0
@@ -604,35 +631,49 @@ export default function PosIndex({
                                                           : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
                                                 }`}
                                             >
-                                                <td className="px-2.5 py-1.5 font-mono text-[11.5px] font-bold text-[#FF4A1F] whitespace-nowrap">
+                                                <td className="px-1.5 py-1 font-mono text-[9.5px] font-bold text-[#FF4A1F] whitespace-nowrap">
                                                     {med.sku}
                                                 </td>
-                                                <td className="px-2.5 py-1 whitespace-nowrap">
+                                                <td className="hidden sm:table-cell px-1 py-1 whitespace-nowrap">
                                                     <BarcodeSvg
                                                         value={med.barcode}
                                                         compact
+                                                        height={14}
+                                                        barWidth={0.65}
+                                                        className="[&>svg]:h-[14px] [&>svg]:max-w-[44px]"
                                                     />
                                                 </td>
-                                                <td className="px-2.5 py-1.5 text-[12.5px] whitespace-nowrap">
-                                                    <div className="inline-flex items-center gap-1.5">
-                                                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                                <td className="px-1.5 py-1 text-[10px] min-w-0">
+                                                    <div className="flex items-baseline gap-1 min-w-0">
+                                                        <span
+                                                            className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[130px] xl:max-w-[155px] 2xl:max-w-[210px]"
+                                                            title={med.name}
+                                                        >
                                                             {med.name}
                                                         </span>
                                                         {med.strength && (
-                                                            <span className="text-[11px] text-slate-400">
+                                                            <span className="text-[8.5px] text-slate-400 shrink-0">
                                                                 {med.strength}
                                                             </span>
                                                         )}
                                                         {med.requires_prescription && (
-                                                            <span className="text-[10.5px] font-bold text-[#FF4A1F]">
+                                                            <span className="text-[8.5px] font-bold text-[#FF4A1F] shrink-0">
                                                                 Rx
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {med.generic_name && (
+                                                        <div
+                                                            className="xl:hidden text-[8.5px] text-slate-400 truncate max-w-[130px]"
+                                                            title={med.generic_name}
+                                                        >
+                                                            {med.generic_name}
+                                                        </div>
+                                                    )}
                                                 </td>
-                                                <td className="px-2.5 py-1.5 text-[12px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                                <td className="hidden xl:table-cell px-1.5 py-1 text-[9.5px] text-slate-500 dark:text-slate-400">
                                                     <span
-                                                        className="block max-w-[170px] truncate"
+                                                        className="block truncate max-w-[95px] 2xl:max-w-[125px]"
                                                         title={
                                                             med.generic_name ||
                                                             med.dosage_form
@@ -642,7 +683,7 @@ export default function PosIndex({
                                                             med.dosage_form}
                                                     </span>
                                                 </td>
-                                                <td className="px-2.5 py-1.5 text-right text-[12px] whitespace-nowrap">
+                                                <td className="px-1 py-1 text-right text-[9.5px] whitespace-nowrap">
                                                     {outOfStock ? (
                                                         <StatusDot variant="rose">
                                                             Out
@@ -659,11 +700,11 @@ export default function PosIndex({
                                                             {
                                                                 med.available_stock
                                                             }{' '}
-                                                            {med.unit}
+                                                            <span className="text-[8.5px] font-normal text-slate-400">{med.unit}</span>
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="px-2.5 py-1.5 text-right text-[12.5px] font-bold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                                <td className="px-1 py-1 text-right text-[10px] font-bold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap leading-tight">
                                                     <div>
                                                         {formatCurrency(
                                                             med.selling_price,
@@ -672,7 +713,7 @@ export default function PosIndex({
                                                     </div>
                                                     {med.units_per_box > 1 &&
                                                         med.box_selling_price && (
-                                                            <div className="text-[10.5px] font-normal text-slate-400">
+                                                            <div className="text-[8px] font-normal text-slate-400">
                                                                 Box:{' '}
                                                                 {formatCurrency(
                                                                     med.box_selling_price,
@@ -681,9 +722,9 @@ export default function PosIndex({
                                                             </div>
                                                         )}
                                                 </td>
-                                                <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
+                                                <td className="px-1.5 py-1 text-right whitespace-nowrap">
                                                     {cartQty > 0 ? (
-                                                        <div className="inline-flex items-center gap-1">
+                                                        <div className="inline-flex items-center gap-0.5">
                                                             <button
                                                                 type="button"
                                                                 onClick={() =>
@@ -693,11 +734,11 @@ export default function PosIndex({
                                                                     )
                                                                 }
                                                                 aria-label={`Decrease ${med.name} quantity`}
-                                                                className="h-6 w-6 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#FF4A1F]/60 cursor-pointer"
+                                                                className="h-4.5 w-4.5 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#FF4A1F]/60 cursor-pointer"
                                                             >
-                                                                <Minus className="h-3 w-3" />
+                                                                <Minus className="h-2 w-2" />
                                                             </button>
-                                                            <span className="w-6 text-center text-[12px] font-bold tabular-nums text-[#FF4A1F]">
+                                                            <span className="w-4 text-center text-[9.5px] font-bold tabular-nums text-[#FF4A1F]">
                                                                 {cartQty}
                                                             </span>
                                                             <button
@@ -713,9 +754,9 @@ export default function PosIndex({
                                                                     )
                                                                 }
                                                                 aria-label={`Increase ${med.name} quantity`}
-                                                                className="h-6 w-6 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#FF4A1F]/60 disabled:opacity-40 cursor-pointer"
+                                                                className="h-4.5 w-4.5 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#FF4A1F]/60 disabled:opacity-40 cursor-pointer"
                                                             >
-                                                                <Plus className="h-3 w-3" />
+                                                                <Plus className="h-2 w-2" />
                                                             </button>
                                                         </div>
                                                     ) : (
@@ -733,9 +774,9 @@ export default function PosIndex({
                                                             onClick={() =>
                                                                 addToCart(med)
                                                             }
-                                                            className="h-7 px-2.5 text-[11.5px]"
+                                                            className="h-5 px-1.5 text-[9.5px] leading-none"
                                                         >
-                                                            <Plus className="h-3 w-3" />
+                                                            <Plus className="h-2 w-2 mr-0.5" />
                                                             Add
                                                         </Button>
                                                     )}
@@ -750,7 +791,7 @@ export default function PosIndex({
                 </div>
 
                 {/* Right Order Register */}
-                <div className="lg:col-span-5 xl:col-span-4 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] sticky top-16 overflow-hidden">
+                <div className="lg:col-span-4 min-w-0 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] sticky top-16 overflow-hidden">
                     <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-[#151921]">
                         <div className="flex items-center gap-2">
                             <ShoppingCart className="h-4 w-4 text-[#FF4A1F]" />
@@ -821,16 +862,114 @@ export default function PosIndex({
                                         setPaymentMethod(String(e.target.value))
                                     }
                                 />
-                                <Input
-                                    label="Discount"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={discount}
-                                    onChange={(e) =>
-                                        setDiscount(e.target.value)
-                                    }
-                                />
+                                <div className="flex flex-col gap-1 w-full font-sans antialiased">
+                                    <div className="flex items-center justify-between gap-1">
+                                        <label
+                                            htmlFor="pos-discount-input"
+                                            className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
+                                        >
+                                            Discount
+                                        </label>
+                                        <div
+                                            role="group"
+                                            aria-label="Discount type"
+                                            className="inline-flex rounded-[3px] border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800/70"
+                                        >
+                                            <button
+                                                type="button"
+                                                aria-pressed={
+                                                    discountType === 'fixed'
+                                                }
+                                                onClick={() =>
+                                                    handleDiscountTypeChange(
+                                                        'fixed'
+                                                    )
+                                                }
+                                                title={`Fixed amount (${currencySymbol})`}
+                                                className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                    discountType === 'fixed'
+                                                        ? 'bg-[#FF4A1F] text-white'
+                                                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                                }`}
+                                            >
+                                                {currencySymbol}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-pressed={
+                                                    discountType === 'percent'
+                                                }
+                                                onClick={() =>
+                                                    handleDiscountTypeChange(
+                                                        'percent'
+                                                    )
+                                                }
+                                                title="Percentage (%)"
+                                                className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                    discountType === 'percent'
+                                                        ? 'bg-[#FF4A1F] text-white'
+                                                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                                }`}
+                                            >
+                                                %
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
+                                        {discountType === 'fixed' && (
+                                            <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
+                                                {currencySymbol}
+                                            </span>
+                                        )}
+                                        <input
+                                            id="pos-discount-input"
+                                            type="number"
+                                            min="0"
+                                            max={
+                                                discountType === 'percent'
+                                                    ? 100
+                                                    : undefined
+                                            }
+                                            step="0.01"
+                                            value={discount}
+                                            onChange={(e) =>
+                                                setDiscount(e.target.value)
+                                            }
+                                            onFocus={(e) =>
+                                                e.currentTarget.select()
+                                            }
+                                            onBlur={() => {
+                                                const num = Number(discount);
+                                                if (
+                                                    discount.trim() === '' ||
+                                                    Number.isNaN(num) ||
+                                                    num < 0
+                                                ) {
+                                                    setDiscount('0');
+                                                    return;
+                                                }
+                                                if (
+                                                    discountType ===
+                                                        'percent' &&
+                                                    num > 100
+                                                ) {
+                                                    setDiscount('100');
+                                                }
+                                            }}
+                                            placeholder={
+                                                discountType === 'percent'
+                                                    ? '0'
+                                                    : '0.00'
+                                            }
+                                            className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                        />
+                                        {discountType === 'percent' && (
+                                            <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
+                                                %
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1029,7 +1168,13 @@ export default function PosIndex({
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-slate-500">
-                                    <span>Discount</span>
+                                    <span>
+                                        Discount
+                                        {discountType === 'percent' &&
+                                        effectiveDiscountPercent > 0
+                                            ? ` (${effectiveDiscountPercent}%)`
+                                            : ''}
+                                    </span>
                                     <span className="font-semibold tabular-nums">
                                         -
                                         {formatCurrency(
