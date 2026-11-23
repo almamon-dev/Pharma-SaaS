@@ -10,6 +10,7 @@ use App\Models\Medicine;
 use App\Models\MedicineBatch;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Services\InventoryService;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -55,8 +56,17 @@ class PosController extends Controller
             ]);
 
         $customers = Customer::query()
+            ->withSum('sales as total_due', 'due_amount')
             ->orderBy('name')
-            ->get(['id', 'name', 'phone', 'loyalty_points', 'allergies']);
+            ->get(['id', 'name', 'phone', 'loyalty_points', 'allergies'])
+            ->map(fn (Customer $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'phone' => $c->phone,
+                'loyalty_points' => (int) $c->loyalty_points,
+                'allergies' => $c->allergies,
+                'total_due' => (float) ($c->total_due ?? 0),
+            ]);
 
         return Inertia::render('Pos/Index', [
             'medicines' => $medicines,
@@ -85,7 +95,14 @@ class PosController extends Controller
                 Rule::exists('customers', 'id')->where('tenant_id', $tenant->id),
             ],
             'customer_name' => ['nullable', 'string', 'max:255'],
-            'payment_method' => ['required', Rule::in(['cash', 'card', 'bkash'])],
+            'doctor_name' => ['nullable', 'string', 'max:255'],
+            'prescription_notes' => ['nullable', 'string', 'max:1000'],
+            'payment_method' => ['nullable', 'string', 'max:50'],
+            'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'payments' => ['nullable', 'array'],
+            'payments.*.method' => ['required_with:payments', 'string', Rule::in(['cash', 'card', 'bkash', 'nagad', 'rocket'])],
+            'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01'],
+            'payments.*.reference_number' => ['nullable', 'string', 'max:100'],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])],
             'items' => ['required', 'array', 'min:1'],
@@ -96,6 +113,10 @@ class PosController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.sale_unit' => ['nullable', Rule::in(['piece', 'strip', 'box'])],
         ]);
+
+        if ($branch && ! $request->user()->canAccessBranch($branch)) {
+            abort(403, "You do not have permission to dispense from branch \"{$branch->name}\".");
+        }
 
         $sale = DB::transaction(function () use ($validated, $branch, $request): Sale {
             $subtotal = 0;
@@ -180,7 +201,62 @@ class PosController extends Controller
                 ? round($subtotal * min(100, $rawDiscount) / 100, 2)
                 : $rawDiscount;
             $discountAmount = min($subtotal, max(0, round($discountAmount, 2)));
+
+            // Enforce role discount limit cap (server-side per Section 3.8)
+            $discountCapPercent = $request->user()->getRoleLimit('discount_percent');
+            if ($discountCapPercent !== null && $subtotal > 0) {
+                $effectivePercent = ($discountAmount / $subtotal) * 100;
+                if ($effectivePercent > $discountCapPercent + 0.01) {
+                    abort(422, "Your role allows a maximum discount of {$discountCapPercent}%. Requested: ".round($effectivePercent, 1)."%. Manager approval required.");
+                }
+            }
+
             $totalAmount = max(0, round($subtotal - $discountAmount, 2));
+
+            // Determine payment lines and amounts
+            $paymentLines = [];
+            if (! empty($validated['payments']) && is_array($validated['payments'])) {
+                foreach ($validated['payments'] as $p) {
+                    $amt = round((float) ($p['amount'] ?? 0), 2);
+                    if ($amt > 0) {
+                        $paymentLines[] = [
+                            'method' => (string) ($p['method'] ?? 'cash'),
+                            'amount' => $amt,
+                            'reference_number' => ! empty($p['reference_number']) ? trim((string) $p['reference_number']) : null,
+                        ];
+                    }
+                }
+                $totalCollected = array_sum(array_column($paymentLines, 'amount'));
+                $paymentMethodSummary = implode(' + ', array_unique(array_map(fn ($p) => ucfirst($p['method']), $paymentLines)));
+            } else {
+                $method = (string) ($validated['payment_method'] ?? 'cash');
+                $givenPaid = isset($validated['paid_amount']) ? (float) $validated['paid_amount'] : $totalAmount;
+                $totalCollected = max(0, round($givenPaid, 2));
+                $paymentMethodSummary = ucfirst($method);
+                if ($totalCollected > 0) {
+                    $paymentLines[] = [
+                        'method' => in_array($method, ['cash', 'card', 'bkash', 'nagad', 'rocket']) ? $method : 'cash',
+                        'amount' => $totalCollected,
+                        'reference_number' => null,
+                    ];
+                }
+            }
+
+            if ($totalCollected >= $totalAmount) {
+                $paidAmount = $totalAmount;
+                $changeAmount = round($totalCollected - $totalAmount, 2);
+                $dueAmount = 0.0;
+                $paymentStatus = 'paid';
+            } else {
+                $paidAmount = round($totalCollected, 2);
+                $changeAmount = 0.0;
+                $dueAmount = round($totalAmount - $totalCollected, 2);
+                $paymentStatus = $paidAmount > 0 ? 'partial' : 'due';
+
+                if (empty($validated['customer_id'])) {
+                    abort(422, 'A registered customer is required when selling on credit or with pending due (বাকিতে বিক্রি করতে কাস্টমার সিলেক্ট করতে হবে)।');
+                }
+            }
 
             $invoiceNumber = 'INV-'.now()->format('ymd').'-'.strtoupper(substr(uniqid(), -5));
 
@@ -193,12 +269,25 @@ class PosController extends Controller
                 'discount_amount' => round($discountAmount, 2),
                 'tax_amount' => 0,
                 'total_amount' => $totalAmount,
-                'paid_amount' => $totalAmount,
-                'payment_method' => $validated['payment_method'],
-                'payment_status' => 'paid',
+                'paid_amount' => $paidAmount,
+                'due_amount' => $dueAmount,
+                'change_amount' => $changeAmount,
+                'payment_method' => $paymentMethodSummary ?: 'Cash',
+                'payment_status' => $paymentStatus,
+                'doctor_name' => ! empty($validated['doctor_name']) ? trim((string) $validated['doctor_name']) : null,
+                'prescription_notes' => ! empty($validated['prescription_notes']) ? trim((string) $validated['prescription_notes']) : null,
                 'notes' => ! empty($validated['customer_name']) ? "Customer: {$validated['customer_name']}" : null,
                 'sold_at' => now(),
             ]);
+
+            foreach ($paymentLines as $pay) {
+                SalePayment::query()->create([
+                    'sale_id' => $sale->id,
+                    'payment_method' => $pay['method'],
+                    'amount' => $pay['amount'],
+                    'reference_number' => $pay['reference_number'],
+                ]);
+            }
 
             foreach ($allocatedLines as $line) {
                 SaleItem::query()->create([
@@ -242,15 +331,61 @@ class PosController extends Controller
                 subject: $sale,
                 metadata: [
                     'total' => $totalAmount,
+                    'paid_amount' => $paidAmount,
+                    'due_amount' => $dueAmount,
+                    'payment_status' => $paymentStatus,
                     'discount_type' => $discountType,
                     'discount_amount' => round($discountAmount, 2),
-                    'payment_method' => $validated['payment_method'],
+                    'payment_method' => $paymentMethodSummary ?: 'Cash',
                 ],
             );
 
             return $sale;
         });
 
-        return back()->with('success', "Invoice {$sale->invoice_number} recorded and FEFO stock deducted.");
+        $sale->load(['items.medicine:id,name,generic_name,strength,unit', 'customer:id,name,phone', 'payments']);
+
+        $receiptData = [
+            'id' => $sale->id,
+            'invoice_number' => $sale->invoice_number,
+            'sold_at' => $sale->sold_at ? $sale->sold_at->format('d M Y, h:i A') : now()->format('d M Y, h:i A'),
+            'branch_name' => $branch->name,
+            'branch_address' => $branch->address,
+            'branch_phone' => $branch->phone,
+            'cashier_name' => $request->user()->name,
+            'customer_name' => ! empty($validated['customer_name']) ? $validated['customer_name'] : ($sale->customer?->name ?? 'Walk-in Customer'),
+            'customer_phone' => $sale->customer?->phone,
+            'doctor_name' => $sale->doctor_name,
+            'prescription_notes' => $sale->prescription_notes,
+            'payment_method' => $sale->payment_method,
+            'payment_status' => $sale->payment_status,
+            'subtotal' => (float) $sale->subtotal,
+            'discount_amount' => (float) $sale->discount_amount,
+            'tax_amount' => (float) $sale->tax_amount,
+            'total_amount' => (float) $sale->total_amount,
+            'paid_amount' => (float) $sale->paid_amount,
+            'due_amount' => (float) $sale->due_amount,
+            'change_amount' => (float) $sale->change_amount,
+            'payments' => $sale->payments->map(fn ($p) => [
+                'method' => $p->payment_method,
+                'amount' => (float) $p->amount,
+                'reference_number' => $p->reference_number,
+            ])->values()->all(),
+            'currency' => $tenant->currency_code ?? 'BDT',
+            'items' => $sale->items->map(fn ($item) => [
+                'name' => $item->medicine?->name ?? 'Medicine',
+                'generic_name' => $item->medicine?->generic_name,
+                'strength' => $item->medicine?->strength,
+                'sale_unit' => $item->sale_unit,
+                'pack_quantity' => (int) ($item->pack_quantity ?: $item->quantity),
+                'quantity' => (int) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'line_total' => (float) $item->line_total,
+            ])->values()->all(),
+        ];
+
+        return back()
+            ->with('success', "Invoice {$sale->invoice_number} recorded and FEFO stock deducted.")
+            ->with('lastSale', $receiptData);
     }
 }

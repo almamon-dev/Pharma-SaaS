@@ -46,8 +46,15 @@ class WelcomeController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        $demoRoles = \App\Models\DemoRole::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
         return Inertia::render('Welcome', [
             'plans' => $plans,
+            'demoRoles' => $demoRoles,
         ]);
     }
 

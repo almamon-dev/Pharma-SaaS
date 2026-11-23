@@ -22,13 +22,14 @@ interface PlansIndexProps {
     businessName: string;
     isAdminOwner: boolean;
     usage: SubscriptionUsage;
+    selectedPlanKey?: string | null;
 }
 
 const paymentMethods = [
     {
         value: 'trial',
-        label: 'Start Free Trial',
-        hint: 'Full workspace access, no charge today',
+        label: 'Start Free Trial (14 Days)',
+        hint: 'Full workspace access, $0 charge, no card required',
     },
     {
         value: 'card',
@@ -52,6 +53,7 @@ export default function PlansIndex({
     businessName,
     isAdminOwner,
     usage,
+    selectedPlanKey,
 }: PlansIndexProps) {
     const { subscription, tenant } = usePage<SharedPageProps>().props;
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>(
@@ -226,15 +228,21 @@ export default function PlansIndex({
                         usage.tenants > plan.max_pharmacies ||
                         usage.branches > plan.max_branches;
 
+                    const isSelectedFromUrl = Boolean(
+                        selectedPlanKey && selectedPlanKey === plan.key
+                    );
+
                     return (
                         <div
                             key={plan.key}
                             className={`rounded-[6px] border p-6 flex flex-col justify-between bg-white dark:bg-[#1e2329] transition-all ${
                                 isCurrent
                                     ? 'border-emerald-500 border-t-[3px] border-t-emerald-500 shadow-sm'
-                                    : plan.is_popular
-                                      ? 'border-[#FF4A1F] border-t-[3px] border-t-[#FF4A1F] shadow-sm'
-                                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                                    : isSelectedFromUrl
+                                      ? 'border-[#FF4A1F] border-t-[3px] border-t-[#FF4A1F] ring-2 ring-[#FF4A1F]/30 shadow-md'
+                                      : plan.is_popular
+                                        ? 'border-[#FF4A1F] border-t-[3px] border-t-[#FF4A1F] shadow-sm'
+                                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                             }`}
                         >
                             <div>
@@ -247,7 +255,7 @@ export default function PlansIndex({
                                             </h3>
                                         </div>
                                         {plan.name_bn && (
-                                            <span className="text-[11px] font-medium text-[#FF4A1F] dark:text-[#ff7450] pl-6">
+                                             <span className="text-[11px] font-medium text-[#FF4A1F] dark:text-[#ff7450] pl-6">
                                                 {plan.name_bn}
                                             </span>
                                         )}
@@ -256,6 +264,10 @@ export default function PlansIndex({
                                         <StatusDot variant="emerald">
                                             Active Plan
                                         </StatusDot>
+                                    ) : isSelectedFromUrl ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-[#FF4A1F] text-white">
+                                            Selected Trial
+                                        </span>
                                     ) : plan.is_popular ? (
                                         <StatusDot variant="brand">
                                             Recommended

@@ -4,6 +4,7 @@ namespace App\Tenancy;
 
 use App\Models\Tenant;
 use Closure;
+use Illuminate\Support\Facades\DB;
 use LogicException;
 
 class CurrentTenant
@@ -13,6 +14,12 @@ class CurrentTenant
     public function set(Tenant $tenant): void
     {
         $this->tenant = $tenant;
+
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("SELECT set_config('app.tenant_id', :id, false)", [
+                'id' => (string) $tenant->getKey(),
+            ]);
+        }
     }
 
     public function get(): Tenant
@@ -33,6 +40,10 @@ class CurrentTenant
     public function clear(): void
     {
         $this->tenant = null;
+
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("SELECT set_config('app.tenant_id', '', false)");
+        }
     }
 
     public function run(Tenant $tenant, Closure $callback): mixed
@@ -43,8 +54,13 @@ class CurrentTenant
         try {
             return $callback($tenant);
         } finally {
-            $this->tenant = $previous;
+            if ($previous !== null) {
+                $this->set($previous);
+            } else {
+                $this->clear();
+            }
         }
     }
 }
+
 

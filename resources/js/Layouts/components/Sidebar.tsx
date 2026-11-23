@@ -85,6 +85,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 icon: Users,
             },
             {
+                category: 'SaaS Business Owner',
+                name: 'Demo Roles & Features',
+                href: route('admin.demo_roles'),
+                active: route().current('admin.demo_roles*'),
+                icon: UserCog,
+            },
+            {
                 category: 'Account',
                 name: 'Profile & Security',
                 href: route('settings.profile'),
@@ -142,19 +149,30 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             hasPerm('inventory.view', 'inventory.manage', 'inventory.adjust')
                 ? [
                       {
+                          name: 'Product Catalog',
+                          href: route('catalog.ui'),
+                          active: route().current('catalog.*'),
+                      },
+                      {
                           name: 'Inventory & FEFO',
                           href: route('inventory.index'),
                           active: route().current('inventory.index'),
                       },
                       {
                           name: 'Batches & Expiry',
-                          href: route('inventory.batches'),
+                          href: hasFeature('batch_expiry')
+                              ? route('inventory.batches')
+                              : route('plans.browse'),
                           active: route().current('inventory.batches'),
+                          locked: !hasFeature('batch_expiry'),
                       },
                       {
                           name: 'Stock Movements',
-                          href: route('inventory.movements'),
+                          href: hasFeature('batch_expiry')
+                              ? route('inventory.movements')
+                              : route('plans.browse'),
                           active: route().current('inventory.movements'),
+                          locked: !hasFeature('batch_expiry'),
                       },
                   ]
                 : []),

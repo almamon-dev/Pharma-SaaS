@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('action', 100);
             $table->string('auditable_type')->nullable();
-            $table->unsignedBigInteger('auditable_id')->nullable();
+            $table->string('auditable_id', 64)->nullable()->index();
             $table->string('description')->nullable();
             $table->jsonb('metadata')->nullable();
             $table->string('ip_address', 45)->nullable();

@@ -7,6 +7,7 @@ use App\Http\Middleware\IdentifyTenantFromDomain;
 use App\Models\Branch;
 use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -117,6 +118,62 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route($isSubdomainPortal ? 'login' : 'welcome');
+    }
+
+    public function demoEnter(Request $request): RedirectResponse
+    {
+        $role = (string) $request->input('role', 'admin');
+        $email = (string) $request->input('email', '');
+
+        if ($email === '') {
+            $email = match ($role) {
+                'superadmin' => 'superadmin@pharmacore.test',
+                'pharmacist' => 'pharmacist@pharmacore.test',
+                'cashier' => 'cashier@pharmacore.test',
+                'manager', 'pathologist', 'radiologist' => 'manager@pharmacore.test',
+                default => 'admin@pharmacore.test',
+            };
+        }
+
+        $user = User::where('email', $email)->first()
+            ?? User::where('email', 'admin@pharmacore.test')->first()
+            ?? User::firstOrFail();
+
+        Auth::guard('web')->logout();
+        Auth::login($user, true);
+        $request->session()->regenerate();
+
+        if ($user->isSuperAdmin()) {
+            return redirect()->route('admin.dashboard');
+        }
+
+        /** @var Tenant|null $domainTenant */
+        $domainTenant = $request->attributes->get(IdentifyTenantFromDomain::REQUEST_ATTRIBUTE);
+
+        $tenant = $domainTenant
+            ?? $user->tenants()->wherePivot('is_active', true)->first()
+            ?? $user->ownedTenants()->first()
+            ?? Tenant::find(1);
+
+        if ($tenant) {
+            $branch = Branch::withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $tenant->id)
+                ->where('is_active', true)
+                ->orderByDesc('is_head_office')
+                ->orderBy('id')
+                ->first();
+
+            session([
+                'active_tenant_id' => $tenant->id,
+                'active_branch_id' => $branch?->id,
+            ]);
+        }
+
+        $targetRoute = ($role === 'cashier' || $user->email === 'cashier@pharmacore.test')
+            ? 'pos.index'
+            : 'dashboard';
+
+        return redirect()->route($targetRoute);
     }
 
     private function isSubdomainPortal(Request $request): bool

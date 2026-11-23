@@ -23,8 +23,12 @@ class Sale extends Model
         'tax_amount',
         'total_amount',
         'paid_amount',
+        'due_amount',
+        'change_amount',
         'payment_method',
         'payment_status',
+        'doctor_name',
+        'prescription_notes',
         'notes',
         'sold_at',
     ];
@@ -37,6 +41,8 @@ class Sale extends Model
             'tax_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
+            'due_amount' => 'decimal:2',
+            'change_amount' => 'decimal:2',
             'sold_at' => 'datetime',
         ];
     }
@@ -54,6 +60,11 @@ class Sale extends Model
     public function cashier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SalePayment::class);
     }
 
     public function items(): HasMany

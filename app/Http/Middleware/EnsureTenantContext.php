@@ -120,6 +120,8 @@ class EnsureTenantContext
         $isOwner = $user->isOwnerOf($activeTenant);
         $roles = $user->rolesForTenant($activeTenant);
 
+        app(\App\Tenancy\CurrentTenant::class)->set($activeTenant);
+
         $this->tenantContext->setTenant(
             tenant: $activeTenant,
             branch: $selectedBranch,

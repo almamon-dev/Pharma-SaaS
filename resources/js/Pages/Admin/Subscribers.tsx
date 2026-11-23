@@ -11,7 +11,7 @@ import {
     EmptyState,
     TableActionMenu,
 } from '@/Components/tables';
-import { PlanSummary } from '@/types';
+import { PlanModuleSummary, PlanSummary } from '@/types';
 import { formatCurrency } from '@/lib/format';
 
 interface SubscriberRow {
@@ -34,35 +34,67 @@ interface SubscriberRow {
     max_branches: number;
     employees_used: number;
     max_users: number;
+    enabled_module_ids?: number[];
 }
 
 interface AdminSubscribersProps {
     subscribers: SubscriberRow[];
     plans: PlanSummary[];
+    modules?: PlanModuleSummary[];
 }
 
 export default function AdminSubscribers({
     subscribers,
     plans,
+    modules = [],
 }: AdminSubscribersProps) {
     const [editing, setEditing] = useState<SubscriberRow | null>(null);
 
-    const form = useForm({
+    const form = useForm<{
+        plan_key: string;
+        status: string;
+        billing_cycle: string;
+        module_ids: number[];
+    }>({
         plan_key: '',
         status: 'active',
         billing_cycle: 'monthly',
+        module_ids: [],
     });
 
     const openManage = (sub: SubscriberRow) => {
         setEditing(sub);
+        const planKey = sub.plan_key || plans[0]?.key || 'growth';
+        const foundPlan = plans.find((p) => p.key === planKey);
+        const planModuleIds = foundPlan?.modules?.map((m) => m.id) ?? [];
+        const coreModuleIds = modules.filter((m) => m.is_core).map((m) => m.id);
+        const defaultModuleIds = Array.from(new Set([...coreModuleIds, ...planModuleIds]));
+        const initialModuleIds = sub.enabled_module_ids && sub.enabled_module_ids.length > 0
+            ? sub.enabled_module_ids
+            : defaultModuleIds;
+
         form.setData({
-            plan_key: sub.plan_key || plans[0]?.key || 'growth',
+            plan_key: planKey,
             status:
                 sub.subscription_status === 'none'
                     ? 'active'
                     : sub.subscription_status,
             billing_cycle: sub.billing_cycle || 'monthly',
+            module_ids: initialModuleIds,
         });
+    };
+
+    const handlePlanChange = (newPlanKey: string) => {
+        const foundPlan = plans.find((p) => p.key === newPlanKey);
+        const planModuleIds = foundPlan?.modules?.map((m) => m.id) ?? [];
+        const coreModuleIds = modules.filter((m) => m.is_core).map((m) => m.id);
+        const combined = Array.from(new Set([...coreModuleIds, ...planModuleIds]));
+
+        form.setData((data) => ({
+            ...data,
+            plan_key: newPlanKey,
+            module_ids: combined,
+        }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -231,10 +263,7 @@ export default function AdminSubscribers({
                                 label="Assigned Plan"
                                 value={form.data.plan_key}
                                 onChange={(e) =>
-                                    form.setData(
-                                        'plan_key',
-                                        String(e.target.value)
-                                    )
+                                    handlePlanChange(String(e.target.value))
                                 }
                                 options={planOptions}
                             />
@@ -294,6 +323,70 @@ export default function AdminSubscribers({
                                         },
                                     ]}
                                 />
+                            </div>
+
+                            {/* Direct Module & Feature Access Control */}
+                            <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                            Feature & Module Privileges
+                                        </label>
+                                        <p className="text-[11px] text-slate-400">
+                                            Control which modules are enabled for this pharmacy workspace.
+                                        </p>
+                                    </div>
+                                    <span className="text-[11px] font-mono font-bold text-[#FF4A1F] bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900/50 px-2 py-0.5 rounded">
+                                        {form.data.module_ids.length} Active
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto p-1 rounded border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                                    {modules.map((mod) => {
+                                        const isCore = Boolean(mod.is_core);
+                                        const isChecked = isCore || form.data.module_ids.includes(mod.id);
+
+                                        return (
+                                            <label
+                                                key={mod.id}
+                                                className={`flex items-start gap-2 p-2 rounded border text-xs cursor-pointer transition-colors ${
+                                                    isCore
+                                                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+                                                        : isChecked
+                                                            ? 'bg-orange-50/60 dark:bg-orange-950/30 border-[#FF4A1F]/50 text-slate-900 dark:text-slate-100'
+                                                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    disabled={isCore}
+                                                    onChange={(e) => {
+                                                        if (isCore) return;
+                                                        const next = e.target.checked
+                                                            ? [...form.data.module_ids, mod.id]
+                                                            : form.data.module_ids.filter((id) => id !== mod.id);
+                                                        form.setData('module_ids', next);
+                                                    }}
+                                                    className="mt-0.5 rounded text-[#FF4A1F] focus:ring-[#FF4A1F]"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-semibold truncate flex items-center gap-1.5">
+                                                        <span>{mod.name}</span>
+                                                        {isCore && (
+                                                            <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
+                                                                Core
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 font-mono">
+                                                        {mod.key}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">

@@ -28,9 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'super_admin' => EnsureSuperAdmin::class,
             'subscription.active' => EnsureActiveSubscription::class,
+            'subscription.writable' => \App\Modules\Billing\Middleware\EnsureSubscriptionWritable::class,
             'tenant' => EnsureTenantContext::class,
             'tenant.role' => EnsureTenantRole::class,
-            'feature' => EnsureTenantFeature::class,
+            'feature' => \App\Modules\Billing\Middleware\EnsureFeatureEnabled::class,
         ]);
 
         $middleware->redirectGuestsTo(fn (Request $request): string => (

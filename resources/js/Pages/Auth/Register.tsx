@@ -24,12 +24,30 @@ function slugifySubdomain(value: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
-export default function Register() {
+interface RegisterProps {
+    initialPlan?: {
+        key: string;
+        name: string;
+        name_bn?: string | null;
+        trial_days: number;
+        monthly_price?: number | string;
+    } | null;
+}
+
+export default function Register({ initialPlan }: RegisterProps) {
     const { tenancy } = usePage<SharedPageProps>().props;
     const baseDomain = tenancy?.baseDomain ?? 'localhost';
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [domainCustomized, setDomainCustomized] = useState(false);
+
+    // Read plan query param if available
+    const searchParams =
+        typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search)
+            : null;
+    const planFromUrl = searchParams?.get('plan');
+    const selectedPlanKey = initialPlan?.key ?? planFromUrl ?? '';
 
     const { data, setData, post, processing, errors } = useForm({
         business_name: '',
@@ -39,6 +57,7 @@ export default function Register() {
         phone: '',
         password: '',
         password_confirmation: '',
+        plan: selectedPlanKey,
     });
 
     const handleBusinessNameChange = (value: string) => {
@@ -60,22 +79,47 @@ export default function Register() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post(route('register'));
+        const postUrl = data.plan
+            ? `${route('register')}?plan=${encodeURIComponent(data.plan)}`
+            : route('register');
+        post(postUrl);
     };
 
     return (
         <AuthLayout
             title="Create Your Workspace"
-            subtitle="Enter your business details and administrator credentials. You will select a subscription plan on the next step."
+            subtitle={
+                selectedPlanKey
+                    ? `Register to begin your 14-day free trial on the ${initialPlan?.name ?? selectedPlanKey.toUpperCase()} plan. No payment required today.`
+                    : "Enter your business details and administrator credentials. You will select a subscription plan on the next step."
+            }
             badge="Pharmacy Onboarding"
             size="md"
             highlights={[
                 'Step 1 — Register your business & workspace subdomain',
-                'Step 2 — Select your subscription plan on the next step',
+                'Step 2 — 14-Day Free Trial activated with zero card requirement',
                 'Step 3 — Operate on your isolated domain with Branches, POS & Staff RBAC',
             ]}
         >
             <form onSubmit={handleSubmit} className="space-y-4">
+                {selectedPlanKey && (
+                    <div className="rounded-[4px] border border-orange-200 dark:border-orange-500/30 bg-orange-50/80 dark:bg-[#1f1917] p-3 text-xs flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#FF4A1F] text-white text-[10px] font-bold shrink-0">
+                                ✓
+                            </span>
+                            <div>
+                                <p className="font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[11px]">
+                                    {initialPlan?.name ?? selectedPlanKey} Plan — ১৪ দিনের ফ্রি ট্রায়াল
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    কোনো ক্রেডিট কার্ড লাগবে না। সাথে সাথে সব ফিচার আনলক হবে।
+                                </p>
+                            </div>
+                        </div>
+                        <span className="font-mono font-bold text-[#FF4A1F] text-xs shrink-0">$0 / ১৪ দিন</span>
+                    </div>
+                )}
                 <Input
                     label="Business Name"
                     required

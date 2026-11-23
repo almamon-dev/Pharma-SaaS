@@ -23,6 +23,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         usePage<SharedPageProps>().props;
     const isSuperAdmin = Boolean(auth?.user?.is_super_admin);
     const isSubscriberAdmin = Boolean(auth?.user?.is_subscriber_admin);
+    const isTrialing = subscription?.status === 'trialing';
+    const daysLeft = subscription?.days_left ?? 0;
     const canViewFeatures =
         !isSuperAdmin &&
         Boolean(tenant?.currentTenant) &&
@@ -71,7 +73,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 <Header
                     title={title}
                     onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-                    actions={actions}
                     isProfileOpen={isProfileOpen}
                     setIsProfileOpen={setIsProfileOpen}
                     profileRef={profileRef}
@@ -97,17 +98,83 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {(title || subtitle) && (
-                            <div className="mb-4">
-                                {title && (
-                                    <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-                                        {title}
-                                    </h1>
+                        {subscription?.banner && (
+                            <div
+                                className={cn(
+                                    'mb-4 rounded-[4px] border px-4 py-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs',
+                                    subscription.banner.type === 'error'
+                                        ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200'
+                                        : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200'
                                 )}
-                                {subtitle && (
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            >
+                                <div className="flex items-center gap-3">
+                                    <AlertCircle className="w-5 h-5 shrink-0" />
+                                    <div>
+                                        <p className="font-bold">
+                                            {subscription.banner.title}
+                                        </p>
+                                        <p className="text-[11px] mt-0.5 opacity-90">
+                                            {subscription.banner.message}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Link
+                                    href={subscription.banner.action_url}
+                                    className="shrink-0 inline-flex items-center gap-1.5 rounded-[3px] bg-[#FF4A1F] hover:bg-[#e03f16] text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-colors"
+                                >
+                                    {subscription.banner.action_label}
+                                </Link>
+                            </div>
+                        )}
+
+                        {isTrialing && (
+                            <div className="mb-4 rounded-[4px] border border-orange-200 dark:border-orange-500/30 bg-orange-50/90 dark:bg-[#1a1412] px-4 py-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-slate-800 dark:text-slate-200 shadow-2xs">
+                                <div className="flex items-center gap-3">
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] shrink-0 font-bold text-sm">
+                                        ⏳
+                                    </span>
+                                    <div>
+                                        <p className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                            <span>১৪ দিনের ফ্রি ট্রায়াল চলছে</span>
+                                            {subscription?.plan?.name && (
+                                                <span className="rounded bg-[#FF4A1F] text-white text-[10px] px-1.5 py-0.5 font-semibold">
+                                                    {subscription.plan.name}
+                                                </span>
+                                            )}
+                                        </p>
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                                            আপনার ট্রায়ালের আর{' '}
+                                            <strong className="text-[#FF4A1F] font-bold">
+                                                {daysLeft} দিন
+                                            </strong>{' '}
+                                            বাকি আছে। ট্রায়াল চলাকালীন সকল ফিচার কোনো ক্রেডিট কার্ড ছাড়াই সম্পূর্ণ আনলক করা।
+                                        </p>
+                                    </div>
+                                </div>
+                                {isSubscriberAdmin && (
+                                    <Link
+                                        href={route('plans.index')}
+                                        className="shrink-0 inline-flex items-center gap-1.5 rounded-[3px] bg-[#FF4A1F] hover:bg-[#e03f16] text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-colors"
+                                    >
+                                        প্ল্যান আপগ্রেড / বিলিং
+                                    </Link>
+                                )}
+                            </div>
+                        )}
+
+                        {(subtitle || actions) && (
+                            <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                {subtitle ? (
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
                                         {subtitle}
                                     </p>
+                                ) : (
+                                    <div />
+                                )}
+                                {actions && (
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                        {actions}
+                                    </div>
                                 )}
                             </div>
                         )}

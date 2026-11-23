@@ -68,7 +68,16 @@ export interface SubscriptionUsage {
 export interface SubscriptionSharedData {
     has_subscription: boolean;
     is_usable: boolean;
+    is_writable?: boolean;
     status: string;
+    status_badge?: { label: string; color: string };
+    banner?: {
+        type: string;
+        title: string;
+        message: string;
+        action_label: string;
+        action_url: string;
+    } | null;
     billing_cycle: string;
     amount: number;
     payment_method?: string | null;
@@ -145,6 +154,7 @@ export interface TenantSharedData {
     canManageCrm: boolean;
     canManageBilling: boolean;
     enabledFeatures?: string[];
+    featureStates?: Record<string, { name: string; type: string; enabled: boolean; level?: string | null; limit?: number | null }>;
     features?: TenantFeatureItem[];
     branches: BranchItem[];
     tenants: TenantMembership[];
@@ -156,6 +166,47 @@ export interface DomainTenantBanner {
     slug: string;
     domain: string;
     city?: string | null;
+}
+
+export interface PosReceiptItem {
+    name: string;
+    generic_name?: string | null;
+    strength?: string | null;
+    sale_unit: string;
+    pack_quantity: number;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+}
+
+export interface PosReceiptData {
+    id: number;
+    invoice_number: string;
+    sold_at: string;
+    branch_name: string;
+    branch_address?: string | null;
+    branch_phone?: string | null;
+    cashier_name: string;
+    customer_name?: string | null;
+    customer_phone?: string | null;
+    doctor_name?: string | null;
+    prescription_notes?: string | null;
+    payment_method: string;
+    payment_status?: string;
+    subtotal: number;
+    discount_amount: number;
+    tax_amount: number;
+    total_amount: number;
+    paid_amount: number;
+    due_amount?: number;
+    change_amount?: number;
+    payments?: Array<{
+        method: string;
+        amount: number;
+        reference_number?: string | null;
+    }>;
+    currency: string;
+    items: PosReceiptItem[];
 }
 
 export interface SharedPageProps {
@@ -180,6 +231,7 @@ export interface SharedPageProps {
     flash: {
         success?: string | null;
         error?: string | null;
+        lastSale?: PosReceiptData | null;
     };
     errors: Record<string, string>;
     [key: string]: unknown;

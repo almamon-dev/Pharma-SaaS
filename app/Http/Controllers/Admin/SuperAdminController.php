@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\DemoRole;
 use App\Models\Module;
 use App\Models\SaasPlan;
 use App\Models\Scopes\TenantScope;
@@ -258,19 +259,33 @@ class SuperAdminController extends Controller
     public function subscribers(): Response
     {
         $plans = SaasPlan::query()
+            ->with('modules:id,key,name')
             ->orderBy('sort_order')
             ->get(['id', 'name', 'key', 'monthly_price', 'annual_price', 'max_pharmacies', 'max_branches', 'max_users']);
+
+        $modules = Module::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['id', 'key', 'name', 'category', 'is_core']);
 
         $subscribers = User::query()
             ->where('is_super_admin', false)
             ->where('account_type', 'admin')
-            ->with(['activeSubscription.plan', 'currentTenant:id,name'])
+            ->with(['activeSubscription.plan.modules:id,key,name', 'currentTenant.modules'])
             ->orderBy('name')
             ->get()
             ->map(function (User $admin) {
                 $subscription = $admin->activeSubscription;
                 $plan = $subscription?->plan;
                 $usage = $admin->subscriptionUsage();
+
+                $enabledModuleIds = $admin->currentTenant
+                    ? $admin->currentTenant->modules
+                        ->where('is_active', true)
+                        ->where('pivot.is_enabled', true)
+                        ->pluck('id')
+                        ->all()
+                    : ($plan ? $plan->modules->pluck('id')->all() : []);
 
                 return [
                     'id' => $admin->id,
@@ -292,12 +307,14 @@ class SuperAdminController extends Controller
                     'max_branches' => $usage['max_branches'],
                     'employees_used' => $usage['employees'],
                     'max_users' => $usage['max_users'],
+                    'enabled_module_ids' => $enabledModuleIds,
                 ];
             });
 
         return Inertia::render('Admin/Subscribers', [
             'subscribers' => $subscribers,
             'plans' => $plans,
+            'modules' => $modules,
         ]);
     }
 
@@ -314,6 +331,8 @@ class SuperAdminController extends Controller
             'plan_key' => ['required', 'string', Rule::exists('saas_plans', 'key')],
             'status' => ['required', Rule::in(['active', 'trialing', 'suspended', 'cancelled'])],
             'billing_cycle' => ['required', Rule::in(['monthly', 'annual'])],
+            'module_ids' => ['nullable', 'array'],
+            'module_ids.*' => ['integer', Rule::exists('modules', 'id')],
         ]);
 
         $plan = SaasPlan::query()->where('key', $validated['plan_key'])->firstOrFail();
@@ -332,7 +351,33 @@ class SuperAdminController extends Controller
             forcedStatus: $validated['status'],
         );
 
-        return back()->with('success', "Updated subscription for {$user->name} ({$plan->name} — {$validated['status']}).");
+        if (array_key_exists('module_ids', $validated)) {
+            $tenants = $user->ownedTenants()->get();
+            if ($user->currentTenant && ! $tenants->contains('id', $user->currentTenant->id)) {
+                $tenants->push($user->currentTenant);
+            }
+
+            $selectedModuleIds = collect($validated['module_ids'] ?? [])->map(fn ($id) => (int) $id);
+            $allActiveModules = Module::query()->where('is_active', true)->get();
+            $now = now();
+
+            foreach ($tenants as $tenant) {
+                foreach ($allActiveModules as $mod) {
+                    $enabled = $mod->is_core || $selectedModuleIds->contains($mod->id);
+                    DB::table('tenant_modules')->updateOrInsert(
+                        ['tenant_id' => $tenant->id, 'module_id' => $mod->id],
+                        [
+                            'is_enabled' => $enabled,
+                            'enabled_at' => $enabled ? $now : null,
+                            'updated_at' => $now,
+                            'created_at' => $now,
+                        ]
+                    );
+                }
+            }
+        }
+
+        return back()->with('success', "Updated subscription and module privileges for {$user->name} ({$plan->name} — {$validated['status']}).");
     }
 
     public function features(): Response
@@ -449,5 +494,80 @@ class SuperAdminController extends Controller
         $subscriptionService->syncAllActiveTenants();
 
         return back()->with('success', "Feature \"{$module->name}\" ".($module->is_active ? 'enabled' : 'disabled').'.');
+    }
+
+    public function demoRoles(): Response
+    {
+        $roles = DemoRole::query()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        return Inertia::render('Admin/DemoRoles', [
+            'roles' => $roles,
+        ]);
+    }
+
+    public function updateDemoRole(Request $request, DemoRole $demoRole): RedirectResponse
+    {
+        $validated = $request->validate([
+            'title_en' => ['required', 'string', 'max:120'],
+            'title_bn' => ['nullable', 'string', 'max:120'],
+            'subtitle_en' => ['required', 'string', 'max:160'],
+            'subtitle_bn' => ['nullable', 'string', 'max:160'],
+            'description_en' => ['nullable', 'string', 'max:1000'],
+            'description_bn' => ['nullable', 'string', 'max:1000'],
+            'email' => ['required', 'string', 'max:150'],
+            'tags_en' => ['nullable'],
+            'tags_bn' => ['nullable'],
+            'features_en' => ['nullable'],
+            'features_bn' => ['nullable'],
+            'restrictions_en' => ['nullable'],
+            'restrictions_bn' => ['nullable'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $parseList = function ($val): array {
+            if (is_array($val)) {
+                return array_values(array_filter(array_map('trim', $val)));
+            }
+            if (is_string($val)) {
+                return array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $val))));
+            }
+            return [];
+        };
+
+        $demoRole->update([
+            'title_en' => trim($validated['title_en']),
+            'title_bn' => ! empty($validated['title_bn']) ? trim($validated['title_bn']) : null,
+            'subtitle_en' => trim($validated['subtitle_en']),
+            'subtitle_bn' => ! empty($validated['subtitle_bn']) ? trim($validated['subtitle_bn']) : null,
+            'description_en' => ! empty($validated['description_en']) ? trim($validated['description_en']) : null,
+            'description_bn' => ! empty($validated['description_bn']) ? trim($validated['description_bn']) : null,
+            'email' => trim($validated['email']),
+            'tags_en' => $parseList($validated['tags_en'] ?? []),
+            'tags_bn' => $parseList($validated['tags_bn'] ?? []),
+            'features_en' => $parseList($validated['features_en'] ?? []),
+            'features_bn' => $parseList($validated['features_bn'] ?? []),
+            'restrictions_en' => $parseList($validated['restrictions_en'] ?? []),
+            'restrictions_bn' => $parseList($validated['restrictions_bn'] ?? []),
+            'is_active' => (bool) ($validated['is_active'] ?? $demoRole->is_active),
+        ]);
+
+        return back()->with('success', "Demo role \"{$demoRole->title_en}\" updated successfully.");
+    }
+
+    public function toggleDemoRole(DemoRole $demoRole): RedirectResponse
+    {
+        $demoRole->update(['is_active' => ! $demoRole->is_active]);
+
+        return back()->with('success', "Demo role \"{$demoRole->title_en}\" ".($demoRole->is_active ? 'activated' : 'deactivated').'.');
+    }
+
+    public function resetDemoRoles(): RedirectResponse
+    {
+        DemoRole::seedDefaults();
+
+        return back()->with('success', 'Demo roles restored to default settings.');
     }
 }

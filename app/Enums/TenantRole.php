@@ -118,7 +118,7 @@ enum TenantRole: string
         }
 
         if (($subscriberAdminId || $tenantId) && ! empty($customSlugs)) {
-            $customRoles = Role::query()
+            $customRoles = Role::withoutGlobalScopes()
                 ->where(function ($query) use ($subscriberAdminId, $tenantId): void {
                     if ($subscriberAdminId) {
                         $query->where('user_id', $subscriberAdminId);
@@ -128,11 +128,15 @@ enum TenantRole: string
                     }
                 })
                 ->whereIn('slug', $customSlugs)
-                ->get(['permissions']);
+                ->with('rolePermissions')
+                ->get();
 
             foreach ($customRoles as $customRole) {
                 if (is_array($customRole->permissions)) {
                     $permissions = array_merge($permissions, $customRole->permissions);
+                }
+                if ($customRole->relationLoaded('rolePermissions') && $customRole->rolePermissions->isNotEmpty()) {
+                    $permissions = array_merge($permissions, $customRole->rolePermissions->pluck('permission_key')->all());
                 }
             }
         }

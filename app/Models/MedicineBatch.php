@@ -20,6 +20,7 @@ class MedicineBatch extends Model
         'medicine_id',
         'supplier_id',
         'batch_number',
+        'manufacturing_date',
         'expiry_date',
         'quantity_received',
         'quantity_available',
@@ -36,6 +37,7 @@ class MedicineBatch extends Model
     protected function casts(): array
     {
         return [
+            'manufacturing_date' => 'date',
             'expiry_date' => 'date',
             'quantity_received' => 'integer',
             'quantity_available' => 'integer',

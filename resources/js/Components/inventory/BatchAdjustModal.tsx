@@ -19,6 +19,7 @@ interface BatchAdjustModalProps {
 const reasonPresets: Record<string, string[]> = {
     adjustment_in: ['Physical stock count surplus', 'Unrecorded supplier bonus', 'Audit reconciliation (+)'],
     adjustment_out: ['Physical stock count variance', 'Sample / clinic issue', 'Audit reconciliation (-)'],
+    supplier_return: ['Near-expiry supplier return (সাপ্লায়ার ফেরত)', 'Defective batch supplier recall', 'Wrong shipment returned to distributor'],
     damage: ['Water / moisture damage', 'Broken bottle or strip', 'Cold-chain failure'],
     expiry_disposal: ['Expired stock quarantine disposal', 'Manufacturer recall disposal', 'DGDA scheduled expiry write-off'],
 };
@@ -69,6 +70,7 @@ export const BatchAdjustModal: React.FC<BatchAdjustModalProps> = ({
             ? [{ id: 'adjustment_in', value: 'adjustment_in', name: 'Stock Addition (+)' }]
             : []),
         { id: 'adjustment_out', value: 'adjustment_out', name: 'Stock Deduction (-)' },
+        { id: 'supplier_return', value: 'supplier_return', name: 'Return to Supplier (সাপ্লায়ার ফেরত)' },
         { id: 'damage', value: 'damage', name: 'Record Damaged Stock' },
         { id: 'expiry_disposal', value: 'expiry_disposal', name: 'Expiry / Quarantine Disposal' },
     ];

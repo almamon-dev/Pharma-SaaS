@@ -134,16 +134,18 @@ class DemoPharmacySeeder extends Seeder
         TenantDomain::setPrimaryForTenant($greenlife, TenantDomain::defaultSubdomain('demo'), false);
 
         // Custom Role under Admin & Tenant 1
-        Role::query()->updateOrCreate(
-            ['tenant_id' => $greenlife->id, 'slug' => 'crm_specialist', 'guard_name' => 'web'],
-            [
-                'user_id' => $admin->id,
-                'name' => 'CRM & Loyalty Specialist',
-                'description' => 'Handles customer medical profiles, loyalty points & distributor follow-ups.',
-                'permissions' => ['crm.view', 'crm.manage', 'inventory.view'],
-                'is_system' => false,
-            ]
-        );
+        $currentTenant->run($greenlife, function () use ($greenlife, $admin) {
+            Role::query()->updateOrCreate(
+                ['tenant_id' => $greenlife->id, 'slug' => 'crm_specialist', 'guard_name' => 'web'],
+                [
+                    'user_id' => $admin->id,
+                    'name' => 'CRM & Loyalty Specialist',
+                    'description' => 'Handles customer medical profiles, loyalty points & distributor follow-ups.',
+                    'permissions' => ['crm.view', 'crm.manage', 'inventory.view'],
+                    'is_system' => false,
+                ]
+            );
+        });
 
         [$bananiBranch, $dhanmondiBranch] = $currentTenant->run($greenlife, function () use ($greenlife): array {
             $banani = Branch::query()->updateOrCreate(
@@ -284,6 +286,26 @@ class DemoPharmacySeeder extends Seeder
 
             $subscriptionService->syncModulesForTenant($greenlife, $growthPlan, $growthSub->status);
             $subscriptionService->syncModulesForTenant($careplus, $growthPlan, $growthSub->status);
+        }
+
+        // Phase 2 Plan & Features Subscription: Unlock POS, FEFO, Batches, Catalog for Demo Tenant
+        $phase2PremiumPlan = \App\Modules\Billing\Models\Plan::where('code', 'premium')->first();
+        if ($phase2PremiumPlan) {
+            foreach ([$greenlife, $careplus] as $t) {
+                $currentTenant->run($t, function () use ($t, $phase2PremiumPlan) {
+                    \App\Modules\Billing\Models\Subscription::updateOrCreate(
+                        ['tenant_id' => $t->id],
+                        [
+                            'plan_id' => $phase2PremiumPlan->id,
+                            'billing_cycle' => 'yearly',
+                            'status' => \App\Modules\Billing\Models\Subscription::STATUS_ACTIVE,
+                            'starts_at' => now()->subMonths(1),
+                            'ends_at' => now()->addYears(2),
+                            'auto_renew' => true,
+                        ]
+                    );
+                });
+            }
         }
 
         // 3. Independent Second Subscriber Admin (Metro Health Pharma)

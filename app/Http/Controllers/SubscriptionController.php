@@ -35,6 +35,7 @@ class SubscriptionController extends Controller
             'businessName' => $businessName,
             'isAdminOwner' => $user->isSubscriberAdmin(),
             'usage' => $subscriberAdmin->subscriptionUsage(),
+            'selectedPlanKey' => $request->query('plan'),
         ]);
     }
 

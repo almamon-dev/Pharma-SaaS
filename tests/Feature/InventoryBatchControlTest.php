@@ -13,6 +13,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Scopes\TenantScope;
 use App\Models\StockMovement;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\TenantProvisioningService;
 use App\Tenancy\CurrentTenant;
@@ -702,5 +703,230 @@ class InventoryBatchControlTest extends TestCase
                 ],
             ])
             ->assertRedirect();
+    }
+
+    public function test_pos_checkout_stores_doctor_prescription_notes_and_flashes_receipt_data(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'POS Rx Care',
+            'plan_key' => 'growth',
+        ]);
+        $branch = Branch::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->firstOrFail();
+
+        [$medicine, $batch] = app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branch): array {
+            $medicine = Medicine::create([
+                'tenant_id' => $tenant->id,
+                'name' => 'Amoxicillin 500mg',
+                'sku' => 'AMX-500',
+                'dosage_form' => 'capsule',
+                'unit' => 'pcs',
+                'units_per_box' => 10,
+                'reorder_level' => 10,
+                'requires_prescription' => true,
+                'default_purchase_price' => 8.00,
+                'default_selling_price' => 12.00,
+                'is_active' => true,
+            ]);
+
+            $batch = MedicineBatch::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'medicine_id' => $medicine->id,
+                'batch_number' => 'AMX-B1',
+                'manufacturing_date' => now()->subMonths(3)->toDateString(),
+                'expiry_date' => now()->addMonths(9)->toDateString(),
+                'quantity_received' => 100,
+                'quantity_available' => 100,
+                'purchase_price' => 8.00,
+                'selling_price' => 12.00,
+                'status' => 'active',
+            ]);
+
+            return [$medicine, $batch];
+        });
+
+        $response = $this->actingAs($owner)
+            ->withSession(['active_branch_id' => $branch->id])
+            ->post('/pos/checkout', [
+                'customer_name' => 'John Doe',
+                'doctor_name' => 'Dr. Rahman MBBS',
+                'prescription_notes' => 'Take 1 capsule 3 times daily after food',
+                'payment_method' => 'cash',
+                'discount' => 5,
+                'discount_type' => 'fixed',
+                'items' => [
+                    ['medicine_id' => $medicine->id, 'quantity' => 10, 'sale_unit' => 'piece'],
+                ],
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('lastSale');
+
+        $sale = Sale::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->latest('id')->firstOrFail();
+        $this->assertSame('Dr. Rahman MBBS', $sale->doctor_name);
+        $this->assertSame('Take 1 capsule 3 times daily after food', $sale->prescription_notes);
+        $this->assertEquals(120.00, (float) $sale->subtotal);
+        $this->assertEquals(5.00, (float) $sale->discount_amount);
+        $this->assertEquals(115.00, (float) $sale->total_amount);
+
+        $flashSale = session('lastSale');
+        $this->assertNotNull($flashSale);
+        $this->assertSame($sale->invoice_number, $flashSale['invoice_number']);
+        $this->assertSame('Dr. Rahman MBBS', $flashSale['doctor_name']);
+        $this->assertCount(1, $flashSale['items']);
+    }
+
+    public function test_branch_transfer_moves_batch_stock_between_branches_with_ledger_entries(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'Transfer Pharmacy',
+            'plan_key' => 'growth',
+        ]);
+        $branchA = Branch::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->firstOrFail();
+
+        [$branchB, $medicine, $batchA] = app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branchA): array {
+            $branchB = Branch::create([
+                'tenant_id' => $tenant->id,
+                'name' => 'Branch Beta',
+                'code' => 'BB-02',
+                'city' => 'Dhaka',
+                'is_active' => true,
+            ]);
+
+            $medicine = Medicine::create([
+                'tenant_id' => $tenant->id,
+                'name' => 'Napa 500mg',
+                'sku' => 'NAPA-500',
+                'dosage_form' => 'tablet',
+                'unit' => 'pcs',
+                'units_per_box' => 10,
+                'reorder_level' => 10,
+                'default_purchase_price' => 1.50,
+                'default_selling_price' => 2.00,
+                'is_active' => true,
+            ]);
+
+            $batchA = MedicineBatch::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branchA->id,
+                'medicine_id' => $medicine->id,
+                'batch_number' => 'NP-2026',
+                'manufacturing_date' => '2026-01-15',
+                'expiry_date' => '2028-01-15',
+                'quantity_received' => 200,
+                'quantity_available' => 200,
+                'purchase_price' => 1.50,
+                'selling_price' => 2.00,
+                'status' => 'active',
+            ]);
+
+            return [$branchB, $medicine, $batchA];
+        });
+
+        $response = $this->actingAs($owner)
+            ->withSession(['active_branch_id' => $branchA->id])
+            ->post("/inventory/batches/{$batchA->id}/transfer", [
+                'target_branch_id' => $branchB->id,
+                'quantity' => 50,
+                'reason' => 'Emergency restock for Branch Beta',
+                'notes' => 'Sent with courier slip #771',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $batchA->refresh();
+        $this->assertSame(150, (int) $batchA->quantity_available);
+
+        $batchB = MedicineBatch::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)
+            ->where('branch_id', $branchB->id)
+            ->where('batch_number', 'NP-2026')
+            ->firstOrFail();
+
+        $this->assertSame(50, (int) $batchB->quantity_available);
+        $this->assertSame('2026-01-15', $batchB->manufacturing_date?->toDateString());
+
+        // Verify stock movement ledger entries
+        $transferOut = StockMovement::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)
+            ->where('branch_id', $branchA->id)
+            ->where('movement_type', StockMovementType::TRANSFER_OUT->value)
+            ->firstOrFail();
+        $this->assertSame(-50, (int) $transferOut->quantity_change);
+        $this->assertSame(200, (int) $transferOut->balance_before);
+        $this->assertSame(150, (int) $transferOut->balance_after);
+
+        $transferIn = StockMovement::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)
+            ->where('branch_id', $branchB->id)
+            ->where('movement_type', StockMovementType::TRANSFER_IN->value)
+            ->firstOrFail();
+        $this->assertSame(50, (int) $transferIn->quantity_change);
+        $this->assertSame(0, (int) $transferIn->balance_before);
+        $this->assertSame(50, (int) $transferIn->balance_after);
+    }
+
+    public function test_supplier_return_deducts_batch_stock_and_logs_movement(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'Supplier Return Care',
+            'plan_key' => 'growth',
+        ]);
+        $branch = Branch::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->firstOrFail();
+
+        [$medicine, $batch] = app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branch): array {
+            $medicine = Medicine::create([
+                'tenant_id' => $tenant->id,
+                'name' => 'Cipro 500mg',
+                'sku' => 'CIP-500',
+                'dosage_form' => 'tablet',
+                'unit' => 'pcs',
+                'units_per_box' => 10,
+                'reorder_level' => 10,
+                'default_purchase_price' => 10.00,
+                'default_selling_price' => 15.00,
+                'is_active' => true,
+            ]);
+
+            $batch = MedicineBatch::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'medicine_id' => $medicine->id,
+                'batch_number' => 'CIP-009',
+                'expiry_date' => now()->addDays(20)->toDateString(),
+                'quantity_received' => 100,
+                'quantity_available' => 40,
+                'purchase_price' => 10.00,
+                'selling_price' => 15.00,
+                'status' => 'active',
+            ]);
+
+            return [$medicine, $batch];
+        });
+
+        $response = $this->actingAs($owner)
+            ->withSession(['active_branch_id' => $branch->id])
+            ->post("/inventory/batches/{$batch->id}/adjust", [
+                'adjustment_type' => 'supplier_return',
+                'quantity' => 25,
+                'reason' => 'Returning near-expiry stock to distributor per contract',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $batch->refresh();
+        $this->assertSame(15, (int) $batch->quantity_available);
+
+        $movement = StockMovement::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)
+            ->where('movement_type', StockMovementType::SUPPLIER_RETURN->value)
+            ->firstOrFail();
+        $this->assertSame(-25, (int) $movement->quantity_change);
+        $this->assertSame(40, (int) $movement->balance_before);
+        $this->assertSame(15, (int) $movement->balance_after);
     }
 }

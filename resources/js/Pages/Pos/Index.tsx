@@ -4,12 +4,16 @@ import {
     AlertTriangle,
     Camera,
     Check,
+    Clock,
     Minus,
+    Pause,
     Plus,
     Receipt,
     ScanBarcode,
     ShoppingCart,
+    Stethoscope,
     Trash2,
+    UserPlus,
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import {
@@ -21,8 +25,11 @@ import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { StatusDot } from '@/Components/ui/StatusDot';
-import { SharedPageProps } from '@/types';
+import { PosReceiptData, SharedPageProps } from '@/types';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
+import PosReceiptModal from './components/PosReceiptModal';
+import QuickCustomerModal from './components/QuickCustomerModal';
+import HeldBillsModal, { HeldBill } from './components/HeldBillsModal';
 
 interface PosMedicine {
     id: number;
@@ -50,7 +57,24 @@ interface CrmCustomer {
     phone?: string | null;
     loyalty_points: number;
     allergies?: string | null;
+    total_due?: number;
 }
+
+type PaymentMode = 'single' | 'split' | 'due';
+
+interface SplitPaymentRow {
+    method: string;
+    amount: string;
+    reference_number?: string;
+}
+
+const singlePaymentOptions = [
+    { id: 'cash', value: 'cash', name: 'Cash Counter (নগদ)' },
+    { id: 'card', value: 'card', name: 'Debit / Credit Card (কার্ড)' },
+    { id: 'bkash', value: 'bkash', name: 'bKash (বিকাশ)' },
+    { id: 'nagad', value: 'nagad', name: 'Nagad (নগদ ওয়ালেট)' },
+    { id: 'rocket', value: 'rocket', name: 'Rocket (রকেট)' },
+];
 
 interface CartItem {
     medicine: PosMedicine;
@@ -88,12 +112,6 @@ interface PosProps {
 }
 
 type CatalogFilter = 'all' | 'in_stock' | 'rx';
-
-const paymentOptions = [
-    { id: 'cash', value: 'cash', name: 'Cash Counter' },
-    { id: 'card', value: 'card', name: 'Debit / Credit Card' },
-    { id: 'bkash', value: 'bkash', name: 'bKash / Mobile Wallet' },
-];
 
 function CartQtyInput({
     qty,
@@ -158,7 +176,7 @@ export default function PosIndex({
     customers = [],
     branchName,
 }: PosProps) {
-    const { tenant } = usePage<SharedPageProps>().props;
+    const { tenant, flash } = usePage<SharedPageProps>().props;
     const currency = tenant?.currentTenant?.currency_code ?? 'BDT';
     const currencySymbol = getCurrencySymbol(currency);
 
@@ -167,7 +185,22 @@ export default function PosIndex({
     const [cart, setCart] = useState<CartItem[]>([]);
     const [customerId, setCustomerId] = useState('');
     const [customerName, setCustomerName] = useState('Walk-in Customer');
+    const [doctorName, setDoctorName] = useState('');
+    const [prescriptionNotes, setPrescriptionNotes] = useState('');
+    const [showRxFields, setShowRxFields] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [paymentMode, setPaymentMode] = useState<PaymentMode>('single');
+    const [givenCash, setGivenCash] = useState('');
+    const [splitPayments, setSplitPayments] = useState<SplitPaymentRow[]>([
+        { method: 'cash', amount: '', reference_number: '' },
+        { method: 'bkash', amount: '', reference_number: '' },
+    ]);
+    const [duePaidNow, setDuePaidNow] = useState('0');
+    const [dueMethod, setDueMethod] = useState('cash');
+
+    const [heldBillsModalOpen, setHeldBillsModalOpen] = useState(false);
+    const [quickCustomerModalOpen, setQuickCustomerModalOpen] = useState(false);
+    const [heldBills, setHeldBills] = useState<HeldBill[]>([]);
     const [discountType, setDiscountType] = useState<DiscountType>('fixed');
     const [discount, setDiscount] = useState('0');
     const [processing, setProcessing] = useState(false);
@@ -175,7 +208,96 @@ export default function PosIndex({
     const [scanStatus, setScanStatus] = useState<BarcodeScanFeedback | null>(
         null
     );
+    const [receiptModalSale, setReceiptModalSale] = useState<PosReceiptData | null>(null);
     const scanInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('pos_held_bills');
+            if (raw) {
+                setHeldBills(JSON.parse(raw));
+            }
+        } catch {}
+    }, []);
+
+    const saveHeldBills = (bills: HeldBill[]) => {
+        setHeldBills(bills);
+        try {
+            localStorage.setItem('pos_held_bills', JSON.stringify(bills));
+        } catch {}
+    };
+
+    const handleHoldBill = () => {
+        if (cart.length === 0) return;
+        const newHeld: HeldBill = {
+            id: 'HOLD-' + Date.now().toString(36),
+            heldAt: new Date().toISOString(),
+            customerName: selectedCustomer?.name ?? customerName,
+            customerId: customerId || undefined,
+            doctorName: doctorName || undefined,
+            prescriptionNotes: prescriptionNotes || undefined,
+            itemsCount: cart.length,
+            subtotal: subtotal,
+            cart: [...cart],
+            discount,
+            discountType,
+        };
+        const updated = [newHeld, ...heldBills];
+        saveHeldBills(updated);
+        setCart([]);
+        setDiscount('0');
+        setDoctorName('');
+        setPrescriptionNotes('');
+        setShowRxFields(false);
+        setGivenCash('');
+        setDuePaidNow('0');
+    };
+
+    const handleResumeBill = (bill: HeldBill) => {
+        setCart(bill.cart);
+        setCustomerId(bill.customerId || '');
+        setCustomerName(bill.customerName || 'Walk-in Customer');
+        setDoctorName(bill.doctorName || '');
+        setPrescriptionNotes(bill.prescriptionNotes || '');
+        setShowRxFields(Boolean(bill.doctorName || bill.prescriptionNotes));
+        setDiscount(bill.discount || '0');
+        setDiscountType(bill.discountType || 'fixed');
+        const remaining = heldBills.filter((b) => b.id !== bill.id);
+        saveHeldBills(remaining);
+        setHeldBillsModalOpen(false);
+    };
+
+    const handleDeleteHeldBill = (billId: string) => {
+        const remaining = heldBills.filter((b) => b.id !== billId);
+        saveHeldBills(remaining);
+    };
+
+    const handleClearAllHeldBills = () => {
+        saveHeldBills([]);
+        setHeldBillsModalOpen(false);
+    };
+
+    useEffect(() => {
+        if (flash?.lastSale) {
+            setReceiptModalSale(flash.lastSale);
+        }
+    }, [flash?.lastSale]);
+
+    const hasRxItem = useMemo(() => cart.some((c) => c.medicine.requires_prescription), [cart]);
+
+    const handleStartNewSale = () => {
+        setReceiptModalSale(null);
+        setCart([]);
+        setQuery('');
+        setDoctorName('');
+        setPrescriptionNotes('');
+        setShowRxFields(false);
+        setDiscount('0');
+        setGivenCash('');
+        setDuePaidNow('0');
+        setPaymentMode('single');
+        scanInputRef.current?.focus({ preventScroll: true });
+    };
 
     useEffect(() => {
         scanInputRef.current?.focus({ preventScroll: true });
@@ -232,15 +354,18 @@ export default function PosIndex({
 
     const customerOptions = useMemo(
         () => [
-            { id: 'walkin', value: '', name: 'Walk-in Customer' },
-            ...customers.map((c) => ({
-                id: c.id,
-                value: String(c.id),
-                name: `${c.name}${c.phone ? ` (${c.phone})` : ''}`,
-                subtitle: `${c.loyalty_points} loyalty pts`,
-            })),
+            { id: 'walkin', value: '', name: 'Walk-in Customer (সাধারণ ক্রেতা)' },
+            ...customers.map((c) => {
+                const dueText = c.total_due && c.total_due > 0 ? ` · বাকি: ${formatCurrency(c.total_due, currency)}` : '';
+                return {
+                    id: c.id,
+                    value: String(c.id),
+                    name: `${c.name}${c.phone ? ` (${c.phone})` : ''}${dueText}`,
+                    subtitle: `${c.loyalty_points} loyalty pts`,
+                };
+            }),
         ],
-        [customers]
+        [customers, currency]
     );
 
     const cartById = useMemo(() => {
@@ -253,6 +378,9 @@ export default function PosIndex({
 
     const filteredMedicines = useMemo(() => {
         const needle = query.trim().toLowerCase();
+        if (!needle) {
+            return [];
+        }
         return medicines.filter((m) => {
             if (catalogFilter === 'in_stock' && m.available_stock <= 0) {
                 return false;
@@ -260,7 +388,6 @@ export default function PosIndex({
             if (catalogFilter === 'rx' && !m.requires_prescription) {
                 return false;
             }
-            if (!needle) return true;
             return (
                 m.name.toLowerCase().includes(needle) ||
                 (m.generic_name ?? '').toLowerCase().includes(needle) ||
@@ -451,13 +578,58 @@ export default function PosIndex({
         e.preventDefault();
         if (cart.length === 0) return;
 
+        let payloadPaymentMethod = paymentMethod;
+        let payloadPaidAmount: number | undefined = undefined;
+        let payloadPayments: Array<{ method: string; amount: number; reference_number?: string }> | undefined = undefined;
+
+        if (paymentMode === 'single') {
+            payloadPaymentMethod = paymentMethod;
+            const given = Number(givenCash);
+            payloadPaidAmount = given > 0 ? given : grandTotal;
+        } else if (paymentMode === 'split') {
+            const activePayments = splitPayments
+                .filter((p) => Number(p.amount) > 0)
+                .map((p) => ({
+                    method: p.method,
+                    amount: Math.round(Number(p.amount) * 100) / 100,
+                    reference_number: p.reference_number?.trim() || undefined,
+                }));
+
+            if (activePayments.length === 0) {
+                alert('অনুগ্রহ করে অন্তত একটি পেমেন্ট মাধ্যমে টাকার পরিমাণ লিখুন।');
+                return;
+            }
+
+            const totalSplit = activePayments.reduce((s, p) => s + p.amount, 0);
+            if (totalSplit < grandTotal && !customerId) {
+                alert('বাকি বা আংশিক বিক্রির জন্য রেজিস্টার্ড কাস্টমার সিলেক্ট করতে হবে।');
+                return;
+            }
+
+            payloadPayments = activePayments;
+            payloadPaymentMethod = activePayments.map((p) => p.method).join(' + ');
+            payloadPaidAmount = totalSplit;
+        } else if (paymentMode === 'due') {
+            if (!customerId) {
+                alert('বাকিতে বিক্রির জন্য কাস্টমার সিলেক্ট করা আবশ্যক। অনুগ্রহ করে কাস্টমার সিলেক্ট বা নতুন কাস্টমার যুক্ত করুন।');
+                return;
+            }
+            const paid = Math.max(0, Number(duePaidNow) || 0);
+            payloadPaidAmount = paid;
+            payloadPaymentMethod = paid > 0 ? dueMethod : 'due';
+        }
+
         setProcessing(true);
         router.post(
             route('pos.checkout'),
             {
                 customer_id: customerId ? Number(customerId) : null,
                 customer_name: selectedCustomer?.name ?? customerName,
-                payment_method: paymentMethod,
+                doctor_name: doctorName.trim() || null,
+                prescription_notes: prescriptionNotes.trim() || null,
+                payment_method: payloadPaymentMethod,
+                paid_amount: payloadPaidAmount,
+                payments: payloadPayments,
                 discount:
                     discountType === 'percent'
                         ? effectiveDiscountPercent
@@ -471,11 +643,27 @@ export default function PosIndex({
             },
             {
                 preserveScroll: true,
-                onSuccess: () => {
+                onSuccess: (page) => {
                     setCart([]);
                     setDiscount('0');
+                    setDoctorName('');
+                    setPrescriptionNotes('');
+                    setShowRxFields(false);
                     setScanStatus(null);
+                    setGivenCash('');
+                    setDuePaidNow('0');
+                    setPaymentMode('single');
+                    const lastSale = (page.props as any)?.flash?.lastSale;
+                    if (lastSale) {
+                        setReceiptModalSale(lastSale);
+                    }
                     scanInputRef.current?.focus({ preventScroll: true });
+                },
+                onError: (errs) => {
+                    const firstMsg = Object.values(errs)[0];
+                    if (firstMsg) {
+                        alert(typeof firstMsg === 'string' ? firstMsg : 'Checkout failed');
+                    }
                 },
                 onFinish: () => setProcessing(false),
             }
@@ -503,11 +691,23 @@ export default function PosIndex({
                                         <ScanBarcode className="h-3.5 w-3.5 text-[#FF4A1F]" />
                                     }
                                     rightIcon={
-                                        !query ? (
+                                        query ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setQuery('');
+                                                    scanInputRef.current?.focus();
+                                                }}
+                                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer text-xs"
+                                                title="Clear search"
+                                            >
+                                                ✕
+                                            </button>
+                                        ) : (
                                             <kbd className="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
                                                 F2
                                             </kbd>
-                                        ) : undefined
+                                        )
                                     }
                                     className="h-8 text-[12.5px]"
                                 />
@@ -552,7 +752,9 @@ export default function PosIndex({
                                 );
                             })}
                             <span className="ml-1 text-[11px] font-medium text-slate-400 tabular-nums">
-                                {filteredMedicines.length} SKUs
+                                {query.trim()
+                                    ? `${filteredMedicines.length} found`
+                                    : 'Search to display'}
                             </span>
                         </div>
                     </div>
@@ -602,9 +804,25 @@ export default function PosIndex({
                                     <tr>
                                         <td
                                             colSpan={7}
-                                            className="px-4 py-10 text-center text-xs text-slate-400"
+                                            className="px-4 py-14 text-center text-xs text-slate-400"
                                         >
-                                            No medicines match "{query}".
+                                            {!query.trim() ? (
+                                                <div className="flex flex-col items-center justify-center gap-2 py-4">
+                                                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center text-slate-400">
+                                                        <ScanBarcode className="h-5 w-5 text-[#FF4A1F]" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                                            ওষুধের নাম, জেনেরিক বা বারকোড দিয়ে সার্চ করুন
+                                                        </p>
+                                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                                            Search by medicine name, generic, barcode, or SKU (F2 to focus)
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span>No medicines match "{query}".</span>
+                                            )}
                                         </td>
                                     </tr>
                                 ) : (
@@ -798,41 +1016,82 @@ export default function PosIndex({
                             <h2 className="text-[13px] font-bold text-slate-900 dark:text-slate-100">
                                 Order Register
                             </h2>
+                            {heldBills.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setHeldBillsModalOpen(true)}
+                                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                    <Clock className="h-3 w-3 animate-pulse" />
+                                    <span>হোল্ড ({heldBills.length})</span>
+                                </button>
+                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
                                 {totalUnits} pcs ({cart.length} lines)
                             </span>
                             {cart.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setCart([])}
-                                    className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
-                                >
-                                    Clear
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleHoldBill}
+                                        title="Hold bill to serve another customer"
+                                        className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                        <Pause className="h-3 w-3" />
+                                        Hold
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCart([])}
+                                        className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
 
                     <form onSubmit={handleCompleteCheckout}>
                         <div className="p-3.5 space-y-2.5 border-b border-slate-100 dark:border-slate-800">
-                            <Select
-                                label="Customer"
-                                size="sm"
-                                value={customerId}
-                                options={customerOptions}
-                                onChange={(e) => {
-                                    const val = String(e.target.value);
-                                    setCustomerId(val);
-                                    const found = customers.find(
-                                        (c) => String(c.id) === val
-                                    );
-                                    if (found) {
-                                        setCustomerName(found.name);
-                                    }
-                                }}
-                            />
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                                        Customer (কাস্টমার)
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuickCustomerModalOpen(true)}
+                                        className="text-[11px] font-bold text-[#FF4A1F] hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <UserPlus className="h-3 w-3" />
+                                        + New Customer
+                                    </button>
+                                </div>
+                                <Select
+                                    size="sm"
+                                    value={customerId}
+                                    options={customerOptions}
+                                    onChange={(e) => {
+                                        const val = String(e.target.value);
+                                        setCustomerId(val);
+                                        const found = customers.find(
+                                            (c) => String(c.id) === val
+                                        );
+                                        if (found) {
+                                            setCustomerName(found.name);
+                                        }
+                                    }}
+                                />
+                                {selectedCustomer && (selectedCustomer.total_due ?? 0) > 0 && (
+                                    <div className="mt-1 flex items-center justify-between px-2 py-1 rounded-[4px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-[11px] text-rose-700 dark:text-rose-300">
+                                        <span>⚠️ পূর্বের বকেয়া (Previous Due):</span>
+                                        <span className="font-bold">{formatCurrency(selectedCustomer.total_due!, currency)}</span>
+                                    </div>
+                                )}
+                            </div>
 
                             {!customerId && (
                                 <Input
@@ -852,124 +1111,381 @@ export default function PosIndex({
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-2.5">
-                                <Select
-                                    label="Payment"
-                                    size="sm"
-                                    value={paymentMethod}
-                                    options={paymentOptions}
-                                    onChange={(e) =>
-                                        setPaymentMethod(String(e.target.value))
-                                    }
-                                />
-                                <div className="flex flex-col gap-1 w-full font-sans antialiased">
-                                    <div className="flex items-center justify-between gap-1">
-                                        <label
-                                            htmlFor="pos-discount-input"
-                                            className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
-                                        >
-                                            Discount
-                                        </label>
-                                        <div
-                                            role="group"
-                                            aria-label="Discount type"
-                                            className="inline-flex rounded-[3px] border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800/70"
-                                        >
-                                            <button
-                                                type="button"
-                                                aria-pressed={
-                                                    discountType === 'fixed'
-                                                }
-                                                onClick={() =>
-                                                    handleDiscountTypeChange(
-                                                        'fixed'
-                                                    )
-                                                }
-                                                title={`Fixed amount (${currencySymbol})`}
-                                                className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                                    discountType === 'fixed'
-                                                        ? 'bg-[#FF4A1F] text-white'
-                                                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                                                }`}
-                                            >
-                                                {currencySymbol}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                aria-pressed={
-                                                    discountType === 'percent'
-                                                }
-                                                onClick={() =>
-                                                    handleDiscountTypeChange(
-                                                        'percent'
-                                                    )
-                                                }
-                                                title="Percentage (%)"
-                                                className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                                    discountType === 'percent'
-                                                        ? 'bg-[#FF4A1F] text-white'
-                                                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                                                }`}
-                                            >
-                                                %
-                                            </button>
+                            {/* Doctor & Prescription Notes */}
+                            <div className="pt-0.5">
+                                {hasRxItem || showRxFields ? (
+                                    <div className="space-y-2 p-2.5 rounded-[4px] border border-indigo-200/90 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/30 text-xs">
+                                        <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <Stethoscope className="h-3.5 w-3.5" />
+                                                <span>Doctor & Prescription (প্রেসক্রিপশন)</span>
+                                            </div>
+                                            {!hasRxItem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowRxFields(false)}
+                                                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                                >
+                                                    Hide
+                                                </button>
+                                            )}
                                         </div>
-                                    </div>
-                                    <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
-                                        {discountType === 'fixed' && (
-                                            <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
-                                                {currencySymbol}
-                                            </span>
-                                        )}
-                                        <input
-                                            id="pos-discount-input"
-                                            type="number"
-                                            min="0"
-                                            max={
-                                                discountType === 'percent'
-                                                    ? 100
-                                                    : undefined
-                                            }
-                                            step="0.01"
-                                            value={discount}
-                                            onChange={(e) =>
-                                                setDiscount(e.target.value)
-                                            }
-                                            onFocus={(e) =>
-                                                e.currentTarget.select()
-                                            }
-                                            onBlur={() => {
-                                                const num = Number(discount);
-                                                if (
-                                                    discount.trim() === '' ||
-                                                    Number.isNaN(num) ||
-                                                    num < 0
-                                                ) {
-                                                    setDiscount('0');
-                                                    return;
-                                                }
-                                                if (
-                                                    discountType ===
-                                                        'percent' &&
-                                                    num > 100
-                                                ) {
-                                                    setDiscount('100');
-                                                }
-                                            }}
-                                            placeholder={
-                                                discountType === 'percent'
-                                                    ? '0'
-                                                    : '0.00'
-                                            }
-                                            className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                        <Input
+                                            placeholder="Doctor Name (ডাক্তারের নাম)"
+                                            value={doctorName}
+                                            onChange={(e) => setDoctorName(e.target.value)}
+                                            className="h-7 text-xs bg-white dark:bg-[#151921]"
                                         />
-                                        {discountType === 'percent' && (
-                                            <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
-                                                %
-                                            </span>
-                                        )}
+                                        <Input
+                                            placeholder="Prescription / Dosage Notes (নির্দেশনা বা নোট)"
+                                            value={prescriptionNotes}
+                                            onChange={(e) => setPrescriptionNotes(e.target.value)}
+                                            className="h-7 text-xs bg-white dark:bg-[#151921]"
+                                        />
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowRxFields(true)}
+                                        className="text-[11px] font-medium text-slate-500 hover:text-[#FF4A1F] flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                        <Stethoscope className="h-3 w-3" />
+                                        <span>+ Add Doctor Name / Prescription Note</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Discount Input */}
+                            <div className="flex flex-col gap-1 w-full font-sans antialiased">
+                                <div className="flex items-center justify-between gap-1">
+                                    <label
+                                        htmlFor="pos-discount-input"
+                                        className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
+                                    >
+                                        Discount
+                                    </label>
+                                    <div
+                                        role="group"
+                                        aria-label="Discount type"
+                                        className="inline-flex rounded-[3px] border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800/70"
+                                    >
+                                        <button
+                                            type="button"
+                                            aria-pressed={
+                                                discountType === 'fixed'
+                                            }
+                                            onClick={() =>
+                                                handleDiscountTypeChange(
+                                                    'fixed'
+                                                )
+                                            }
+                                            title={`Fixed amount (${currencySymbol})`}
+                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                discountType === 'fixed'
+                                                    ? 'bg-[#FF4A1F] text-white'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                            }`}
+                                        >
+                                            {currencySymbol}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-pressed={
+                                                discountType === 'percent'
+                                            }
+                                            onClick={() =>
+                                                handleDiscountTypeChange(
+                                                    'percent'
+                                                )
+                                            }
+                                            title="Percentage (%)"
+                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                discountType === 'percent'
+                                                    ? 'bg-[#FF4A1F] text-white'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                            }`}
+                                        >
+                                            %
+                                        </button>
                                     </div>
                                 </div>
+                                <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
+                                    {discountType === 'fixed' && (
+                                        <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
+                                            {currencySymbol}
+                                        </span>
+                                    )}
+                                    <input
+                                        id="pos-discount-input"
+                                        type="number"
+                                        min="0"
+                                        max={
+                                            discountType === 'percent'
+                                                ? 100
+                                                : undefined
+                                        }
+                                        step="0.01"
+                                        value={discount}
+                                        onChange={(e) =>
+                                            setDiscount(e.target.value)
+                                        }
+                                        onFocus={(e) =>
+                                            e.currentTarget.select()
+                                        }
+                                        onBlur={() => {
+                                            const num = Number(discount);
+                                            if (
+                                                discount.trim() === '' ||
+                                                Number.isNaN(num) ||
+                                                num < 0
+                                            ) {
+                                                setDiscount('0');
+                                                return;
+                                            }
+                                            if (
+                                                discountType ===
+                                                    'percent' &&
+                                                num > 100
+                                            ) {
+                                                setDiscount('100');
+                                            }
+                                        }}
+                                        placeholder={
+                                            discountType === 'percent'
+                                                ? '0'
+                                                : '0.00'
+                                        }
+                                        className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                    />
+                                    {discountType === 'percent' && (
+                                        <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
+                                            %
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Payment Mode Selector & Options */}
+                            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">
+                                        Payment Method (পেমেন্ট পদ্ধতি)
+                                    </label>
+                                    <span className="text-[10px] text-slate-400 font-medium">
+                                        {paymentMode === 'single' ? 'একক' : paymentMode === 'split' ? 'মিক্সড' : 'বাকি'}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-1 p-0.5 rounded-[5px] bg-slate-100 dark:bg-[#1a202a] border border-slate-200 dark:border-slate-800 text-[11px] font-semibold">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('single')}
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'single'
+                                                ? 'bg-white dark:bg-[#252d3d] text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/80 dark:border-slate-700'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Single Pay
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('split')}
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'split'
+                                                ? 'bg-[#FF4A1F] text-white shadow-xs font-bold'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Split / Mixed
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('due')}
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'due'
+                                                ? 'bg-rose-600 text-white shadow-xs font-bold'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Due (বাকি)
+                                    </button>
+                                </div>
+
+                                {/* Single Payment Mode Controls */}
+                                {paymentMode === 'single' && (
+                                    <div className="space-y-2 pt-1">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Select
+                                                size="sm"
+                                                value={paymentMethod}
+                                                options={singlePaymentOptions}
+                                                onChange={(e) => setPaymentMethod(String(e.target.value))}
+                                            />
+                                            {paymentMethod === 'cash' ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder={`Given Cash (${currencySymbol})`}
+                                                        value={givenCash}
+                                                        onChange={(e) => setGivenCash(e.target.value)}
+                                                        className="h-[30px] rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2 text-xs font-bold tabular-nums text-slate-900 dark:text-white focus:border-[#FF4A1F] focus:outline-none"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-center text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 rounded-[4px] border border-emerald-200 dark:border-emerald-900/50">
+                                                    Full Pay: {formatCurrency(grandTotal, currency)}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {paymentMethod === 'cash' && Number(givenCash) > grandTotal && (
+                                            <div className="flex items-center justify-between px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300 font-bold">
+                                                <span>Change / ফেরত:</span>
+                                                <span>{formatCurrency(Number(givenCash) - grandTotal, currency)}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Split / Mixed Payment Mode Controls */}
+                                {paymentMode === 'split' && (
+                                    <div className="space-y-2 pt-1 p-2 rounded-[4px] bg-slate-50 dark:bg-[#161c24] border border-slate-200 dark:border-slate-800 text-xs">
+                                        <div className="flex items-center justify-between font-bold text-[11px] text-slate-700 dark:text-slate-300 pb-1 border-b border-slate-200 dark:border-slate-700">
+                                            <span>Mixed Methods</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSplitPayments([...splitPayments, { method: 'card', amount: '' }])}
+                                                className="text-[#FF4A1F] hover:underline cursor-pointer flex items-center gap-0.5"
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                                Add Row
+                                            </button>
+                                        </div>
+                                        {splitPayments.map((row, rIdx) => (
+                                            <div key={rIdx} className="grid grid-cols-12 gap-1.5 items-center">
+                                                <div className="col-span-5">
+                                                    <select
+                                                        value={row.method}
+                                                        onChange={(e) => {
+                                                            const updated = [...splitPayments];
+                                                            updated[rIdx].method = e.target.value;
+                                                            setSplitPayments(updated);
+                                                        }}
+                                                        className="w-full h-7 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1f2631] text-[11px] px-1 font-semibold text-slate-800 dark:text-slate-100"
+                                                    >
+                                                        <option value="cash">Cash (নগদ)</option>
+                                                        <option value="bkash">bKash (বিকাশ)</option>
+                                                        <option value="nagad">Nagad (নগদ)</option>
+                                                        <option value="card">Card (কার্ড)</option>
+                                                        <option value="rocket">Rocket (রকেট)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-6">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder={`Amount (${currencySymbol})`}
+                                                        value={row.amount}
+                                                        onChange={(e) => {
+                                                            const updated = [...splitPayments];
+                                                            updated[rIdx].amount = e.target.value;
+                                                            setSplitPayments(updated);
+                                                        }}
+                                                        className="w-full h-7 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1f2631] px-1.5 text-[11px] font-bold tabular-nums text-slate-800 dark:text-slate-100"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 flex justify-center">
+                                                    {splitPayments.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== rIdx))}
+                                                            className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {(() => {
+                                            const totalPaid = splitPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                                            const remaining = Math.max(0, Math.round((grandTotal - totalPaid) * 100) / 100);
+                                            const change = Math.max(0, Math.round((totalPaid - grandTotal) * 100) / 100);
+                                            return (
+                                                <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
+                                                    <div className="flex justify-between font-semibold">
+                                                        <span>Total Collected:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(totalPaid, currency)}</span>
+                                                    </div>
+                                                    {remaining > 0 ? (
+                                                        <div className="flex justify-between text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded">
+                                                            <span>Remaining Due (বাকি):</span>
+                                                            <span>{formatCurrency(remaining, currency)}</span>
+                                                        </div>
+                                                    ) : (
+                                                        change > 0 && (
+                                                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                                                                <span>Change / ফেরত:</span>
+                                                                <span>{formatCurrency(change, currency)}</span>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+
+                                {/* Due Sale Mode Controls */}
+                                {paymentMode === 'due' && (
+                                    <div className="space-y-2 pt-1 p-2.5 rounded-[4px] bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-xs">
+                                        {!customerId && (
+                                            <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                                <span>বাকিতে বিক্রি করতে উপরে কাস্টমার সিলেক্ট করুন</span>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-0.5">
+                                                    Paid Now / আজকে আদায় ({currencySymbol})
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={grandTotal}
+                                                    step="0.01"
+                                                    value={duePaidNow}
+                                                    onChange={(e) => setDuePaidNow(e.target.value)}
+                                                    className="w-full h-7 rounded border border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-0.5">
+                                                    Payment Method
+                                                </label>
+                                                <select
+                                                    value={dueMethod}
+                                                    onChange={(e) => setDueMethod(e.target.value)}
+                                                    className="w-full h-7 rounded border border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-1 text-xs font-medium text-slate-900 dark:text-white"
+                                                >
+                                                    <option value="cash">Cash (নগদ)</option>
+                                                    <option value="bkash">bKash (বিকাশ)</option>
+                                                    <option value="nagad">Nagad (নগদ)</option>
+                                                    <option value="card">Card (কার্ড)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="pt-1.5 border-t border-rose-200 dark:border-rose-900/50 flex justify-between items-center text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                                            <span>Due to Record (নতুন বকেয়া):</span>
+                                            <span className="text-sm">{formatCurrency(Math.max(0, grandTotal - (Number(duePaidNow) || 0)), currency)}</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1228,6 +1744,32 @@ export default function PosIndex({
                 subtitle="Use laptop webcam or phone camera to add products to cart"
                 allowContinuous
                 defaultContinuous={false}
+            />
+
+            <PosReceiptModal
+                open={receiptModalSale !== null}
+                sale={receiptModalSale}
+                onClose={() => setReceiptModalSale(null)}
+                onNewSale={handleStartNewSale}
+            />
+
+            <QuickCustomerModal
+                open={quickCustomerModalOpen}
+                onClose={() => setQuickCustomerModalOpen(false)}
+                onCustomerCreated={(newCust) => {
+                    setCustomerId(String(newCust.id));
+                    setCustomerName(newCust.name);
+                }}
+            />
+
+            <HeldBillsModal
+                open={heldBillsModalOpen}
+                heldBills={heldBills}
+                currency={currency}
+                onClose={() => setHeldBillsModalOpen(false)}
+                onResumeBill={handleResumeBill}
+                onDeleteBill={handleDeleteHeldBill}
+                onClearAll={handleClearAllHeldBills}
             />
         </AppLayout>
     );

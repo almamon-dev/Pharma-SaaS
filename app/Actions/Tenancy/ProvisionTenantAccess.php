@@ -88,6 +88,8 @@ class ProvisionTenantAccess
             ]);
         }
 
+        \Database\Seeders\RbacPermissionCatalogSeeder::seedRolesForTenant($tenant);
+
         $this->currentTenant->run($tenant, function () use ($tenant): void {
             if (MedicineCategory::query()->count() === 0) {
                 $defaultCategories = [

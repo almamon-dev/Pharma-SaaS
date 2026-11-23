@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Enums\TenantRole;
 use App\Models\Scopes\TenantScope;
+use App\Modules\Core\Models\UserPermissionOverride;
+use App\Modules\Core\Services\AccessService;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -15,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 #[Fillable([
     'name',
@@ -27,8 +30,17 @@ use Illuminate\Support\Facades\DB;
     'platform_compliance_role',
     'status',
     'current_tenant_id',
+    'tenant_id',
+    'role_id',
+    'is_owner',
+    'is_active',
+    'access_all_branches',
+    'default_branch_id',
+    'manager_pin_hash',
+    'permission_version',
+    'must_change_password',
 ])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'manager_pin_hash'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -40,6 +52,11 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
+            'is_owner' => 'boolean',
+            'is_active' => 'boolean',
+            'access_all_branches' => 'boolean',
+            'permission_version' => 'integer',
+            'must_change_password' => 'boolean',
         ];
     }
 
@@ -73,6 +90,11 @@ class User extends Authenticatable
         return $this->hasOne(TenantSubscription::class, 'user_id')->latestOfMany();
     }
 
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo(Role::class);
+    }
+
     public function customRoles(): HasMany
     {
         return $this->hasMany(Role::class, 'user_id');
@@ -86,6 +108,21 @@ class User extends Authenticatable
     public function ownedTenants(): HasMany
     {
         return $this->hasMany(Tenant::class, 'owner_id');
+    }
+
+    public function defaultBranch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'default_branch_id');
+    }
+
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(Branch::class, 'user_branches')->withTimestamps();
+    }
+
+    public function overrides(): HasMany
+    {
+        return $this->hasMany(UserPermissionOverride::class, 'user_id');
     }
 
     public function tenants(): BelongsToMany
@@ -149,6 +186,23 @@ class User extends Authenticatable
     {
         if ($this->isSuperAdmin()) {
             return true;
+        }
+
+        $tenantId = $this->current_tenant_id;
+        if ($tenantId) {
+            $p2Sub = \App\Modules\Billing\Models\Subscription::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->orderByDesc('ends_at')
+                ->first();
+
+            if ($p2Sub) {
+                return in_array($p2Sub->status, [
+                    \App\Modules\Billing\Models\Subscription::STATUS_TRIAL,
+                    \App\Modules\Billing\Models\Subscription::STATUS_ACTIVE,
+                    \App\Modules\Billing\Models\Subscription::STATUS_GRACE,
+                    \App\Modules\Billing\Models\Subscription::STATUS_READ_ONLY,
+                ], true);
+            }
         }
 
         return (bool) $this->effectiveSubscription()?->isUsable();
@@ -234,5 +288,64 @@ class User extends Authenticatable
             fn (string $r) => TenantRole::normalize($r),
             $roles
         )));
+    }
+
+    /**
+     * RBAC Permission check delegation.
+     */
+    public function hasPermission(string $permissionKey, ?string $scope = null, ?int $branchId = null): bool
+    {
+        return app(AccessService::class)->hasPermission($this, $permissionKey, $scope, $branchId);
+    }
+
+    /**
+     * Get numeric limit for a user (discount cap, max refund, etc.).
+     */
+    public function getRoleLimit(string $limitKey): ?float
+    {
+        return app(AccessService::class)->getLimit($this, $limitKey);
+    }
+
+    /**
+     * Get effective data scope ('all', 'branch', 'own', 'none').
+     */
+    public function getEffectiveScope(string $permissionKey): string
+    {
+        return app(AccessService::class)->getEffectiveScope($this, $permissionKey);
+    }
+
+    /**
+     * Check if user is allowed to operate in the given branch.
+     */
+    public function canAccessBranch(Branch|int $branch): bool
+    {
+        $branchId = $branch instanceof Branch ? $branch->id : $branch;
+        return app(AccessService::class)->canAccessBranch($this, (int) $branchId);
+    }
+
+    /**
+     * Increment permission version to instantly invalidate cached permissions and sessions.
+     */
+    public function bumpPermissionVersion(): void
+    {
+        $this->increment('permission_version');
+        $this->refresh();
+    }
+
+    /**
+     * Set manager PIN for inline approvals.
+     */
+    public function setManagerPin(string $pin): void
+    {
+        $this->manager_pin_hash = Hash::make($pin);
+        $this->save();
+    }
+
+    /**
+     * Verify manager PIN.
+     */
+    public function verifyManagerPin(string $pin): bool
+    {
+        return ! empty($this->manager_pin_hash) && Hash::check($pin, $this->manager_pin_hash);
     }
 }

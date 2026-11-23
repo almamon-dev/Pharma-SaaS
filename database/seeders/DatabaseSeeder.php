@@ -13,7 +13,11 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PlanSeeder::class,
+            Phase2PlansAndFeaturesSeeder::class,
             DemoPharmacySeeder::class,
+            RbacPermissionCatalogSeeder::class,
         ]);
+
+        \App\Models\DemoRole::seedDefaults();
     }
 }

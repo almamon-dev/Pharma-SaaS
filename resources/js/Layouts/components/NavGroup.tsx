@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Lock } from 'lucide-react';
 
 export interface SidebarSubItem {
     name: string;
     href: string;
     active: boolean;
     badge?: number | string | null;
+    locked?: boolean;
 }
 
 export interface SidebarGroupItem {
@@ -185,7 +186,14 @@ export const NavGroup: React.FC<NavGroupProps> = ({
                                     )}
                                 </div>
 
+                                {isOpen && subItem.locked && (
+                                    <span className="ml-auto shrink-0 flex items-center justify-center text-slate-400 dark:text-slate-500" title="Locked by plan - Click to Upgrade">
+                                        <Lock size={12} strokeWidth={2} />
+                                    </span>
+                                )}
+
                                 {isOpen &&
+                                    !subItem.locked &&
                                     Number(subItem.badge) > 0 && (
                                         <span className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 bg-[#ff4a1f] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-[#12161c] shadow-xs leading-none">
                                             {subItem.badge}

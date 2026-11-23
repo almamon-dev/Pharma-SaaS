@@ -112,6 +112,7 @@ class InventoryService
                     medicine: $medicine,
                     validated: [
                         'batch_number' => $validated['batch_number'],
+                        'manufacturing_date' => $validated['manufacturing_date'] ?? null,
                         'supplier_id' => $validated['supplier_id'] ?? null,
                         'quantity' => (int) $validated['quantity'],
                         'expiry_date' => $validated['expiry_date'],
@@ -252,6 +253,7 @@ class InventoryService
                 'medicine_id' => $medicine->id,
                 'supplier_id' => ! empty($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
                 'batch_number' => $batchNumber,
+                'manufacturing_date' => ! empty($validated['manufacturing_date']) ? $validated['manufacturing_date'] : null,
                 'expiry_date' => $validated['expiry_date'],
                 'quantity_received' => $quantity,
                 'quantity_available' => $quantity,
@@ -314,6 +316,7 @@ class InventoryService
             StockMovementType::ADJUSTMENT_OUT,
             StockMovementType::DAMAGE,
             StockMovementType::EXPIRY_DISPOSAL,
+            StockMovementType::SUPPLIER_RETURN,
         ], true)) {
             throw ValidationException::withMessages([
                 'adjustment_type' => 'Unsupported batch adjustment type.',
@@ -450,6 +453,7 @@ class InventoryService
                 action: match ($movementType) {
                     StockMovementType::DAMAGE => 'inventory.batch_damaged',
                     StockMovementType::EXPIRY_DISPOSAL => 'inventory.batch_disposed',
+                    StockMovementType::SUPPLIER_RETURN => 'inventory.batch_supplier_returned',
                     default => 'inventory.batch_adjusted',
                 },
                 description: "{$movementType->label()} on batch {$locked->batch_number} (-{$effectiveQty}): {$cleanReason}.",
@@ -465,6 +469,134 @@ class InventoryService
             );
 
             return $locked->fresh();
+        });
+    }
+
+    /**
+     * Transfer stock from one branch batch to another branch.
+     * Deducts from source with TRANSFER_OUT and credits target with TRANSFER_IN.
+     *
+     * @return array{source: MedicineBatch, target: MedicineBatch}
+     */
+    public function transferBatchStock(
+        MedicineBatch $sourceBatch,
+        Branch $targetBranch,
+        int $quantity,
+        ?string $reason = null,
+        ?string $notes = null,
+        ?User $actor = null,
+    ): array {
+        return DB::transaction(function () use ($sourceBatch, $targetBranch, $quantity, $reason, $notes, $actor): array {
+            $lockedSource = MedicineBatch::query()->lockForUpdate()->findOrFail($sourceBatch->id);
+
+            if ($lockedSource->branch_id === $targetBranch->id) {
+                throw ValidationException::withMessages([
+                    'target_branch_id' => 'Target branch must be different from the source branch.',
+                ]);
+            }
+
+            $available = (int) $lockedSource->quantity_available;
+            if ($quantity <= 0 || $quantity > $available) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Cannot transfer {$quantity} units. Only {$available} units available in source batch.",
+                ]);
+            }
+
+            $beforeSource = $available;
+            $afterSource = $beforeSource - $quantity;
+            $lockedSource->quantity_available = $afterSource;
+            if ($afterSource === 0 && $lockedSource->status === BatchStatus::ACTIVE->value) {
+                $lockedSource->status = BatchStatus::DEPLETED->value;
+            }
+            $lockedSource->save();
+
+            // Find or create batch in target branch
+            $targetBatch = MedicineBatch::query()
+                ->where('branch_id', $targetBranch->id)
+                ->where('medicine_id', $lockedSource->medicine_id)
+                ->where('batch_number', $lockedSource->batch_number)
+                ->lockForUpdate()
+                ->first();
+
+            $beforeTarget = 0;
+            if ($targetBatch) {
+                $beforeTarget = (int) $targetBatch->quantity_available;
+                $afterTarget = $beforeTarget + $quantity;
+                $targetBatch->quantity_available = $afterTarget;
+                $targetBatch->quantity_received += $quantity;
+                if ($targetBatch->status === BatchStatus::DEPLETED->value && $afterTarget > 0) {
+                    $targetBatch->status = BatchStatus::ACTIVE->value;
+                }
+                $targetBatch->save();
+            } else {
+                $afterTarget = $quantity;
+                $targetBatch = MedicineBatch::query()->create([
+                    'branch_id' => $targetBranch->id,
+                    'medicine_id' => $lockedSource->medicine_id,
+                    'supplier_id' => $lockedSource->supplier_id,
+                    'batch_number' => $lockedSource->batch_number,
+                    'manufacturing_date' => $lockedSource->manufacturing_date,
+                    'expiry_date' => $lockedSource->expiry_date,
+                    'quantity_received' => $quantity,
+                    'quantity_available' => $quantity,
+                    'purchase_price' => $lockedSource->purchase_price,
+                    'selling_price' => $lockedSource->selling_price,
+                    'rack_location' => $lockedSource->rack_location,
+                    'status' => BatchStatus::ACTIVE->value,
+                    'notes' => "Transferred from {$lockedSource->branch?->name}",
+                ]);
+            }
+
+            $cleanReason = trim((string) ($reason ?: "Branch transfer to {$targetBranch->name}"));
+
+            // Record Transfer Out on source
+            $this->recordMovement(
+                branchId: (int) $lockedSource->branch_id,
+                medicineId: (int) $lockedSource->medicine_id,
+                batchId: $lockedSource->id,
+                movementType: StockMovementType::TRANSFER_OUT,
+                quantityChange: -$quantity,
+                balanceBefore: $beforeSource,
+                balanceAfter: $afterSource,
+                unitCost: (float) $lockedSource->purchase_price,
+                reason: $cleanReason,
+                notes: $notes,
+                actor: $actor,
+                reference: $targetBatch,
+            );
+
+            // Record Transfer In on target
+            $this->recordMovement(
+                branchId: (int) $targetBranch->id,
+                medicineId: (int) $lockedSource->medicine_id,
+                batchId: $targetBatch->id,
+                movementType: StockMovementType::TRANSFER_IN,
+                quantityChange: $quantity,
+                balanceBefore: $beforeTarget,
+                balanceAfter: $afterTarget,
+                unitCost: (float) $lockedSource->purchase_price,
+                reason: "Received from {$lockedSource->branch?->name}: {$cleanReason}",
+                notes: $notes,
+                actor: $actor,
+                reference: $lockedSource,
+            );
+
+            AuditLog::record(
+                action: 'inventory.batch_transferred',
+                description: "Transferred {$quantity} units of batch {$lockedSource->batch_number} from {$lockedSource->branch?->name} to {$targetBranch->name}.",
+                subject: $lockedSource,
+                metadata: [
+                    'quantity' => $quantity,
+                    'source_branch_id' => $lockedSource->branch_id,
+                    'target_branch_id' => $targetBranch->id,
+                ],
+                userId: $actor?->id,
+            );
+
+            return [
+                'source' => $lockedSource->fresh(),
+                'target' => $targetBatch->fresh(),
+            ];
         });
     }
 

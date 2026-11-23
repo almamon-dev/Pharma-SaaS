@@ -1,10 +1,8 @@
 import React from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    Building2,
     ChevronDown,
     CreditCard,
-    GitBranch,
     Layers,
     LogOut,
     Settings,
@@ -12,14 +10,11 @@ import {
     Store,
     User,
 } from 'lucide-react';
-import { Select } from '@/Components/ui/Select';
-import { StatusDot } from '@/Components/ui/StatusDot';
 import { SharedPageProps } from '@/types';
 
 interface HeaderProps {
     title?: string;
     onToggleSidebar: () => void;
-    actions?: React.ReactNode;
     isProfileOpen: boolean;
     setIsProfileOpen: (open: boolean) => void;
     profileRef: React.RefObject<HTMLDivElement | null>;
@@ -38,7 +33,6 @@ function getInitials(name?: string): string {
 export const Header: React.FC<HeaderProps> = ({
     title,
     onToggleSidebar,
-    actions,
     isProfileOpen,
     setIsProfileOpen,
     profileRef,
@@ -47,43 +41,6 @@ export const Header: React.FC<HeaderProps> = ({
     const authUser = auth?.user;
     const isSuperAdmin = Boolean(authUser?.is_super_admin);
     const hasSubscription = Boolean(subscription?.is_usable);
-
-    const tenantOptions = (tenant?.tenants ?? []).map((t) => ({
-        id: t.id,
-        value: String(t.id),
-        name: t.name,
-        subtitle: t.role_label,
-    }));
-
-    const branchOptions = (tenant?.branches ?? []).map((b) => ({
-        id: b.id,
-        value: String(b.id),
-        name: `${b.name} (${b.code})`,
-        badge: b.is_head_office ? 'HQ' : undefined,
-        badgeColor: (b.is_head_office ? 'success' : 'neutral') as
-            | 'success'
-            | 'neutral',
-    }));
-
-    const switchTenant = (tenantId: string) => {
-        if (!tenantId || Number(tenantId) === tenant?.currentTenant?.id) {
-            return;
-        }
-        router.post(route('tenant.switch'), {
-            tenant_id: Number(tenantId),
-        });
-    };
-
-    const switchBranch = (branchId: string) => {
-        if (!branchId || Number(branchId) === tenant?.currentBranch?.id) {
-            return;
-        }
-        router.post(
-            route('branch.switch'),
-            { branch_id: Number(branchId) },
-            { preserveScroll: true }
-        );
-    };
 
     const handleLogout = () => {
         router.post(route('logout'));
@@ -95,17 +52,17 @@ export const Header: React.FC<HeaderProps> = ({
           (authUser?.is_subscriber_admin ? 'Business Admin' : 'Staff');
 
     return (
-        <header className="h-16 bg-white/95 dark:bg-[#12161c]/95 backdrop-blur-xs border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between px-4 sm:px-5 z-30 shrink-0 transition-colors">
+        <header className="h-14 bg-white/95 dark:bg-[#12161c]/95 backdrop-blur-xs border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between px-4 sm:px-5 z-30 shrink-0 transition-colors">
             <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
                 <button
                     type="button"
                     aria-label="Toggle navigation"
-                    className="w-9 h-9 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                    className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
                     onClick={onToggleSidebar}
                 >
                     <svg
-                        width="20"
-                        height="20"
+                        width="18"
+                        height="18"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -117,70 +74,14 @@ export const Header: React.FC<HeaderProps> = ({
                     </svg>
                 </button>
 
-                <div className="hidden sm:flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 tracking-wide leading-none truncate">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 tracking-tight leading-none truncate">
                         {title || 'Dashboard'}
                     </span>
-                    {!isSuperAdmin && subscription?.plan && (
-                        <StatusDot
-                            variant="brand"
-                            className="hidden xl:inline-flex"
-                        >
-                            {subscription.plan.name}
-                        </StatusDot>
-                    )}
-                    {isSuperAdmin && (
-                        <StatusDot
-                            variant="brand"
-                            className="hidden sm:inline-flex"
-                        >
-                            Super Admin
-                        </StatusDot>
-                    )}
                 </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                {!isSuperAdmin &&
-                    hasSubscription &&
-                    tenantOptions.length > 0 && (
-                        <div className="hidden xl:block w-48">
-                            <Select
-                                size="sm"
-                                ariaLabel="Switch tenant workspace"
-                                value={String(tenant?.currentTenant?.id ?? '')}
-                                options={tenantOptions}
-                                onChange={(e) =>
-                                    switchTenant(String(e.target.value))
-                                }
-                                icon={Building2}
-                            />
-                        </div>
-                    )}
-
-                {!isSuperAdmin &&
-                    hasSubscription &&
-                    branchOptions.length > 0 && (
-                        <div className="hidden md:block w-48">
-                            <Select
-                                size="sm"
-                                ariaLabel="Select active branch"
-                                value={String(tenant?.currentBranch?.id ?? '')}
-                                options={branchOptions}
-                                onChange={(e) =>
-                                    switchBranch(String(e.target.value))
-                                }
-                                icon={GitBranch}
-                            />
-                        </div>
-                    )}
-
-                {actions && (
-                    <div className="flex items-center gap-2">{actions}</div>
-                )}
-
-                <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5 hidden sm:block" />
-
                 <div className="relative" ref={profileRef}>
                     <button
                         type="button"

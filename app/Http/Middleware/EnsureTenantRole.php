@@ -25,6 +25,14 @@ class EnsureTenantRole
             return $next($request);
         }
 
+        if ($user) {
+            foreach ($abilities as $ability) {
+                if ($user->hasPermission($ability)) {
+                    return $next($request);
+                }
+            }
+        }
+
         abort(403, 'You do not have permission in this tenant workspace for this action.');
     }
 }

@@ -44,6 +44,7 @@ export interface BatchRow {
     supplier_id?: number | null;
     supplier_name?: string | null;
     batch_number: string;
+    manufacturing_date?: string | null;
     expiry_date?: string | null;
     days_remaining?: number | null;
     is_expired: boolean;

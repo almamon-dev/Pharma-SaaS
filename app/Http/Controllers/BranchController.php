@@ -85,9 +85,10 @@ class BranchController extends Controller
             )
             ->firstOrFail();
 
-        if ($usage && $usage['branches'] >= $usage['max_branches']) {
-            return back()->with('error', "Your current subscription allows up to {$usage['max_branches']} branch(es) across your account. Upgrade on the Plans page to add another branch.");
-        }
+        // Plan Limit Enforcement: check max_branches
+        app(\App\Modules\Billing\Services\FeatureManager::class)
+            ->setTenant($targetTenant)
+            ->assertCanUse('max_branches');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Check, Languages } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Check, Languages, UserCog } from 'lucide-react';
 import { SharedPageProps } from '@/types';
 
 interface PlanModule {
@@ -31,6 +31,7 @@ interface PlanSummary {
 
 interface WelcomeProps {
     plans?: PlanSummary[];
+    demoRoles?: any[];
 }
 
 interface RoleDemoItem {
@@ -40,6 +41,8 @@ interface RoleDemoItem {
     titleEn: string;
     subtitleBn: string;
     subtitleEn: string;
+    descriptionBn?: string | null;
+    descriptionEn?: string | null;
     email: string;
     tagsBn: string[];
     tagsEn: string[];
@@ -167,6 +170,64 @@ const roleDemoItems: RoleDemoItem[] = [
         ],
     },
     {
+        id: 'pathologist',
+        roleKey: 'manager',
+        titleBn: 'প্যাথলজিস্ট',
+        titleEn: 'Pathologist',
+        subtitleBn: 'টেস্ট ও রিপোর্ট',
+        subtitleEn: 'Lab tests & reports',
+        email: 'manager@pharmacore.test',
+        tagsBn: ['ল্যাব টেস্ট', 'স্যাম্পল কালেকশন', 'টেস্ট রিপোর্ট', 'ডায়াগনস্টিক'],
+        tagsEn: ['Lab Tests', 'Sample Collection', 'Test Reports', 'Diagnostics'],
+        canDoBn: [
+            'প্যাথলজি টেস্ট অর্ডার ও রিপোর্ট এন্ট্রি',
+            'রোগীর ডায়াগনস্টিক রিপোর্ট ভেরিফিকেশন',
+            'ল্যাব ইনভেন্টরি ও রিএজেন্ট পর্যবেক্ষণ',
+        ],
+        canDoEn: [
+            'Enter lab test orders and diagnostic results',
+            'Verify patient clinical pathology reports',
+            'Track lab inventory reagents and supplies',
+        ],
+        cannotDoBn: [
+            'ফার্মেসির সামগ্রিক আর্থিক খতিয়ান দেখা যায় না',
+            'ওষুধ ক্রয় চালান অনুমোদন বন্ধ',
+        ],
+        cannotDoEn: [
+            'Cannot access pharmacy master financial ledgers',
+            'Wholesale drug purchase approvals locked',
+        ],
+    },
+    {
+        id: 'radiologist',
+        roleKey: 'manager',
+        titleBn: 'রেডিওলজিস্ট',
+        titleEn: 'Radiologist',
+        subtitleBn: 'ইমেজিং ও রিপোর্ট',
+        subtitleEn: 'Imaging & diagnostics',
+        email: 'manager@pharmacore.test',
+        tagsBn: ['এক্স-রে ও আল্ট্রাসনোগ্রাম', 'ইমেজিং রিপোর্ট', 'প্যাকস ভিউয়ার', 'ডায়াগনস্টিক'],
+        tagsEn: ['X-Ray & USG', 'Imaging Reports', 'PACS Viewer', 'Diagnostics'],
+        canDoBn: [
+            'রেডিওলজি ও ইমেজিং রিপোর্ট আপলোড',
+            'ডায়াগনস্টিক রোগীর কেস স্টাডি যাচাই',
+            'ইমেজিং সরঞ্জাম স্থিতি পর্যবেক্ষণ',
+        ],
+        canDoEn: [
+            'Upload radiology and medical imaging findings',
+            'Review diagnostic patient imaging cases',
+            'Inspect imaging equipment operational logs',
+        ],
+        cannotDoBn: [
+            'ক্যাশ কাউন্টারের দৈনিক টাকা সংগ্রহ দেখা যায় না',
+            'ফার্মেসি স্টক ডিসপোজাল বন্ধ',
+        ],
+        cannotDoEn: [
+            'Cash counter register collections hidden',
+            'Pharmacy stock write-offs locked',
+        ],
+    },
+    {
         id: 'superadmin',
         roleKey: 'superadmin',
         titleBn: 'সুপার অ্যাডমিন',
@@ -287,34 +348,88 @@ const defaultPlanItems: DefaultPlanItem[] = [
     },
 ];
 
-export default function Welcome({ plans = [] }: WelcomeProps) {
-    const { auth } = usePage<SharedPageProps>().props;
+export default function Welcome({ plans = [], demoRoles = [] }: WelcomeProps) {
+    const { auth, tenancy } = usePage<SharedPageProps>().props;
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
     const [activeRoleId, setActiveRoleId] = useState<string>('owner');
     const [lang, setLang] = useState<'bn' | 'en'>('bn');
+    const [heroTab, setHeroTab] = useState<'demo' | 'trial'>('demo');
+    const [isEnteringDemo, setIsEnteringDemo] = useState(false);
 
-    const activeRole = roleDemoItems.find((r) => r.id === activeRoleId) || roleDemoItems[0];
+    const displayRoles: RoleDemoItem[] = (demoRoles && demoRoles.length > 0)
+        ? demoRoles.map((r: any) => ({
+            id: r.role_id,
+            roleKey: r.role_key,
+            titleBn: r.title_bn || r.title_en,
+            titleEn: r.title_en,
+            subtitleBn: r.subtitle_bn || r.subtitle_en,
+            subtitleEn: r.subtitle_en,
+            descriptionBn: r.description_bn || r.description_en,
+            descriptionEn: r.description_en,
+            email: r.email,
+            tagsBn: r.tags_bn || r.tags_en || [],
+            tagsEn: r.tags_en || [],
+            canDoBn: r.features_bn || r.features_en || [],
+            canDoEn: r.features_en || [],
+            cannotDoBn: r.restrictions_bn || r.restrictions_en || [],
+            cannotDoEn: r.restrictions_en || [],
+        }))
+        : roleDemoItems;
 
-    const enterDemo = (email: string) => {
-        router.post(route('login'), {
-            email,
-            password: 'password',
-            remember: true,
-        });
+    const activeRole = displayRoles.find((r) => r.id === activeRoleId) || displayRoles[0];
+
+    useEffect(() => {
+        // Reset loading state on mount and when returning from bfcache (browser back/forward)
+        setIsEnteringDemo(false);
+        const handlePageShow = () => {
+            setIsEnteringDemo(false);
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
+    }, []);
+
+    const enterDemo = (email: string, roleKey?: string) => {
+        setIsEnteringDemo(true);
+        // Safety timeout: automatically reset spinner if navigation takes longer than 4s or fails
+        setTimeout(() => setIsEnteringDemo(false), 4000);
+
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        const isIpOrLocal = currentHost === 'localhost' || currentHost === '127.0.0.1' || /^(\d{1,3}\.){3}\d{1,3}$/.test(currentHost);
+
+        const selectedRole = roleKey || activeRoleId;
+        const isSuper = selectedRole === 'superadmin';
+
+        let targetUrl: string;
+
+        if (isIpOrLocal) {
+            targetUrl = `/demo/enter?role=${encodeURIComponent(selectedRole)}&email=${encodeURIComponent(email)}`;
+        } else {
+            const scheme = tenancy?.scheme || (typeof window !== 'undefined' ? window.location.protocol.replace(':', '') : 'http');
+            const portSuffix = tenancy?.portSuffix || (typeof window !== 'undefined' && window.location.port ? `:${window.location.port}` : '');
+            const baseDomain = tenancy?.baseDomain || currentHost;
+
+            const targetHost = isSuper
+                ? (tenancy?.adminDomain || `admin.${baseDomain}`)
+                : `demo.${baseDomain}`;
+
+            targetUrl = `${scheme}://${targetHost}${portSuffix}/demo/enter?role=${encodeURIComponent(selectedRole)}&email=${encodeURIComponent(email)}`;
+        }
+
+        window.location.href = targetUrl;
     };
 
     const isBn = lang === 'bn';
 
     return (
         <div className="min-h-screen bg-[#0e1217] text-slate-100 font-sans antialiased selection:bg-[#FF4A1C] selection:text-white overflow-x-hidden no-scrollbar">
-            <Head title={isBn ? 'PharmaCore - ডেমো অ্যাকাউন্ট' : 'PharmaCore - Interactive Demo'} />
+            <Head title={isBn ? 'PharmaCore - ডেমো ও ফ্রি ট্রায়াল' : 'PharmaCore - Demo & Free Trial'} />
 
-            {/* Top Amber Demo Notification Banner */}
+            {/* Top Amber Demo & Free Trial Notification Banner */}
             <div className="bg-[#2a220e] border-b border-[#4d3c17] text-[#e5b352] text-center text-xs py-1.5 px-4 font-medium flex items-center justify-center gap-2">
                 <span>
                     {isBn
-                        ? 'এটি ডেমো পরিবেশ। এখানকার সব রোগী, ওষুধ ও বিক্রির তথ্য নমুনা।'
-                        : 'This is a demo environment. All patient, medicine, and sales data here is sample.'}
+                        ? '🎉 নতুন গ্রাহকদের জন্য ১৪ দিনের ফ্রি ট্রায়াল চালু আছে | ১ ক্লিকে ডেমো দেখুন অথবা আপনার ফার্মেসির ট্রায়াল শুরু করুন'
+                        : '🎉 14-Day Free Trial available for all pharmacies | Explore instant demo or launch your free trial with zero card requirement'}
                 </span>
             </div>
 
@@ -350,9 +465,17 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                             </Link>
                         ) : (
                             <>
+                                <button
+                                    type="button"
+                                    onClick={() => enterDemo('admin@pharmacore.test', 'admin')}
+                                    className="h-8 px-3 rounded bg-[#1c232c] hover:bg-[#252f3b] text-slate-200 border border-slate-700/60 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>{isBn ? 'ডেমো দেখুন' : 'Live Demo'}</span>
+                                </button>
                                 <Link
                                     href={route('login')}
-                                    className="h-8 px-3.5 rounded bg-[#1c232c] hover:bg-[#252f3b] text-slate-200 border border-slate-700/60 text-xs font-semibold inline-flex items-center transition-colors cursor-pointer"
+                                    className="h-8 px-2.5 rounded text-slate-300 hover:text-white text-xs font-semibold inline-flex items-center transition-colors"
                                 >
                                     {isBn ? 'সাইন ইন' : 'Sign In'}
                                 </Link>
@@ -360,7 +483,7 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                                     href={route('register')}
                                     className="h-8 px-3.5 rounded bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs font-bold inline-flex items-center transition-colors shadow-sm"
                                 >
-                                    {isBn ? 'ফ্রি ট্রায়াল শুরু' : 'Free Trial'}
+                                    {isBn ? '১৪ দিন ফ্রি ট্রায়াল' : '14-Day Free Trial'}
                                 </Link>
                             </>
                         )}
@@ -368,35 +491,50 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                 </div>
             </header>
 
-            {/* Hero Section: Demo Account & One-Click Dashboard Access */}
+            {/* Hero Section: Two Options - Instant Demo & 14-Day Free Trial */}
             <section className="px-4 sm:px-6 lg:px-8 pt-10 pb-16 lg:pt-14 lg:pb-20 max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                     {/* Left Hero Pitch */}
                     <div className="lg:col-span-7">
-                        <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-2">
-                            {isBn ? 'ডেমো অ্যাকাউন্ট' : 'Demo Account'}
-                        </span>
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#1c232c] border border-slate-700/60 text-[#FF4A1C] text-[11px] font-bold uppercase tracking-wider mb-3">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#FF4A1C] animate-ping" />
+                            <span>{isBn ? 'স্মার্ট ফার্মেসি ক্লাউড ম্যানেজমেন্ট ও পিওএস' : 'SMART PHARMACY CLOUD SAAS'}</span>
+                        </div>
                         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 tracking-tight">
-                            {isBn ? 'নিবন্ধন ছাড়াই পুরো সিস্টেম ঘুরে দেখুন' : 'Explore the Full System Without Registration'}
+                            {isBn ? (
+                                <>দুটো সহজ উপায়ে শুরু করুন:<br /><span className="text-[#FF4A1C]">লাইভ ডেমো</span> অথবা <span className="text-emerald-400">ফ্রি ট্রায়াল</span></>
+                            ) : (
+                                <>Start in Two Easy Ways:<br /><span className="text-[#FF4A1C]">Live Demo</span> or <span className="text-emerald-400">Free Trial</span></>
+                            )}
                         </h1>
                         <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-6 max-w-xl">
                             {isBn
-                                ? 'একটি রোল বেছে নিন, তারপর সরাসরি ড্যাশবোর্ড ঢুকুন। পিওএস, ইনভেন্টরি, রিপোর্ট সবকিছু নমুনা তথ্য দিয়ে চালু আছে। নিজের হাতে ব্যবহার করে দেখুন।'
-                                : 'Select a role, then directly enter the dashboard. POS, inventory, reports, and FEFO are live with sample data. Experience it with your own hands.'}
+                                ? 'কোনো রেজিস্ট্রেশন ছাড়াই ১ ক্লিকে নমুনা ডেটা দিয়ে পুরো সিস্টেম ঘুরে দেখুন, অথবা আপনার নিজস্ব ফার্মেসির জন্য শুরু করুন ১৪ দিনের ফ্রি ট্রায়াল (০ টাকা, কোনো কার্ড লাগবে না)।'
+                                : 'Explore the full system in 1-click with pre-loaded sample data, or start a 14-day free trial for your own pharmacy workspace ($0, no credit card required).'}
                         </p>
 
                         <div className="flex flex-wrap items-center gap-3 mb-6">
-                            <a
-                                href="#roles"
-                                className="h-10 px-5 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center transition-colors shadow-md"
+                            <Link
+                                href={route('register')}
+                                className="h-11 px-5 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2 transition-colors shadow-lg cursor-pointer"
                             >
-                                {isBn ? 'রোল বেছে ডেমো শুরু' : 'Pick a Role to Start Demo'}
-                            </a>
-                            <a
-                                href="#tour"
-                                className="h-10 px-5 rounded-md bg-[#161c24] hover:bg-[#1e2632] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center transition-colors"
+                                <span>🚀</span>
+                                <span>{isBn ? '১৪ দিনের ফ্রি ট্রায়াল শুরু' : 'Start 14-Day Free Trial'}</span>
+                            </Link>
+                            <button
+                                type="button"
+                                disabled={isEnteringDemo}
+                                onClick={() => enterDemo('admin@pharmacore.test', 'admin')}
+                                className="h-11 px-5 rounded-md bg-[#161c24] hover:bg-[#1e2632] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
                             >
-                                {isBn ? 'গাইডেড ট্যুর দেখুন' : 'Watch Guided Tour'}
+                                <span>⚡</span>
+                                <span>{isBn ? 'ইনস্ট্যান্ট ডেমো খুলুন' : 'Open Instant Demo'}</span>
+                            </button>
+                            <a
+                                href="#compare"
+                                className="h-11 px-4 rounded-md text-slate-400 hover:text-white text-xs sm:text-sm font-medium inline-flex items-center justify-center transition-colors"
+                            >
+                                {isBn ? 'পার্থক্য দেখুন ↓' : 'Compare Options ↓'}
                             </a>
                         </div>
 
@@ -408,100 +546,186 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                             </span>
                             <span className="inline-flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                {isBn ? 'ইমেইল লাগবে না' : 'No email required'}
+                                {isBn ? '১৪ দিন সম্পূর্ণ ফ্রি' : '14 days 100% free'}
                             </span>
                             <span className="inline-flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                {isBn ? '২৪ ঘণ্টা পর পর রিসেট' : 'Resets every 24 hours'}
+                                {isBn ? '১ ক্লিকে ডেমো টেস্ট' : '1-click instant demo'}
                             </span>
                         </div>
                     </div>
 
-                    {/* Right Hero Sample Store Card */}
+                    {/* Right Hero Interactive 2-Option Card */}
                     <div className="lg:col-span-5">
                         <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5 sm:p-6 shadow-2xl relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF4A1C]/5 rounded-full blur-2xl pointer-events-none" />
 
-                            <h2 className="text-sm font-bold text-white mb-4 flex items-center justify-between">
-                                <span>{isBn ? 'ডেমো অ্যাকাউন্টে ঢুকুন' : 'Access Demo Account'}</span>
-                                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-2 py-0.5 rounded">
-                                    {isBn ? 'লাইভ সচল' : 'Live Active'}
-                                </span>
-                            </h2>
-
-                            <div className="divide-y divide-slate-800/80 text-xs mb-5">
-                                <div className="py-2.5 flex items-center justify-between">
-                                    <span className="text-slate-400 font-medium">{isBn ? 'ডেমো ব্যবসা' : 'Demo Business'}</span>
-                                    <span className="text-white font-semibold font-mono">{isBn ? 'সিটি কেয়ার ফার্মেসি (নমুনা)' : 'City Care Pharmacy (Demo)'}</span>
-                                </div>
-                                <div className="py-2.5 flex items-center justify-between">
-                                    <span className="text-slate-400 font-medium">{isBn ? 'শাখা' : 'Branches'}</span>
-                                    <span className="text-white font-semibold">{isBn ? '৩টি' : '3 Outlets'}</span>
-                                </div>
-                                <div className="py-2.5 flex items-center justify-between">
-                                    <span className="text-slate-400 font-medium">{isBn ? 'নমুনা ওষুধ' : 'Sample Medicines'}</span>
-                                    <span className="text-white font-semibold">{isBn ? '৫০০+' : '500+ SKUs'}</span>
-                                </div>
-                                <div className="py-2.5 flex items-center justify-between">
-                                    <span className="text-slate-400 font-medium">{isBn ? 'নমুনা রোগী' : 'Sample Patients'}</span>
-                                    <span className="text-white font-semibold">{isBn ? '১২০ জন' : '120 Patients'}</span>
-                                </div>
+                            {/* Two Options Segmented Switcher */}
+                            <div className="w-full grid grid-cols-2 p-1.5 rounded-xl bg-[#0b0f14] border border-slate-800/90 mb-5 gap-1.5 shadow-inner">
+                                <button
+                                    type="button"
+                                    onClick={() => setHeroTab('demo')}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 select-none ${
+                                        heroTab === 'demo'
+                                            ? 'bg-[#1e2632] text-white shadow border border-slate-700/80 ring-1 ring-slate-700/50'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-[#141b24]/60 border border-transparent'
+                                    }`}
+                                >
+                                    <span>⚡</span>
+                                    <span className="truncate">{isBn ? 'অপশন ১: লাইভ ডেমো' : 'Option 1: Live Demo'}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setHeroTab('trial')}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 select-none ${
+                                        heroTab === 'trial'
+                                            ? 'bg-[#FF4A1C] text-white shadow-md shadow-[#FF4A1C]/25 border border-[#ff5f38]'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-[#141b24]/60 border border-transparent'
+                                    }`}
+                                >
+                                    <span>🚀</span>
+                                    <span className="truncate">{isBn ? 'অপশন ২: ফ্রি ট্রায়াল' : 'Option 2: Free Trial'}</span>
+                                </button>
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={() => enterDemo('admin@pharmacore.test')}
-                                className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-lg cursor-pointer"
-                            >
-                                {isBn ? 'ডেমো ড্যাশবোর্ড খুলুন' : 'Open Demo Dashboard'}
-                            </button>
+                            {heroTab === 'demo' ? (
+                                <div>
+                                    <h2 className="text-sm font-bold text-white mb-4 flex items-center justify-between">
+                                        <span>{isBn ? 'ডেমো অ্যাকাউন্টে ঢুকুন' : 'Access Demo Account'}</span>
+                                        <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-2 py-0.5 rounded">
+                                            {isBn ? 'নমুনা ডেটা লাইভ' : 'Sample Data Live'}
+                                        </span>
+                                    </h2>
 
-                            <p className="text-center text-[11px] text-slate-400 mt-2.5">
-                                {isBn
-                                    ? 'লগইন তথ্য নিজে থেকে পূরণ হয়ে যাবে। কিছু টাইপ করতে হবে না।'
-                                    : 'Login credentials autofilled instantly. No typing required.'}
-                            </p>
+                                    <div className="divide-y divide-slate-800/80 text-xs mb-5">
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'ডেমো ব্যবসা' : 'Demo Business'}</span>
+                                            <span className="text-white font-semibold font-mono">{isBn ? 'সিটি কেয়ার ফার্মেসি (নমুনা)' : 'City Care Pharmacy (Demo)'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'শাখা' : 'Branches'}</span>
+                                            <span className="text-white font-semibold">{isBn ? '৩টি শাখা' : '3 Outlets'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'নমুনা ওষুধ' : 'Sample Medicines'}</span>
+                                            <span className="text-white font-semibold">{isBn ? '৫০০+ SKUs' : '500+ SKUs'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'নমুনা রোগী' : 'Sample Patients'}</span>
+                                            <span className="text-white font-semibold">{isBn ? '১২০ জন' : '120 Patients'}</span>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        disabled={isEnteringDemo}
+                                        onClick={() => enterDemo('admin@pharmacore.test', 'admin')}
+                                        className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-lg cursor-pointer disabled:opacity-75"
+                                    >
+                                        {isEnteringDemo ? (
+                                            <span className="inline-flex items-center gap-2">
+                                                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                {isBn ? 'ড্যাশবোর্ড লোড হচ্ছে...' : 'Loading Dashboard...'}
+                                            </span>
+                                        ) : (
+                                            isBn ? 'ডেমো ড্যাশবোর্ড খুলুন' : 'Open Demo Dashboard'
+                                        )}
+                                    </button>
+
+                                    <p className="text-center text-[11px] text-slate-400 mt-2.5">
+                                        {isBn
+                                            ? 'লগইন তথ্য নিজে থেকে পূরণ হয়ে যাবে। কিছু টাইপ করতে হবে না।'
+                                            : 'Login credentials autofilled instantly. No typing required.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <h2 className="text-sm font-bold text-white mb-4 flex items-center justify-between">
+                                        <span>{isBn ? 'আপনার নিজস্ব ফার্মেসি সেটআপ' : 'Your Own Pharmacy Setup'}</span>
+                                        <span className="text-[11px] font-semibold text-[#FF4A1C] bg-[#FF4A1C]/10 border border-[#FF4A1C]/30 px-2 py-0.5 rounded">
+                                            {isBn ? '১৪ দিন ফ্রি' : '14 Days Free'}
+                                        </span>
+                                    </h2>
+
+                                    <div className="divide-y divide-slate-800/80 text-xs mb-5">
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'নিজস্ব সাবডোমেন' : 'Custom Subdomain'}</span>
+                                            <span className="text-emerald-400 font-semibold font-mono">{isBn ? 'yourshop.domain' : 'yourshop.domain'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'আসল স্টক ও ইনভেন্টরি' : 'Real Stock & SKUs'}</span>
+                                            <span className="text-white font-semibold">{isBn ? 'আপনার দোকানের আসল ওষুধ' : 'Your Real Medicine Catalog'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'পিওএস ও প্রিন্টার' : 'POS & Printing'}</span>
+                                            <span className="text-white font-semibold">{isBn ? 'আসল থার্মাল রসিদ ও ক্যাশ' : 'Real Invoices & Thermal Print'}</span>
+                                        </div>
+                                        <div className="py-2.5 flex items-center justify-between">
+                                            <span className="text-slate-400 font-medium">{isBn ? 'ট্রায়াল খরচ' : 'Trial Cost'}</span>
+                                            <span className="text-[#FF4A1C] font-bold font-mono">$0 ({isBn ? 'কোনো কার্ড লাগবে না' : 'No card required'})</span>
+                                        </div>
+                                    </div>
+
+                                    <Link
+                                        href={route('register')}
+                                        className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-lg cursor-pointer"
+                                    >
+                                        {isBn ? 'আপনার ফার্মেসির ফ্রি ট্রায়াল শুরু করুন →' : 'Start Your Pharmacy Free Trial →'}
+                                    </Link>
+
+                                    <p className="text-center text-[11px] text-slate-400 mt-2.5">
+                                        {isBn
+                                            ? 'আজকে $০ চার্জ। ১৪ দিন পর পছন্দ হলে সাবস্ক্রিপশন নিতে পারবেন।'
+                                            : '$0 today. Subscribe only if you love it after 14 days.'}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             </section>
 
             {/* Step 1: Role-Based Explorer Section */}
-            <section id="roles" className="px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800/80 max-w-7xl mx-auto scroll-mt-14">
-                <div className="mb-8">
-                    <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+            <section id="roles" className="px-4 sm:px-6 lg:px-8 py-10 sm:py-12 border-t border-slate-800/80 max-w-7xl mx-auto scroll-mt-14">
+                <div className="mb-5 sm:mb-6">
+                    <span className="text-[#FF4A1C] text-[11px] font-bold uppercase tracking-wider block mb-0.5">
                         {isBn ? 'ধাপ ১' : 'Step 1'}
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight mb-1">
                         {isBn ? 'কোন রোল হিসেবে দেখবেন?' : 'Which Role Do You Want to Explore As?'}
                     </h2>
-                    <p className="text-slate-400 text-xs sm:text-sm">
+                    <p className="text-slate-400 text-xs">
                         {isBn
                             ? 'প্রতিটি রোলের মেনু ও পারমিশন আলাদা। বাঁদিকে একটি রোল বেছে নিন।'
                             : 'Every role has isolated menus, actions, and permissions. Pick a role on the left.'}
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
                     {/* Left Vertical Role Selector */}
-                    <div className="lg:col-span-4 space-y-2.5">
-                        {roleDemoItems.map((item) => {
+                    <div className="lg:col-span-4 xl:col-span-4 space-y-1.5">
+                        {displayRoles.map((item) => {
                             const isSelected = item.id === activeRoleId;
                             return (
                                 <button
                                     key={item.id}
                                     type="button"
                                     onClick={() => setActiveRoleId(item.id)}
-                                    className={`w-full text-left p-3.5 rounded-lg border transition-all cursor-pointer ${
+                                    className={`w-full text-left px-3.5 py-2.5 rounded-lg border transition-all cursor-pointer ${
                                         isSelected
-                                            ? 'border-[#FF4A1C] bg-[#1a1f27] shadow-md'
-                                            : 'border-slate-800 bg-[#141920] hover:border-slate-700 hover:bg-[#181e26]'
+                                            ? 'border-[#FF4A1C] bg-[#1a1f27] shadow-md ring-1 ring-[#FF4A1F]/30'
+                                            : 'border-slate-800/90 bg-[#141920] hover:border-slate-700 hover:bg-[#181e26]'
                                     }`}
                                 >
-                                    <div className="text-xs sm:text-sm font-bold text-white mb-0.5">
-                                        {isBn ? item.titleBn : item.titleEn}
+                                    <div className="flex items-center justify-between">
+                                        <span className={`text-xs font-bold ${isSelected ? 'text-[#FF4A1C]' : 'text-white'}`}>
+                                            {isBn ? item.titleBn : item.titleEn}
+                                        </span>
+                                        {isSelected && (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#FF4A1C] animate-pulse" />
+                                        )}
                                     </div>
-                                    <div className="text-[11px] text-slate-400">
+                                    <div className="text-[11px] text-slate-400 mt-0.5 truncate">
                                         {isBn ? item.subtitleBn : item.subtitleEn}
                                     </div>
                                 </button>
@@ -509,51 +733,99 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                         })}
                     </div>
 
-                    {/* Right Role Detail Card */}
-                    <div className="lg:col-span-8">
-                        <div className="rounded-xl border border-slate-800 bg-[#161c24] p-5 sm:p-6 shadow-xl">
-                            <h3 className="text-base sm:text-lg font-bold text-white mb-3">
-                                {isBn
-                                    ? `${activeRole.titleBn} হিসেবে ডেমো`
-                                    : `Demo as ${activeRole.titleEn}`}
-                            </h3>
+                    {/* Right Role Detail Card (Compact & Modern) */}
+                    <div className="lg:col-span-8 xl:col-span-8">
+                        <div className="rounded-xl border border-slate-800 bg-[#151a22] p-4 sm:p-5 shadow-xl relative overflow-hidden">
+                            {/* Ambient Glow */}
+                            <div className="absolute top-0 right-0 w-60 h-60 bg-[#FF4A1C]/5 rounded-full blur-3xl pointer-events-none" />
 
-                            {/* Tags */}
-                            <div className="flex flex-wrap gap-1.5 mb-5">
+                            {/* Card Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-lg bg-[#FF4A1C]/10 border border-[#FF4A1C]/20 flex items-center justify-center text-[#FF4A1C] shrink-0">
+                                        <UserCog className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                                                {isBn
+                                                    ? `${activeRole.titleBn} হিসেবে ডেমো`
+                                                    : `Demo as ${activeRole.titleEn}`}
+                                            </h3>
+                                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-slate-300 bg-[#1f2631] border border-slate-700/60">
+                                                {activeRole.roleKey}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] font-medium text-[#FF4A1C]">
+                                            {isBn ? activeRole.subtitleBn : activeRole.subtitleEn}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-[10px] shrink-0">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/80 font-medium">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span>{isBn ? 'লাইভ স্যান্ডবক্স' : 'Live Sandbox'}</span>
+                                    </span>
+                                    <span className="text-slate-400 font-mono hidden sm:inline">
+                                        {activeRole.email}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Description (clean text paragraph) */}
+                            {(activeRole.descriptionBn || activeRole.descriptionEn) && (
+                                <p className="mt-2.5 text-xs text-slate-300 leading-relaxed">
+                                    {isBn
+                                        ? (activeRole.descriptionBn || activeRole.descriptionEn)
+                                        : (activeRole.descriptionEn || activeRole.descriptionBn)}
+                                </p>
+                            )}
+
+                            {/* Tags / Module Badges */}
+                            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                                 {(isBn ? activeRole.tagsBn : activeRole.tagsEn).map((tag, idx) => (
                                     <span
                                         key={idx}
-                                        className="rounded px-2.5 py-1 text-[11px] font-semibold bg-[#11151a] border border-slate-800 text-slate-300"
+                                        className="rounded px-2 py-0.5 text-[10px] font-semibold bg-[#1a212b] border border-slate-700/60 text-slate-200"
                                     >
                                         {tag}
                                     </span>
                                 ))}
                             </div>
 
-                            {/* Can Do vs Cannot Do */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                                <div>
-                                    <div className="text-xs font-bold text-[#FF4A1C] uppercase tracking-wider mb-2">
-                                        {isBn ? 'যা করতে পারবেন' : 'What You Can Do'}
-                                    </div>
-                                    <ul className="space-y-1.5 text-xs text-slate-300">
+                            {/* Can Do vs Cannot Do (2-Column Sleek Lists) */}
+                            <div className="mt-3.5 pt-3.5 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Can Do Column */}
+                                <div className="space-y-1.5">
+                                    <span className="text-[11px] font-bold text-[#FF4A1C] uppercase tracking-wider block">
+                                        {isBn ? 'যা যা করতে পারবেন' : 'WHAT YOU CAN DO'}
+                                    </span>
+                                    <ul className="space-y-1">
                                         {(isBn ? activeRole.canDoBn : activeRole.canDoEn).map((point, idx) => (
-                                            <li key={idx} className="flex items-start gap-2">
-                                                <span className="text-[#FF4A1C] font-bold">•</span>
+                                            <li
+                                                key={idx}
+                                                className="flex items-start gap-1.5 text-xs text-slate-300 leading-snug"
+                                            >
+                                                <span className="text-[#FF4A1C] font-bold shrink-0 mt-0.5">•</span>
                                                 <span>{point}</span>
                                             </li>
                                         ))}
                                     </ul>
                                 </div>
 
-                                <div>
-                                    <div className="text-xs font-bold text-[#FF4A1C] uppercase tracking-wider mb-2">
-                                        {isBn ? 'যা দেখা যাবে না' : 'What is Hidden / Restricted'}
-                                    </div>
-                                    <ul className="space-y-1.5 text-xs text-slate-400">
+                                {/* Restrictions Column */}
+                                <div className="space-y-1.5">
+                                    <span className="text-[11px] font-bold text-[#FF4A1C] uppercase tracking-wider block">
+                                        {isBn ? 'সীমাবদ্ধতা / নিরাপদ অ্যাক্সেস' : 'WHAT IS HIDDEN / RESTRICTED'}
+                                    </span>
+                                    <ul className="space-y-1">
                                         {(isBn ? activeRole.cannotDoBn : activeRole.cannotDoEn).map((point, idx) => (
-                                            <li key={idx} className="flex items-start gap-2">
-                                                <span className="text-slate-500 font-bold">•</span>
+                                            <li
+                                                key={idx}
+                                                className="flex items-start gap-1.5 text-xs text-slate-400 leading-snug"
+                                            >
+                                                <span className="text-amber-500 font-bold shrink-0 mt-0.5">•</span>
                                                 <span>{point}</span>
                                             </li>
                                         ))}
@@ -561,20 +833,37 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                                 </div>
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={() => enterDemo(activeRole.email)}
-                                className="w-full sm:w-auto px-6 h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm inline-flex items-center justify-center transition-colors shadow-md cursor-pointer"
-                            >
-                                {isBn
-                                    ? `${activeRole.titleBn} হিসেবে ডেমোতে ঢুকুন`
-                                    : `Enter Demo as ${activeRole.titleEn}`}
-                            </button>
-                            <p className="text-[11px] text-slate-400 mt-2">
-                                {isBn
-                                    ? 'লগইন তথ্য নিজে থেকে পূরণ হবে।'
-                                    : 'Login credentials filled automatically.'}
-                            </p>
+                            {/* Bottom Action Footer */}
+                            <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                                <p className="text-[11px] text-slate-400">
+                                    {isBn
+                                        ? '💡 লগইন তথ্য স্বয়ংক্রিয়ভাবে পূরণ হয়ে সরাসরি ড্যাশবোর্ড চালু হবে।'
+                                        : 'Login credentials filled automatically.'}
+                                </p>
+
+                                <button
+                                    type="button"
+                                    disabled={isEnteringDemo}
+                                    onClick={() => enterDemo(activeRole.email, activeRole.roleKey)}
+                                    className="h-9 px-5 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer disabled:opacity-75 shrink-0"
+                                >
+                                    {isEnteringDemo ? (
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            {isBn ? 'ঢুকছে...' : 'Entering...'}
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <span>🚀</span>
+                                            <span>
+                                                {isBn
+                                                    ? `${activeRole.titleBn} হিসেবে ডেমোতে ঢুকুন →`
+                                                    : `Enter Demo as ${activeRole.titleEn} →`}
+                                            </span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -717,54 +1006,133 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                     </div>
                 </div>
 
-                {/* Scope & What Happens Next (2 Columns) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="rounded-xl border border-slate-800 bg-[#141920] p-5">
-                        <h3 className="text-sm font-bold text-white mb-3">
-                            {isBn ? 'ডেমোর সীমা' : 'Demo Environment Limits'}
+                {/* Two-Option Comparison Section */}
+                <div id="compare" className="mt-14 scroll-mt-14">
+                    <div className="text-center max-w-2xl mx-auto mb-8">
+                        <span className="text-[#FF4A1C] text-xs font-bold uppercase tracking-wider block mb-1">
+                            {isBn ? 'সিদ্ধান্ত নিন' : 'Choose Your Pathway'}
+                        </span>
+                        <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight mb-2">
+                            {isBn ? 'দুইটি অপশনের মধ্যে কোনটি আপনার জন্য সঠিক?' : 'Which Option is Right for You?'}
                         </h3>
-                        <ul className="space-y-2 text-xs text-slate-400">
-                            <li className="flex items-start gap-2">
-                                <span className="text-slate-500 font-bold">•</span>
-                                <span>{isBn ? 'প্রতি ২৪ ঘণ্টায় তথ্য আবার নমুনায় ফিরে যায়' : 'Sample database resets cleanly every 24 hours'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-slate-500 font-bold">•</span>
-                                <span>{isBn ? 'প্রকৃত প্রিন্টার ও পেমেন্ট গেটওয়ে বন্ধ থাকে' : 'Live physical thermal printers and payment gateways simulated'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-slate-500 font-bold">•</span>
-                                <span>{isBn ? 'ইমেইল ও এসএমএস পাঠানো যায় না' : 'Outbound live SMS and email dispatchers disabled'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-slate-500 font-bold">•</span>
-                                <span>{isBn ? 'একসাথে সর্বোচ্চ ৫০ জন ডেমো ব্যবহার করতে পারবেন' : 'Concurrently serves up to 50 active demo testers'}</span>
-                            </li>
-                        </ul>
+                        <p className="text-slate-400 text-xs sm:text-sm">
+                            {isBn
+                                ? 'সফটওয়্যার শুধু পরীক্ষা করতে চান নাকি দোকানে সরাসরি চালাতে চান—দুটোর জন্যই প্রস্তুত।'
+                                : 'Whether you want to test drive features or deploy immediately to your real pharmacy counters.'}
+                        </p>
                     </div>
 
-                    <div className="rounded-xl border border-slate-800 bg-[#141920] p-5">
-                        <h3 className="text-sm font-bold text-white mb-3">
-                            {isBn ? 'পছন্দ হলে কী হবে' : 'Ready to Start Real Business?'}
-                        </h3>
-                        <ul className="space-y-2 text-xs text-slate-400">
-                            <li className="flex items-start gap-2">
-                                <span className="text-[#FF4A1C] font-bold">•</span>
-                                <span>{isBn ? 'এক ক্লিকে ফ্রি ট্রায়াল শুরু করুন' : 'Start your free trial with zero setup delay'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-[#FF4A1C] font-bold">•</span>
-                                <span>{isBn ? 'নিজের ওষুধ ও ব্যাচ আমদানি করুন' : 'Import your own Excel catalog and medicine batches'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-[#FF4A1C] font-bold">•</span>
-                                <span>{isBn ? 'ডেমোতে বানানো কাস্টম রোল ট্রায়ালে আনা যাবে' : 'Easily configure your real branch employees'}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-[#FF4A1C] font-bold">•</span>
-                                <span>{isBn ? '১৪ দিন পুরো ফিচার ফ্রি' : '14 days full feature access, completely free'}</span>
-                            </li>
-                        </ul>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                        {/* Option 1: Live Demo */}
+                        <div className="rounded-xl border border-slate-800 bg-[#141920] p-6 flex flex-col justify-between">
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-bold">
+                                        ⚡ {isBn ? 'অপশন ১: লাইভ ডেমো' : 'Option 1: Live Demo'}
+                                    </span>
+                                    <span className="text-xs text-slate-400 font-medium">
+                                        {isBn ? '১০ সেকেন্ড এক্সেস' : '10s Instant Access'}
+                                    </span>
+                                </div>
+
+                                <h4 className="text-base font-bold text-white mb-2">
+                                    {isBn ? 'সফটওয়্যার ঘুরে দেখা ও পরখ করা' : 'Explore & Test Drive All Features'}
+                                </h4>
+                                <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                                    {isBn
+                                        ? 'কোনো অ্যাকাউন্ট বা ইমেইল ছাড়াই আগে থেকে ভরা নমুনা তথ্য দিয়ে পুরো সিস্টেম নিজের হাতে চালিয়ে দেখুন।'
+                                        : 'Sub-second access to fully loaded sample multi-branch data without creating an account.'}
+                                </p>
+
+                                <ul className="space-y-2.5 text-xs text-slate-300 mb-6">
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                        <span>{isBn ? 'কোনো সাইনআপ বা ইমেইল লাগবে না' : 'Zero signup, no email or password needed'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                        <span>{isBn ? '৫০০+ নমুনা ওষুধ, ৩টি শাখা ও ১২০ রোগী প্রস্তুত' : '500+ sample medicines, 3 branches & 120 patients pre-loaded'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                        <span>{isBn ? 'মালিক, ফার্মাসিস্ট, ক্যাশিয়ার সব রোল টেস্ট করুন' : 'Test Owner, Pharmacist, Cashier & Manager roles'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2 text-slate-400">
+                                        <span className="text-slate-500 font-bold">•</span>
+                                        <span>{isBn ? 'পাবলিক এনভায়রনমেন্ট, প্রতি ২৪ ঘণ্টায় রিসেট হয়' : 'Public shared sandbox, auto-resets every 24 hours'}</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <button
+                                type="button"
+                                disabled={isEnteringDemo}
+                                onClick={() => enterDemo('admin@pharmacore.test', 'admin')}
+                                className="w-full h-10 rounded-md bg-[#1e2632] hover:bg-[#283342] text-slate-200 border border-slate-700/80 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer disabled:opacity-75"
+                            >
+                                {isEnteringDemo ? (
+                                    <span className="inline-flex items-center gap-2">
+                                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        {isBn ? 'ড্যাশবোর্ড লোড হচ্ছে...' : 'Loading...'}
+                                    </span>
+                                ) : (
+                                    isBn ? '⚡ ডেমো ড্যাশবোর্ডে ঢুকুন' : '⚡ Enter Demo Dashboard'
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Option 2: 14-Day Free Trial */}
+                        <div className="rounded-xl border-2 border-[#FF4A1C] bg-[#161c24] p-6 flex flex-col justify-between relative shadow-xl">
+                            <div className="absolute -top-3 right-6 px-2.5 py-0.5 rounded-full bg-[#FF4A1C] text-white text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                                {isBn ? 'প্রস্তাবিত' : 'Recommended'}
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF4A1C]/10 text-[#FF4A1C] text-xs font-bold border border-[#FF4A1C]/30">
+                                        🚀 {isBn ? 'অপশন ২: ১৪ দিনের ফ্রি ট্রায়াল' : 'Option 2: 14-Day Free Trial'}
+                                    </span>
+                                    <span className="text-xs font-bold text-emerald-400 font-mono">
+                                        $0 / ১৪ দিন
+                                    </span>
+                                </div>
+
+                                <h4 className="text-base font-bold text-white mb-2">
+                                    {isBn ? 'নিজের ফার্মেসিতে বাস্তবে চালানো' : 'Run Your Real Pharmacy Operations'}
+                                </h4>
+                                <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                                    {isBn
+                                        ? 'আপনার নিজস্ব ফার্মেসির প্রাইভেট ওয়ার্কস্পেস খুলুন, আসল ওষুধ ও কর্মচারী অ্যাড করে দোকানে লাইভ বিক্রি শুরু করুন।'
+                                        : 'Create your private isolated workspace, import your real medicine batches and start billing customers at your counters.'}
+                                </p>
+
+                                <ul className="space-y-2.5 text-xs text-slate-300 mb-6">
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-[#FF4A1C] shrink-0 mt-0.5" />
+                                        <span>{isBn ? 'আপনার নিজস্ব ব্র্যান্ডেড সাবডোমেন' : 'Your own custom isolated pharmacy domain'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-[#FF4A1C] shrink-0 mt-0.5" />
+                                        <span>{isBn ? 'আপনার দোকানের আসল ওষুধ, ব্যাচ ও দাম এন্ট্রি' : 'Import and manage your real stock, costs & retail prices'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-[#FF4A1C] shrink-0 mt-0.5" />
+                                        <span>{isBn ? 'আসল কাস্টমার স্লিপ প্রিন্টিং ও দৈনিক ক্যাশ ক্লোজিং' : 'Print real POS receipts and track daily counter drawer cash'}</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <Check className="h-3.5 w-3.5 text-[#FF4A1C] shrink-0 mt-0.5" />
+                                        <span>{isBn ? '১৪ দিন সম্পূর্ণ ফ্রি — কোনো ক্রেডিট কার্ড লাগবে না' : '14 days full access — zero credit card required'}</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <Link
+                                href={route('register')}
+                                className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs flex items-center justify-center transition-colors shadow-lg cursor-pointer"
+                            >
+                                {isBn ? '🚀 ১৪ দিনের ফ্রি ট্রায়াল শুরু করুন' : '🚀 Start 14-Day Free Trial'}
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -921,16 +1289,20 @@ export default function Welcome({ plans = [] }: WelcomeProps) {
                     <div className="flex flex-wrap items-center justify-center gap-3">
                         <Link
                             href={route('register')}
-                            className="h-10 px-6 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center transition-colors shadow-lg"
+                            className="h-11 px-6 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2 transition-colors shadow-lg cursor-pointer"
                         >
-                            {isBn ? 'ব্যবসা নিবন্ধন ও ট্রায়াল শুরু' : 'Register Business & Start Trial'}
+                            <span>🚀</span>
+                            <span>{isBn ? 'ব্যবসা নিবন্ধন ও ফ্রি ট্রায়াল' : 'Register Business & Start Free Trial'}</span>
                         </Link>
-                        <a
-                            href="#plans"
-                            className="h-10 px-6 rounded-md bg-[#141920] hover:bg-[#1a212b] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center transition-colors"
+                        <button
+                            type="button"
+                            disabled={isEnteringDemo}
+                            onClick={() => enterDemo('admin@pharmacore.test', 'admin')}
+                            className="h-11 px-6 rounded-md bg-[#141920] hover:bg-[#1a212b] text-slate-200 border border-slate-700/80 text-xs sm:text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-75"
                         >
-                            {isBn ? 'প্ল্যান ও দাম দেখুন' : 'View Plans & Pricing'}
-                        </a>
+                            <span>⚡</span>
+                            <span>{isBn ? 'ইনস্ট্যান্ট ডেমো খুলুন' : 'Open Instant Demo'}</span>
+                        </button>
                     </div>
                 </div>
             </section>

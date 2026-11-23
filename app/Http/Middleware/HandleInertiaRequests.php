@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                'lastSale' => fn () => $request->session()->get('lastSale'),
             ],
         ];
     }
@@ -100,6 +101,41 @@ class HandleInertiaRequests extends Middleware
         $subscriberAdmin = $user->effectiveSubscriberAdmin();
         $subscription = $user->effectiveSubscription();
         $plan = $subscription?->plan;
+
+        $context = app(TenantContext::class);
+        $tenant = $context->tenant();
+        $featureManager = app(\App\Modules\Billing\Services\FeatureManager::class);
+        if ($tenant) {
+            $featureManager->setTenant($tenant);
+        }
+
+        $currentSubModel = $tenant ? \App\Modules\Billing\Models\Subscription::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->orderByDesc('ends_at')
+            ->first() : null;
+
+        $legacySub = $subscription;
+        if (! $currentSubModel && $legacySub && $legacySub->isUsable()) {
+            $banner = null;
+            $isWritable = true;
+            $statusBadge = [
+                'text' => ucfirst($legacySub->status),
+                'color' => 'success',
+            ];
+        } elseif (! $currentSubModel && $tenant && ($tenant->status === 'active' || $tenant->isOnTrial())) {
+            $banner = null;
+            $isWritable = true;
+            $statusBadge = [
+                'text' => 'Active',
+                'color' => 'success',
+            ];
+        } else {
+            $banner = \App\Modules\Billing\Support\SubscriptionState::banner($currentSubModel);
+            $isWritable = \App\Modules\Billing\Support\SubscriptionState::isWritable($currentSubModel);
+            $statusBadge = \App\Modules\Billing\Support\SubscriptionState::statusBadge($currentSubModel);
+        }
+        $subMeta = $featureManager->subscriptionMeta();
+
         $usage = $subscriberAdmin ? $subscriberAdmin->subscriptionUsage() : [
             'tenants' => 0,
             'max_tenants' => 1,
@@ -110,16 +146,24 @@ class HandleInertiaRequests extends Middleware
         ];
 
         return [
-            'has_subscription' => $subscription !== null,
-            'is_usable' => (bool) $subscription?->isUsable(),
-            'status' => $subscription?->status ?? 'none',
-            'billing_cycle' => $subscription?->billing_cycle ?? 'monthly',
+            'has_subscription' => $currentSubModel !== null || $subscription !== null,
+            'is_usable' => (bool) ($isWritable || $subscription?->isUsable()),
+            'is_writable' => $isWritable,
+            'status' => $currentSubModel?->status ?? $subscription?->status ?? 'none',
+            'status_badge' => $statusBadge,
+            'banner' => $banner,
+            'billing_cycle' => $currentSubModel?->billing_cycle ?? $subscription?->billing_cycle ?? 'monthly',
             'amount' => $subscription ? $subscription->recurringAmount() : 0,
             'payment_method' => $subscription?->payment_method,
-            'starts_at' => $subscription?->current_period_starts_at?->toDateString(),
-            'ends_at' => ($subscription?->trial_ends_at ?? $subscription?->current_period_ends_at)?->toDateString(),
-            'days_left' => $subscription?->daysLeft() ?? 0,
-            'plan' => $plan ? [
+            'starts_at' => $currentSubModel?->starts_at?->toDateString() ?? $subscription?->current_period_starts_at?->toDateString(),
+            'ends_at' => ($currentSubModel?->trial_ends_at ?? $currentSubModel?->ends_at ?? $subscription?->trial_ends_at ?? $subscription?->current_period_ends_at)?->toDateString(),
+            'days_left' => $currentSubModel ? $currentSubModel->daysLeft() : ($subscription?->daysLeft() ?? 0),
+            'plan' => $currentSubModel ? [
+                'id' => $currentSubModel->plan_id,
+                'name' => $subMeta['plan_name'] ?? 'Plan',
+                'key' => $subMeta['plan_code'] ?? '',
+                'subscription_status' => $currentSubModel->status,
+            ] : ($plan ? [
                 'id' => $plan->id,
                 'name' => $plan->name,
                 'key' => $plan->key,
@@ -130,7 +174,7 @@ class HandleInertiaRequests extends Middleware
                 'max_users' => (int) $plan->max_users,
                 'max_medicines' => (int) $plan->max_medicines,
                 'subscription_status' => $subscription?->status ?? 'none',
-            ] : null,
+            ] : null),
             'usage' => $usage,
         ];
     }
@@ -177,8 +221,25 @@ class HandleInertiaRequests extends Middleware
         $primaryDomain = $tenant->domains->firstWhere('is_primary', true)?->domain;
         $subscription = $tenant->subscriberSubscription();
         $plan = $subscription?->plan;
+        $fm = app(\App\Modules\Billing\Services\FeatureManager::class)->setTenant($tenant);
+        $featuresAll = $fm->all();
+        $enabledFeatures = $featuresAll
+            ->filter(fn ($f) => $f['type'] === 'boolean' ? $f['value'] === true : true)
+            ->pluck('key')
+            ->all();
+
+        $featureStates = $featuresAll->mapWithKeys(function ($f) {
+            return [
+                $f['key'] => [
+                    'name' => $f['name'],
+                    'type' => $f['type'],
+                    'enabled' => $f['type'] === 'boolean' ? (bool) $f['value'] : true,
+                    'level' => $f['type'] === 'level' ? $f['value'] : null,
+                    'limit' => $f['type'] === 'limit' ? $f['limit_value'] : null,
+                ],
+            ];
+        })->all();
         $features = $tenant->featureCatalogStatus();
-        $enabledFeatures = $tenant->enabledFeatureKeys();
 
         $branches = Branch::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
@@ -277,6 +338,7 @@ class HandleInertiaRequests extends Middleware
             'canManageCrm' => $context->hasPermission('crm.manage', 'crm.view'),
             'canManageBilling' => $user->isSubscriberAdmin() && $context->isOwner(),
             'enabledFeatures' => $enabledFeatures,
+            'featureStates' => $featureStates,
             'features' => $features,
             'branches' => $branches,
             'tenants' => $tenants,

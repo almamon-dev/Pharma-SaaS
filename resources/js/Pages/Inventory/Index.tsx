@@ -1,15 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     Archive,
     ArchiveRestore,
-    Boxes,
     Clock,
     DollarSign,
     Edit,
     FolderPlus,
-    History,
     Layers,
     Package,
     PackagePlus,
@@ -137,6 +135,7 @@ function computeDualPricePatch<T extends object>(
 const EMPTY_CREATE_FORM: MedicineFormValues & {
     supplier_id: string;
     batch_number: string;
+    manufacturing_date: string;
     quantity: string;
     expiry_date: string;
     rack_location: string;
@@ -161,6 +160,7 @@ const EMPTY_CREATE_FORM: MedicineFormValues & {
     box_selling_price: '',
     supplier_id: '',
     batch_number: '',
+    manufacturing_date: '',
     quantity: '',
     expiry_date: '',
     rack_location: '',
@@ -242,6 +242,7 @@ export default function InventoryIndex({
         branch_id: tenant?.currentBranch?.id ? String(tenant.currentBranch.id) : '',
         supplier_id: '',
         batch_number: '',
+        manufacturing_date: '',
         quantity: '50',
         expiry_date: '',
         purchase_price: '',
@@ -854,19 +855,7 @@ export default function InventoryIndex({
             title="Inventory & FEFO Batches"
             subtitle={`Scoped catalog, batch traceability & valuation for ${activeBranchName ?? 'Active Branch'}`}
             actions={
-                <div className="flex flex-wrap items-center gap-2">
-                    <Link href={route('inventory.batches')}>
-                        <Button variant="outline" size="sm">
-                            <Boxes className="h-3.5 w-3.5" />
-                            Batches & Expiry
-                        </Button>
-                    </Link>
-                    <Link href={route('inventory.movements')}>
-                        <Button variant="outline" size="sm">
-                            <History className="h-3.5 w-3.5" />
-                            Movements
-                        </Button>
-                    </Link>
+                <div className="flex items-center gap-2">
                     {medicines.some((m) => Boolean(m.barcode)) && (
                         <Button
                             variant="outline"
@@ -1081,7 +1070,7 @@ export default function InventoryIndex({
                                 <div className="text-[11px] font-bold text-slate-500">
                                     Opening Stock Batch (Optional FEFO)
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                     <Input
                                         label="Batch Number"
                                         placeholder="BATCH-2026-01"
@@ -1106,6 +1095,18 @@ export default function InventoryIndex({
                                             )
                                         }
                                         error={createForm.errors.quantity}
+                                    />
+                                    <Input
+                                        label="Mfg Date (উৎপাদন)"
+                                        type="date"
+                                        value={createForm.data.manufacturing_date}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'manufacturing_date',
+                                                e.target.value
+                                            )
+                                        }
+                                        error={createForm.errors.manufacturing_date}
                                     />
                                     <Input
                                         label="Expiry Date"
@@ -1303,7 +1304,7 @@ export default function InventoryIndex({
                                 />
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <Input
                                     label="Batch Number"
                                     required
@@ -1330,6 +1331,18 @@ export default function InventoryIndex({
                                         )
                                     }
                                     error={restockForm.errors.quantity}
+                                />
+                                <Input
+                                    label="Mfg Date (উৎপাদন)"
+                                    type="date"
+                                    value={restockForm.data.manufacturing_date}
+                                    onChange={(e) =>
+                                        restockForm.setData(
+                                            'manufacturing_date',
+                                            e.target.value
+                                        )
+                                    }
+                                    error={restockForm.errors.manufacturing_date}
                                 />
                                 <Input
                                     label="Expiry Date"

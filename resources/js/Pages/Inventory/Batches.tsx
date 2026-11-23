@@ -3,6 +3,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
+    ArrowRightLeft,
     Boxes,
     Clock,
     DollarSign,
@@ -18,6 +19,7 @@ import { Select } from '@/Components/ui/Select';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Badge } from '@/Components/ui/Badge';
 import { BatchAdjustModal } from '@/Components/inventory/BatchAdjustModal';
+import { BatchTransferModal } from '@/Components/inventory/BatchTransferModal';
 import {
     BatchRow,
     BranchFilterOption,
@@ -76,6 +78,7 @@ export default function InventoryBatches({
     const [branchId, setBranchId] = useState(filters.branch_id || 'all');
     const [supplierId, setSupplierId] = useState(filters.supplier_id || '');
     const [adjustingBatch, setAdjustingBatch] = useState<BatchRow | null>(null);
+    const [transferringBatch, setTransferringBatch] = useState<BatchRow | null>(null);
 
     const applyFilters = (overrides?: Partial<typeof filters>) => {
         const next = {
@@ -288,7 +291,7 @@ export default function InventoryBatches({
                                     <th className="px-3.5 py-2.5">Medicine</th>
                                     <th className="px-3.5 py-2.5">Branch</th>
                                     <th className="px-3.5 py-2.5">Supplier / Rack</th>
-                                    <th className="px-3.5 py-2.5">Expiry</th>
+                                    <th className="px-3.5 py-2.5">Mfg / Expiry</th>
                                     <th className="px-3.5 py-2.5 text-right">Avail / Rcvd</th>
                                     <th className="px-3.5 py-2.5 text-right">Cost Val</th>
                                     <th className="px-3.5 py-2.5">Status</th>
@@ -338,7 +341,12 @@ export default function InventoryBatches({
                                                 )}
                                             </td>
                                             <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">
-                                                {batch.expiry_date || '—'}
+                                                <div>Exp: {batch.expiry_date || '—'}</div>
+                                                {batch.manufacturing_date && (
+                                                    <div className="text-[10.5px] text-slate-400">
+                                                        Mfg: {batch.manufacturing_date}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap">
                                                 <span className="font-bold text-slate-900 dark:text-slate-100">
@@ -361,15 +369,33 @@ export default function InventoryBatches({
                                             </td>
                                             {canAdjust && (
                                                 <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant={batch.is_expired ? 'danger' : 'outline'}
-                                                        onClick={() => setAdjustingBatch(batch)}
-                                                    >
-                                                        <SlidersHorizontal className="h-3 w-3" />
-                                                        {batch.is_expired ? 'Dispose' : 'Adjust'}
-                                                    </Button>
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        {!batch.is_expired &&
+                                                            batch.quantity_available > 0 &&
+                                                            branches.filter((b) => String(b.id) !== 'all').length > 1 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => setTransferringBatch(batch)}
+                                                                    title="Transfer stock to another branch"
+                                                                    className="h-7 px-2 text-xs"
+                                                                >
+                                                                    <ArrowRightLeft className="h-3 w-3 mr-1 text-[#FF4A1F]" />
+                                                                    Transfer
+                                                                </Button>
+                                                            )}
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant={batch.is_expired ? 'danger' : 'outline'}
+                                                            onClick={() => setAdjustingBatch(batch)}
+                                                            className="h-7 px-2 text-xs"
+                                                        >
+                                                            <SlidersHorizontal className="h-3 w-3" />
+                                                            {batch.is_expired ? 'Dispose' : 'Adjust'}
+                                                        </Button>
+                                                    </div>
                                                 </td>
                                             )}
                                         </tr>
@@ -416,6 +442,12 @@ export default function InventoryBatches({
                 batch={adjustingBatch}
                 currency={currency}
                 onClose={() => setAdjustingBatch(null)}
+            />
+
+            <BatchTransferModal
+                batch={transferringBatch}
+                branches={branches}
+                onClose={() => setTransferringBatch(null)}
             />
         </AppLayout>
     );

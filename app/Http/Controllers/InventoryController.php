@@ -61,8 +61,9 @@ class InventoryController extends Controller
             ->get();
 
         $today = now()->startOfDay();
+        $canViewCost = $request->user()->isSuperAdmin() || $request->user()->hasPermission('cost_price.view');
 
-        $mappedAll = $allMedicines->map(function (Medicine $medicine) use ($today): array {
+        $mappedAll = $allMedicines->map(function (Medicine $medicine) use ($today, $canViewCost): array {
             $batches = $medicine->batches;
 
             $sellableBatches = $batches->filter(
@@ -112,8 +113,8 @@ class InventoryController extends Controller
                 'category_name' => $medicine->category?->name ?? 'Uncategorized',
                 'reorder_level' => (int) $medicine->reorder_level,
                 'requires_prescription' => (bool) $medicine->requires_prescription,
-                'default_purchase_price' => (float) $medicine->default_purchase_price,
-                'box_purchase_price' => $medicine->resolvedBoxPurchasePrice(),
+                'default_purchase_price' => $canViewCost ? (float) $medicine->default_purchase_price : null,
+                'box_purchase_price' => $canViewCost ? $medicine->resolvedBoxPurchasePrice() : null,
                 'default_selling_price' => (float) $medicine->default_selling_price,
                 'box_selling_price' => $medicine->resolvedBoxSellingPrice(),
                 'is_active' => (bool) $medicine->is_active,
@@ -124,9 +125,9 @@ class InventoryController extends Controller
                 'days_to_expiry' => $daysToExpiry,
                 'batch_count' => $sellableBatches->count(),
                 'total_batch_count' => $batches->count(),
-                'stock_purchase_value' => round($purchaseVal, 2),
+                'stock_purchase_value' => $canViewCost ? round($purchaseVal, 2) : null,
                 'stock_retail_value' => round($retailVal, 2),
-                'expired_stock_value' => round($expiredVal, 2),
+                'expired_stock_value' => $canViewCost ? round($expiredVal, 2) : null,
             ];
         });
 
@@ -215,6 +216,8 @@ class InventoryController extends Controller
         $baseQuery = MedicineBatch::query()
             ->when($branchFilterId !== null, fn ($q) => $q->where('branch_id', $branchFilterId));
 
+        $canViewCost = $request->user()->isSuperAdmin() || $request->user()->hasPermission('cost_price.view');
+
         $summary = [
             'activeBatches' => (clone $baseQuery)->sellable()->count(),
             'expiring30' => (clone $baseQuery)->sellable()->whereDate('expiry_date', '<=', now()->addDays(30)->toDateString())->count(),
@@ -225,16 +228,16 @@ class InventoryController extends Controller
                 ->whereDate('expiry_date', '<', today()->toDateString())
                 ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
                 ->count(),
-            'expiredLossValue' => round((float) ((clone $baseQuery)
+            'expiredLossValue' => $canViewCost ? round((float) ((clone $baseQuery)
                 ->where('quantity_available', '>', 0)
                 ->whereDate('expiry_date', '<', today()->toDateString())
                 ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
                 ->selectRaw('COALESCE(SUM(quantity_available * purchase_price), 0) as total')
-                ->value('total')), 2),
-            'activeCostValue' => round((float) ((clone $baseQuery)
+                ->value('total')), 2) : 0,
+            'activeCostValue' => $canViewCost ? round((float) ((clone $baseQuery)
                 ->sellable()
                 ->selectRaw('COALESCE(SUM(quantity_available * purchase_price), 0) as total')
-                ->value('total')), 2),
+                ->value('total')), 2) : 0,
         ];
 
         $query = (clone $baseQuery)
@@ -276,7 +279,7 @@ class InventoryController extends Controller
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString()
-            ->through(function (MedicineBatch $batch) use ($today): array {
+            ->through(function (MedicineBatch $batch) use ($today, $canViewCost): array {
                 $daysRemaining = $batch->expiry_date
                     ? (int) $today->diffInDays($batch->expiry_date, false)
                     : null;
@@ -293,6 +296,7 @@ class InventoryController extends Controller
                     'branch_code' => $batch->branch?->code ?? '',
                     'supplier_name' => $batch->supplier?->name,
                     'batch_number' => $batch->batch_number,
+                    'manufacturing_date' => $batch->manufacturing_date?->toDateString(),
                     'expiry_date' => $batch->expiry_date?->toDateString(),
                     'days_remaining' => $daysRemaining,
                     'is_expired' => $batch->isExpired(),
@@ -301,9 +305,9 @@ class InventoryController extends Controller
                         : $batch->status,
                     'quantity_received' => (int) $batch->quantity_received,
                     'quantity_available' => (int) $batch->quantity_available,
-                    'purchase_price' => (float) $batch->purchase_price,
+                    'purchase_price' => $canViewCost ? (float) $batch->purchase_price : null,
                     'selling_price' => (float) $batch->selling_price,
-                    'stock_cost_value' => round((int) $batch->quantity_available * (float) $batch->purchase_price, 2),
+                    'stock_cost_value' => $canViewCost ? round((int) $batch->quantity_available * (float) $batch->purchase_price, 2) : null,
                     'rack_location' => $batch->rack_location,
                     'status' => $batch->status,
                     'disposal_reason' => $batch->disposal_reason,
@@ -562,6 +566,7 @@ class InventoryController extends Controller
             'selling_price' => ['required_without:box_selling_price', 'nullable', 'numeric', 'min:0'],
             'box_selling_price' => ['nullable', 'numeric', 'min:0'],
             'batch_number' => ['nullable', 'string', 'max:64'],
+            'manufacturing_date' => ['nullable', 'date'],
             'quantity' => ['nullable', 'integer', 'min:0'],
             'expiry_date' => ['nullable', 'date'],
             'rack_location' => ['nullable', 'string', 'max:64'],
@@ -684,6 +689,7 @@ class InventoryController extends Controller
                 Rule::exists('suppliers', 'id')->where('tenant_id', $tenant->id),
             ],
             'batch_number' => ['required', 'string', 'max:64'],
+            'manufacturing_date' => ['nullable', 'date'],
             'quantity' => ['required', 'integer', 'min:1'],
             'expiry_date' => ['required', 'date', 'after_or_equal:today'],
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
@@ -725,6 +731,7 @@ class InventoryController extends Controller
                     StockMovementType::ADJUSTMENT_OUT->value,
                     StockMovementType::DAMAGE->value,
                     StockMovementType::EXPIRY_DISPOSAL->value,
+                    StockMovementType::SUPPLIER_RETURN->value,
                 ]),
             ],
             'quantity' => ['nullable', 'integer', 'min:0'],
@@ -753,6 +760,35 @@ class InventoryController extends Controller
         );
 
         return back()->with('success', "Updated batch {$updated->batch_number} ({$updated->quantity_available} remaining · status: {$updated->status}).");
+    }
+
+    public function transferBatch(Request $request, int $batchId): RedirectResponse
+    {
+        $batch = MedicineBatch::query()->findOrFail($batchId);
+
+        $validated = $request->validate([
+            'target_branch_id' => [
+                'required',
+                'integer',
+                Rule::exists('branches', 'id')->where('tenant_id', $batch->tenant_id),
+            ],
+            'quantity' => ['required', 'integer', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $targetBranch = Branch::query()->findOrFail((int) $validated['target_branch_id']);
+
+        $res = $this->inventoryService->transferBatchStock(
+            sourceBatch: $batch,
+            targetBranch: $targetBranch,
+            quantity: (int) $validated['quantity'],
+            reason: $validated['reason'] ?? null,
+            notes: $validated['notes'] ?? null,
+            actor: $request->user(),
+        );
+
+        return back()->with('success', "Transferred {$validated['quantity']} units to {$targetBranch->name}.");
     }
 
     /**
