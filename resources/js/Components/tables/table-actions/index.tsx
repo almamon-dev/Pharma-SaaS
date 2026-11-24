@@ -122,7 +122,7 @@ export function TableActionMenu({
                 aria-label={label}
                 aria-expanded={open}
                 aria-haspopup="menu"
-                className={`h-7 w-7 inline-flex items-center justify-center rounded-[3px] border transition-colors cursor-pointer outline-none ${
+                className={`h-7 w-7 inline-flex items-center justify-center rounded-[4px] border transition-colors cursor-pointer outline-none ${
                     open
                         ? 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
                         : 'border-transparent text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'

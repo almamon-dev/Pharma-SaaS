@@ -4,7 +4,9 @@ import {
     Check,
     Coffee,
     Edit2,
+    KeyRound,
     Layers,
+    LogOut,
     Plus,
     Search,
     Store,
@@ -14,6 +16,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
+import { TableActionMenu, TableActionItem } from '@/Components/tables';
 import { formatCurrency } from '@/lib/format';
 import {
     CloseShiftModal,
@@ -148,7 +151,7 @@ export default function CountersIndex({
                             onClick={() => setStatusFilter('active')}
                             className={`px-2.5 py-1 rounded-[4px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                                 statusFilter === 'active'
-                                    ? 'bg-white dark:bg-[#12161c] text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-200/80 dark:border-emerald-800'
+                                    ? 'bg-white dark:bg-[#12161c] text-emerald-600 dark:text-emerald-400 font-semibold border border-slate-200/80 dark:border-slate-700'
                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                             }`}
                         >
@@ -160,7 +163,7 @@ export default function CountersIndex({
                             onClick={() => setStatusFilter('on_break')}
                             className={`px-2.5 py-1 rounded-[4px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                                 statusFilter === 'on_break'
-                                    ? 'bg-white dark:bg-[#12161c] text-amber-600 dark:text-amber-400 font-semibold border border-amber-200/80 dark:border-amber-800'
+                                    ? 'bg-white dark:bg-[#12161c] text-amber-600 dark:text-amber-400 font-semibold border border-slate-200/80 dark:border-slate-700'
                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                             }`}
                         >
@@ -209,16 +212,59 @@ export default function CountersIndex({
                             const isOnBreak = counter.status === 'on_break';
                             const isClosed = counter.status === 'closed';
 
+                            const actionItems: TableActionItem[] = [
+                                ...(isClosed
+                                    ? [
+                                          {
+                                              key: 'open-shift',
+                                              label: 'Open Shift Float',
+                                              icon: <Plus className="h-3.5 w-3.5 text-[#FF4A1F]" />,
+                                              onClick: () => setOpenShiftCounter(counter),
+                                          },
+                                      ]
+                                    : isOnBreak
+                                    ? [
+                                          {
+                                              key: 'resume-shift',
+                                              label: 'Resume Shift (PIN)',
+                                              icon: <KeyRound className="h-3.5 w-3.5 text-amber-600" />,
+                                              onClick: () => setResumeCounter(counter),
+                                          },
+                                          {
+                                              key: 'close-shift',
+                                              label: 'Close Shift',
+                                              icon: <LogOut className="h-3.5 w-3.5 text-rose-600" />,
+                                              variant: 'danger' as const,
+                                              onClick: () => setCloseShiftCounter(counter),
+                                          },
+                                      ]
+                                    : [
+                                          {
+                                              key: 'take-break',
+                                              label: 'Take Break',
+                                              icon: <Coffee className="h-3.5 w-3.5 text-amber-600" />,
+                                              onClick: () => setBreakCounter(counter),
+                                          },
+                                          {
+                                              key: 'close-shift',
+                                              label: 'Close Shift',
+                                              icon: <LogOut className="h-3.5 w-3.5 text-rose-600" />,
+                                              variant: 'danger' as const,
+                                              onClick: () => setCloseShiftCounter(counter),
+                                          },
+                                      ]),
+                                {
+                                    key: 'edit',
+                                    label: 'Edit Counter',
+                                    icon: <Edit2 className="h-3.5 w-3.5 text-slate-500" />,
+                                    onClick: () => setEditingCounter(counter),
+                                },
+                            ];
+
                             return (
                                 <div
                                     key={counter.id}
-                                    className={`rounded-[4px] border bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none ${
-                                        isActive
-                                            ? 'border-emerald-500/50 dark:border-emerald-500/30 ring-1 ring-emerald-500/10'
-                                            : isOnBreak
-                                            ? 'border-amber-500/50 dark:border-amber-500/30 bg-amber-500/[0.02]'
-                                            : 'border-slate-200 dark:border-slate-800'
-                                    }`}
+                                    className="rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none"
                                 >
                                     {/* Card Header */}
                                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-[#151921]/50">
@@ -238,15 +284,15 @@ export default function CountersIndex({
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-1 shrink-0">
+                                            <div className="flex items-center gap-1.5 shrink-0">
                                                 {/* Status Pill */}
                                                 <span
-                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold ${
+                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold border border-slate-200/80 dark:border-slate-700 ${
                                                         isActive
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                                                             : isOnBreak
-                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 animate-pulse'
-                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700'
+                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 animate-pulse'
+                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                                                     }`}
                                                 >
                                                     <span
@@ -261,62 +307,43 @@ export default function CountersIndex({
                                                     {isActive ? 'Serving' : isOnBreak ? (counter.current_break_reason ? counter.current_break_reason.toUpperCase() : 'BREAK') : 'Closed'}
                                                 </span>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setEditingCounter(counter)}
-                                                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-[4px] hover:bg-slate-200/50 dark:hover:bg-slate-800 cursor-pointer"
-                                                    title="Edit counter"
-                                                >
-                                                    <Edit2 className="h-3 w-3" />
-                                                </button>
+                                                {/* Three-Dot Action Menu */}
+                                                <TableActionMenu items={actionItems} label={`${counter.code} actions`} />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Card Content (Summary Metric Design Inside) */}
-                                    <div className="p-3 text-xs space-y-2.5 flex-1 flex flex-col justify-between">
+                                    {/* Card Content (Simple Key : Value List) */}
+                                    <div className="p-3 text-xs flex-1 flex flex-col justify-between">
                                         {session ? (
-                                            <div className="space-y-2">
-                                                {/* Hero Metric: Drawer Cash */}
-                                                <div className="bg-slate-50 dark:bg-[#161a22] rounded-[4px] p-2.5 border border-slate-100 dark:border-slate-800">
-                                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                                                        <span className="font-medium uppercase tracking-wider">Drawer Cash</span>
-                                                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">Live Float</span>
-                                                    </div>
-                                                    <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-0.5">
-                                                        {formatCurrency(session.system_expected_cash, currency)}
-                                                    </div>
+                                            <div className="space-y-1.5 py-1 text-[11.5px]">
+                                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                                    <span>Opening Float:</span>
+                                                    <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                                                        {formatCurrency(session.opening_float, currency)}
+                                                    </span>
                                                 </div>
-
-                                                {/* Sub Metrics Mini-Grid */}
-                                                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                                    <div className="bg-slate-50/60 dark:bg-[#161a22]/60 rounded-[4px] p-2 border border-slate-100 dark:border-slate-800/80">
-                                                        <span className="text-[10px] text-slate-400 block">Opening Float</span>
-                                                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                                                            {formatCurrency(session.opening_float, currency)}
-                                                        </span>
-                                                    </div>
-                                                    <div className="bg-slate-50/60 dark:bg-[#161a22]/60 rounded-[4px] p-2 border border-slate-100 dark:border-slate-800/80 text-right">
-                                                        <span className="text-[10px] text-slate-400 block">Sales ({session.total_transactions})</span>
-                                                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                                            {formatCurrency(session.total_sales_amount, currency)}
-                                                        </span>
-                                                    </div>
+                                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                                    <span>Drawer Cash:</span>
+                                                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                                        {formatCurrency(session.system_expected_cash, currency)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                                    <span>Shift Sales:</span>
+                                                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                                        {formatCurrency(session.total_sales_amount, currency)} ({session.total_transactions})
+                                                    </span>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="py-4 my-auto text-center rounded-[4px] bg-slate-50/40 dark:bg-[#161a22]/40 border border-dashed border-slate-200/80 dark:border-slate-800/80">
-                                                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                                    Terminal Inactive
-                                                </div>
-                                                <div className="text-[11px] text-slate-400 mt-0.5">
-                                                    Ready for next cashier shift
-                                                </div>
+                                            <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
+                                                Ready for next cashier shift
                                             </div>
                                         )}
 
                                         {/* Cashier Footer Row */}
-                                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11.5px] text-slate-600 dark:text-slate-400">
+                                        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11.5px] text-slate-600 dark:text-slate-400">
                                             <span className="flex items-center gap-1.5 text-slate-500">
                                                 <User className="h-3 w-3 text-slate-400" />
                                                 <span>Cashier:</span>
@@ -325,56 +352,6 @@ export default function CountersIndex({
                                                 {counter.current_user_name || (counter.status !== 'closed' ? 'Assigned' : 'Available')}
                                             </span>
                                         </div>
-                                    </div>
-
-                                    {/* Card Action Button Bar (No Arrows, rounded-[4px], flat shadow-none) */}
-                                    <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-[#151921] flex items-center gap-1.5">
-                                        {isClosed ? (
-                                            <Button
-                                                type="button"
-                                                variant="primary"
-                                                size="sm"
-                                                onClick={() => setOpenShiftCounter(counter)}
-                                                className="w-full bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-semibold py-1 h-7.5 rounded-[4px] shadow-none"
-                                            >
-                                                Open Shift Float
-                                            </Button>
-                                        ) : (
-                                            <>
-                                                {isOnBreak ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="primary"
-                                                        size="sm"
-                                                        onClick={() => setResumeCounter(counter)}
-                                                        className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1 h-7.5 rounded-[4px] shadow-none"
-                                                    >
-                                                        Resume (PIN)
-                                                    </Button>
-                                                ) : (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => setBreakCounter(counter)}
-                                                        className="flex-1 text-xs py-1 h-7.5 border-amber-300 dark:border-amber-900/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-[4px] shadow-none"
-                                                    >
-                                                        <Coffee className="h-3 w-3 mr-1 text-amber-600" />
-                                                        Break
-                                                    </Button>
-                                                )}
-
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => setCloseShiftCounter(counter)}
-                                                    className="flex-1 text-xs py-1 h-7.5 border-rose-300 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-[4px] shadow-none"
-                                                >
-                                                    Close Shift
-                                                </Button>
-                                            </>
-                                        )}
                                     </div>
                                 </div>
                             );
