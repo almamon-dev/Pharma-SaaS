@@ -7,7 +7,6 @@ import {
     Shield,
     X,
     AlertTriangle,
-    ArrowRight,
     Terminal,
     Info,
     Check,
@@ -364,7 +363,7 @@ export default function BrowsePlans({
                                             onClick={() =>
                                                 handleSelectPlan(plan)
                                             }
-                                            className="w-full py-2.5 rounded-lg bg-[#FF4A1F] hover:bg-[#e03f16] text-white font-bold text-xs transition-colors shadow-2xs flex items-center justify-center gap-2"
+                                            className="w-full py-2.5 rounded-lg bg-[#FF4A1F] hover:bg-[#e03f16] text-white font-bold text-xs transition-colors shadow-none flex items-center justify-center gap-2 cursor-pointer"
                                         >
                                             <span>
                                                 Switch to {plan.name} (
@@ -373,7 +372,6 @@ export default function BrowsePlans({
                                                     : 'Monthly'}
                                                 )
                                             </span>
-                                            <ArrowRight className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                 </div>

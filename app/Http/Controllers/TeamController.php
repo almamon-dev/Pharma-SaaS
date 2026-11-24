@@ -182,6 +182,7 @@ class TeamController extends Controller
             'currentTenantId' => $currentTenant->id,
             'isOwner' => $isOwner,
             'canManageRoles' => $isOwner || $user->hasPermission('role.manage'),
+            'currentTab' => in_array($request->query('tab'), ['matrix', 'activity']) ? $request->query('tab') : 'users',
         ]);
     }
 

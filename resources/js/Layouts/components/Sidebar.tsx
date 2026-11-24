@@ -143,6 +143,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           href: route('pos.index'),
                           active: route().current('pos.*'),
                       },
+                      {
+                          name: 'Counters & Shifts',
+                          href: route('counters.index'),
+                          active: route().current('counters.*'),
+                      },
                   ]
                 : []),
             ...(hasFeature('inventory') &&
@@ -207,7 +212,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       },
                   ]
                 : []),
-            ...(hasFeature('branches')
+            ...(isSubscriberAdmin || hasFeature('branches') || hasPerm('branch.manage')
                 ? [
                       {
                           category: 'Organization',
@@ -218,14 +223,29 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       },
                   ]
                 : []),
-            ...(hasFeature('team_rbac') && hasPerm('team.manage')
+            ...(isSubscriberAdmin || hasFeature('team_rbac') || hasPerm('user.manage', 'role.manage')
                 ? [
                       {
                           category: 'Organization',
-                          name: 'Employees & Roles',
-                          href: route('team.index'),
-                          active: route().current('team.*'),
+                          group: 'Employees & Roles',
                           icon: Users,
+                          items: [
+                              {
+                                  name: 'Staff Directory',
+                                  href: route('team.index'),
+                                  active: route().current('team.index') && (typeof window === 'undefined' || !window.location.search.includes('tab=')),
+                              },
+                              {
+                                  name: 'Roles & Permissions',
+                                  href: `${route('team.index')}?tab=matrix`,
+                                  active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=matrix'),
+                              },
+                              {
+                                  name: 'Activity & Audit Log',
+                                  href: `${route('team.index')}?tab=activity`,
+                                  active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=activity'),
+                              },
+                          ],
                       },
                   ]
                 : []),

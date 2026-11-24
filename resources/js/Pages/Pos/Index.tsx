@@ -30,6 +30,14 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import PosReceiptModal from './components/PosReceiptModal';
 import QuickCustomerModal from './components/QuickCustomerModal';
 import HeldBillsModal, { HeldBill } from './components/HeldBillsModal';
+import { PosCounterBar } from './components/PosCounterBar';
+import { PosBreakLockOverlay } from './components/PosBreakLockOverlay';
+import {
+    CloseShiftModal,
+    OpenShiftModal,
+    PosCounterData,
+    TakeBreakModal,
+} from './components/PosShiftModals';
 
 interface PosMedicine {
     id: number;
@@ -109,6 +117,8 @@ interface PosProps {
     medicines: PosMedicine[];
     customers?: CrmCustomer[];
     branchName?: string | null;
+    counters?: PosCounterData[];
+    activeCounter?: PosCounterData | null;
 }
 
 type CatalogFilter = 'all' | 'in_stock' | 'rx';
@@ -175,10 +185,16 @@ export default function PosIndex({
     medicines,
     customers = [],
     branchName,
+    counters = [],
+    activeCounter = null,
 }: PosProps) {
     const { tenant, flash } = usePage<SharedPageProps>().props;
     const currency = tenant?.currentTenant?.currency_code ?? 'BDT';
     const currencySymbol = getCurrencySymbol(currency);
+
+    const [openShiftOpen, setOpenShiftOpen] = useState(false);
+    const [takeBreakOpen, setTakeBreakOpen] = useState(false);
+    const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 
     const [query, setQuery] = useState('');
     const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all');
@@ -623,6 +639,8 @@ export default function PosIndex({
         router.post(
             route('pos.checkout'),
             {
+                counter_id: activeCounter?.id,
+                counter_session_id: activeCounter?.current_session?.id,
                 customer_id: customerId ? Number(customerId) : null,
                 customer_name: selectedCustomer?.name ?? customerName,
                 doctor_name: doctorName.trim() || null,
@@ -675,6 +693,20 @@ export default function PosIndex({
             title="Point of Sale"
             subtitle={`${branchName ?? 'Active Branch'} · Compact list terminal & FEFO checkout`}
         >
+            {/* Break Lock Screen Overlay */}
+            {activeCounter && activeCounter.status === 'on_break' && (
+                <PosBreakLockOverlay counter={activeCounter} />
+            )}
+
+            {/* Counter Shift & Status Bar */}
+            <PosCounterBar
+                activeCounter={activeCounter}
+                currency={currency}
+                onOpenShift={() => setOpenShiftOpen(true)}
+                onTakeBreak={() => setTakeBreakOpen(true)}
+                onCloseShift={() => setCloseShiftOpen(true)}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 {/* Left Catalog List */}
                 <div className="lg:col-span-8 min-w-0 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden">
@@ -1771,6 +1803,29 @@ export default function PosIndex({
                 onDeleteBill={handleDeleteHeldBill}
                 onClearAll={handleClearAllHeldBills}
             />
+
+            <OpenShiftModal
+                open={openShiftOpen}
+                counters={counters}
+                currency={currency}
+                onClose={() => setOpenShiftOpen(false)}
+            />
+
+            {activeCounter && (
+                <>
+                    <TakeBreakModal
+                        open={takeBreakOpen}
+                        counter={activeCounter}
+                        onClose={() => setTakeBreakOpen(false)}
+                    />
+                    <CloseShiftModal
+                        open={closeShiftOpen}
+                        counter={activeCounter}
+                        currency={currency}
+                        onClose={() => setCloseShiftOpen(false)}
+                    />
+                </>
+            )}
         </AppLayout>
     );
 }

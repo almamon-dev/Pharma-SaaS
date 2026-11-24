@@ -186,6 +186,8 @@ export interface PosReceiptData {
     branch_name: string;
     branch_address?: string | null;
     branch_phone?: string | null;
+    counter_code?: string | null;
+    counter_name?: string | null;
     cashier_name: string;
     customer_name?: string | null;
     customer_phone?: string | null;

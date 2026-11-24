@@ -7,6 +7,8 @@ use App\Enums\StockMovementType;
 use App\Enums\TenantRole;
 use App\Models\AuditLog;
 use App\Models\Branch;
+use App\Models\Counter;
+use App\Models\CounterSession;
 use App\Models\Customer;
 use App\Models\Medicine;
 use App\Models\MedicineBatch;
@@ -308,6 +310,20 @@ class DemoPharmacySeeder extends Seeder
             }
         }
 
+        // Seed default roles and bind role_id for demo users
+        RbacPermissionCatalogSeeder::seedRolesForTenant($greenlife);
+        RbacPermissionCatalogSeeder::seedRolesForTenant($careplus);
+
+        $ownerRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'owner')->first();
+        $managerRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'manager')->first();
+        $pharmacistRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'pharmacist')->first();
+        $cashierRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'cashier')->first();
+
+        $admin->update(['role_id' => $ownerRole?->id]);
+        $manager->update(['role_id' => $managerRole?->id]);
+        $pharmacist->update(['role_id' => $pharmacistRole?->id]);
+        $cashier->update(['role_id' => $cashierRole?->id]);
+
         // 3. Independent Second Subscriber Admin (Metro Health Pharma)
         $subscriberTwo = User::query()->updateOrCreate(
             ['email' => 'metro@pharmacore.test'],
@@ -384,6 +400,10 @@ class DemoPharmacySeeder extends Seeder
 
             $subscriptionService->syncModulesForTenant($metroTenant, $starterPlan, $starterSub->status);
         }
+
+        RbacPermissionCatalogSeeder::seedRolesForTenant($metroTenant);
+        $metroOwnerRole = Role::withoutGlobalScopes()->where('tenant_id', $metroTenant->id)->where('slug', 'owner')->first();
+        $subscriberTwo->update(['role_id' => $metroOwnerRole?->id]);
 
         // Seed inventory, customers, suppliers & sample invoices inside TenantScope
         $currentTenant->run($greenlife, fn () => $this->seedPrimaryTenantInventory($greenlife, $bananiBranch, $admin));
@@ -662,6 +682,73 @@ class DemoPharmacySeeder extends Seeder
                 'line_total' => 240.00,
             ]);
         }
+
+        // Seed branch counters & active session
+        $c1 = Counter::query()->updateOrCreate(
+            ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-01'],
+            [
+                'name' => 'Main OPD Dispensing',
+                'type' => 'opd',
+                'zone' => 'Ground Floor Area A',
+                'status' => 'active',
+                'current_user_id' => $user->id,
+                'is_active' => true,
+            ]
+        );
+
+        $session1 = CounterSession::query()->firstOrCreate(
+            ['counter_id' => $c1->id, 'status' => 'open'],
+            [
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'user_id' => $user->id,
+                'opened_at' => now()->subHours(4),
+                'opening_float' => 2000.00,
+                'system_expected_cash' => 2240.00,
+                'total_sales_amount' => 240.00,
+                'total_transactions' => 1,
+            ]
+        );
+
+        if (isset($sale)) {
+            $sale->update([
+                'counter_id' => $c1->id,
+                'counter_session_id' => $session1->id,
+            ]);
+        }
+
+        Counter::query()->updateOrCreate(
+            ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-02'],
+            [
+                'name' => 'Cashier & Billing Station',
+                'type' => 'billing',
+                'zone' => 'Central Cash Counter',
+                'status' => 'closed',
+                'is_active' => true,
+            ]
+        );
+
+        Counter::query()->updateOrCreate(
+            ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-03'],
+            [
+                'name' => 'Express & Baby Care',
+                'type' => 'express',
+                'zone' => 'Retail Wing',
+                'status' => 'closed',
+                'is_active' => true,
+            ]
+        );
+
+        Counter::query()->updateOrCreate(
+            ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-04'],
+            [
+                'name' => 'Emergency 24/7 Counter',
+                'type' => 'emergency',
+                'zone' => 'Emergency Wing',
+                'status' => 'closed',
+                'is_active' => true,
+            ]
+        );
 
         if (! AuditLog::query()->where('action', 'inventory.batch_verified')->exists()) {
             AuditLog::record(

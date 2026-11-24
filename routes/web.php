@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Billing\FeatureAccessController;
 use App\Http\Controllers\Billing\PlanBrowseController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\CounterController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
@@ -94,6 +95,28 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/pos/checkout', [PosController::class, 'checkout'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('pos.checkout');
+
+    Route::get('/counters', [CounterController::class, 'index'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,cashier'])
+        ->name('counters.index');
+    Route::post('/counters', [CounterController::class, 'store'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.store');
+    Route::put('/counters/{counter}', [CounterController::class, 'update'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.update');
+    Route::post('/counters/{counter}/open-session', [CounterController::class, 'openSession'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
+        ->name('counters.open-session');
+    Route::post('/counters/{counter}/take-break', [CounterController::class, 'takeBreak'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
+        ->name('counters.take-break');
+    Route::post('/counters/{counter}/resume-service', [CounterController::class, 'resumeService'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
+        ->name('counters.resume-service');
+    Route::post('/counters/{counter}/close-session', [CounterController::class, 'closeSession'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
+        ->name('counters.close-session');
 
     Route::get('/inventory', [InventoryController::class, 'index'])
         ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
@@ -198,20 +221,20 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->middleware('feature:branches')
         ->name('branches.index');
     Route::post('/branches', [BranchController::class, 'store'])
-        ->middleware(['feature:branches', 'tenant.role:branches.manage,admin,manager'])
+        ->middleware(['feature:branches', 'tenant.role:branch.manage,admin,manager'])
         ->name('branches.store');
     Route::patch('/branches/{branch}/toggle', [BranchController::class, 'toggleStatus'])
-        ->middleware(['feature:branches', 'tenant.role:branches.manage,admin,manager'])
+        ->middleware(['feature:branches', 'tenant.role:branch.manage,admin,manager'])
         ->name('branches.toggle');
 
     Route::get('/team', [TeamController::class, 'index'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,role.manage,admin,manager'])
         ->name('team.index');
     Route::post('/team', [TeamController::class, 'store'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
         ->name('team.store');
     Route::put('/team/memberships/{membership}', [TeamController::class, 'updateMembership'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
         ->name('team.memberships.update');
     Route::post('/team/roles', [TeamController::class, 'storeRole'])
         ->middleware(['feature:team_rbac', 'tenant.role:role.manage,admin'])
@@ -226,16 +249,16 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->middleware(['feature:team_rbac', 'tenant.role:role.manage,admin'])
         ->name('team.roles.delete');
     Route::post('/team/users/{targetUser}/overrides', [TeamController::class, 'storeOverride'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,role.manage,admin'])
         ->name('team.users.overrides.store');
     Route::delete('/team/overrides/{override}', [TeamController::class, 'deleteOverride'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,role.manage,admin'])
         ->name('team.overrides.delete');
     Route::post('/team/users/{targetUser}/pin', [TeamController::class, 'setPin'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
         ->name('team.users.pin');
     Route::post('/team/users/{targetUser}/reset-password', [TeamController::class, 'resetPassword'])
-        ->middleware(['feature:team_rbac', 'tenant.role:team.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
         ->name('team.users.reset-password');
 
     Route::get('/crm/customers', [CrmController::class, 'customers'])

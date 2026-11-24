@@ -15,6 +15,8 @@ class Sale extends Model
     protected $fillable = [
         'tenant_id',
         'branch_id',
+        'counter_id',
+        'counter_session_id',
         'customer_id',
         'user_id',
         'invoice_number',
@@ -50,6 +52,16 @@ class Sale extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function counter(): BelongsTo
+    {
+        return $this->belongsTo(Counter::class);
+    }
+
+    public function counterSession(): BelongsTo
+    {
+        return $this->belongsTo(CounterSession::class, 'counter_session_id');
     }
 
     public function customer(): BelongsTo

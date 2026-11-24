@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import {
-    ArrowRight,
     Eye,
     EyeOff,
     Globe,
@@ -152,7 +151,6 @@ export default function Login() {
                     className="h-10 font-semibold"
                 >
                     Sign In
-                    <ArrowRight className="h-4 w-4" />
                 </Button>
             </form>
 

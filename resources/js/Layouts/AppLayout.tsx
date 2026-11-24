@@ -1,22 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, LucideIcon } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import { Header } from './components/Header';
+import { PageHeader, PageHeaderBreadcrumb } from '@/Components/ui/PageHeader';
 import { SharedPageProps } from '@/types';
 import { cn } from '@/lib/cn';
 
 interface AppLayoutProps {
     title?: string;
     subtitle?: string;
+    icon?: LucideIcon | React.ComponentType<{ className?: string }>;
+    badge?: string | React.ReactNode;
+    breadcrumbs?: PageHeaderBreadcrumb[];
     actions?: React.ReactNode;
+    hidePageHeader?: boolean;
     children: React.ReactNode;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
     title,
     subtitle,
+    icon,
+    badge,
+    breadcrumbs,
     actions,
+    hidePageHeader = false,
     children,
 }) => {
     const { auth, flash, subscription, tenant } =
@@ -162,21 +171,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {(subtitle || actions) && (
-                            <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                {subtitle ? (
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        {subtitle}
-                                    </p>
-                                ) : (
-                                    <div />
-                                )}
-                                {actions && (
-                                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                        {actions}
-                                    </div>
-                                )}
-                            </div>
+                        {!hidePageHeader && (subtitle || actions) && (
+                            <PageHeader
+                                title={title}
+                                description={subtitle}
+                                icon={icon}
+                                badge={badge}
+                                breadcrumbs={breadcrumbs}
+                                actions={actions}
+                            />
                         )}
 
                         {children}

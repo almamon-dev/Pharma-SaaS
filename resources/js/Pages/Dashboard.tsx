@@ -472,7 +472,7 @@ export default function Dashboard({
                                         href={route('features.index')}
                                         className="text-[11px] font-bold text-[#FF4A1F] hover:underline"
                                     >
-                                        View All →
+                                        View All
                                     </Link>
                                 </div>
                                 <div className="space-y-1.5 mb-3">

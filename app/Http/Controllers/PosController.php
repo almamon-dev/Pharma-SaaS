@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\BatchStatus;
 use App\Enums\StockMovementType;
 use App\Models\AuditLog;
+use App\Models\Counter;
+use App\Models\CounterSession;
 use App\Models\Customer;
 use App\Models\Medicine;
 use App\Models\MedicineBatch;
@@ -68,10 +70,44 @@ class PosController extends Controller
                 'total_due' => (float) ($c->total_due ?? 0),
             ]);
 
+        $userId = auth()->id();
+        $counters = Counter::query()
+            ->where('branch_id', $branchId)
+            ->where('is_active', true)
+            ->with(['currentUser:id,name', 'currentSession' => fn ($q) => $q->with('user:id,name')])
+            ->orderBy('code')
+            ->get()
+            ->map(fn (Counter $c) => [
+                'id' => $c->id,
+                'code' => $c->code,
+                'name' => $c->name,
+                'type' => $c->type,
+                'zone' => $c->zone,
+                'status' => $c->status,
+                'current_break_reason' => $c->current_break_reason,
+                'break_started_at' => $c->break_started_at?->toISOString(),
+                'current_user_id' => $c->current_user_id,
+                'current_user_name' => $c->currentUser?->name,
+                'current_session' => $c->currentSession ? [
+                    'id' => $c->currentSession->id,
+                    'user_id' => $c->currentSession->user_id,
+                    'user_name' => $c->currentSession->user?->name,
+                    'opened_at' => $c->currentSession->opened_at?->toISOString(),
+                    'opening_float' => (float) $c->currentSession->opening_float,
+                    'total_sales_amount' => (float) $c->currentSession->total_sales_amount,
+                    'total_transactions' => (int) $c->currentSession->total_transactions,
+                    'system_expected_cash' => (float) $c->currentSession->system_expected_cash,
+                ] : null,
+            ]);
+
+        $activeCounter = $counters->first(fn ($c) => $c['current_user_id'] === $userId && $c['status'] !== 'closed');
+
         return Inertia::render('Pos/Index', [
             'medicines' => $medicines,
             'customers' => $customers,
             'branchName' => $tenantContext->branch()?->name,
+            'counters' => $counters,
+            'activeCounter' => $activeCounter,
         ]);
     }
 
@@ -90,6 +126,14 @@ class PosController extends Controller
         }
 
         $validated = $request->validate([
+            'counter_id' => [
+                'nullable',
+                Rule::exists('counters', 'id')->where('tenant_id', $tenant->id),
+            ],
+            'counter_session_id' => [
+                'nullable',
+                Rule::exists('counter_sessions', 'id')->where('tenant_id', $tenant->id),
+            ],
             'customer_id' => [
                 'nullable',
                 Rule::exists('customers', 'id')->where('tenant_id', $tenant->id),
@@ -118,7 +162,23 @@ class PosController extends Controller
             abort(403, "You do not have permission to dispense from branch \"{$branch->name}\".");
         }
 
-        $sale = DB::transaction(function () use ($validated, $branch, $request): Sale {
+        $counterId = ! empty($validated['counter_id']) ? (int) $validated['counter_id'] : null;
+        $counterSessionId = ! empty($validated['counter_session_id']) ? (int) $validated['counter_session_id'] : null;
+
+        if (! $counterId) {
+            $userActiveCounter = Counter::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('branch_id', $branch->id)
+                ->where('current_user_id', $request->user()->id)
+                ->where('status', 'active')
+                ->first();
+            if ($userActiveCounter) {
+                $counterId = $userActiveCounter->id;
+                $counterSessionId = $userActiveCounter->currentSession?->id;
+            }
+        }
+
+        $sale = DB::transaction(function () use ($validated, $branch, $request, $counterId, $counterSessionId): Sale {
             $subtotal = 0;
             $allocatedLines = [];
 
@@ -262,6 +322,8 @@ class PosController extends Controller
 
             $sale = Sale::query()->create([
                 'branch_id' => $branch->id,
+                'counter_id' => $counterId,
+                'counter_session_id' => $counterSessionId,
                 'customer_id' => $validated['customer_id'] ?? null,
                 'user_id' => $request->user()->id,
                 'invoice_number' => $invoiceNumber,
@@ -325,6 +387,25 @@ class PosController extends Controller
                 }
             }
 
+            if ($counterSessionId) {
+                $session = CounterSession::query()->find($counterSessionId);
+                if ($session) {
+                    $cashCollected = 0.0;
+                    foreach ($paymentLines as $p) {
+                        if ($p['method'] === 'cash') {
+                            $cashCollected += $p['amount'];
+                        }
+                    }
+                    $netCash = max(0, $cashCollected - $changeAmount);
+
+                    $session->increment('total_sales_amount', $totalAmount);
+                    $session->increment('total_transactions', 1);
+                    if ($netCash > 0) {
+                        $session->increment('system_expected_cash', $netCash);
+                    }
+                }
+            }
+
             AuditLog::record(
                 action: 'pos.sale_completed',
                 description: "Completed POS invoice {$invoiceNumber} for {$totalAmount}.",
@@ -337,13 +418,15 @@ class PosController extends Controller
                     'discount_type' => $discountType,
                     'discount_amount' => round($discountAmount, 2),
                     'payment_method' => $paymentMethodSummary ?: 'Cash',
+                    'counter_id' => $counterId,
+                    'counter_session_id' => $counterSessionId,
                 ],
             );
 
             return $sale;
         });
 
-        $sale->load(['items.medicine:id,name,generic_name,strength,unit', 'customer:id,name,phone', 'payments']);
+        $sale->load(['items.medicine:id,name,generic_name,strength,unit', 'customer:id,name,phone', 'payments', 'counter:id,code,name']);
 
         $receiptData = [
             'id' => $sale->id,
@@ -352,6 +435,8 @@ class PosController extends Controller
             'branch_name' => $branch->name,
             'branch_address' => $branch->address,
             'branch_phone' => $branch->phone,
+            'counter_code' => $sale->counter?->code,
+            'counter_name' => $sale->counter?->name,
             'cashier_name' => $request->user()->name,
             'customer_name' => ! empty($validated['customer_name']) ? $validated['customer_name'] : ($sale->customer?->name ?? 'Walk-in Customer'),
             'customer_phone' => $sale->customer?->phone,

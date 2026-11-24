@@ -34,6 +34,8 @@ class Phase2PlansAndFeaturesSeeder extends Seeder
             ['key' => 'audit_log_view', 'type' => 'boolean', 'group_name' => 'Compliance', 'description' => 'Detailed Audit Trail & Activity Logs', 'sort' => 14],
             ['key' => 'bank_reconciliation', 'type' => 'boolean', 'group_name' => 'Accounting', 'description' => 'Bank Account Reconciliation', 'sort' => 15],
             ['key' => 'period_closing', 'type' => 'boolean', 'group_name' => 'Accounting', 'description' => 'Financial Month/Year Period Closing', 'sort' => 16],
+            ['key' => 'team_rbac', 'type' => 'boolean', 'group_name' => 'Organization', 'description' => 'Team RBAC & Custom Role Matrices', 'sort' => 17],
+            ['key' => 'branches', 'type' => 'boolean', 'group_name' => 'Organization', 'description' => 'Multi-Branch Operations & Scopes', 'sort' => 18],
 
             // Limit Features
             ['key' => 'max_branches', 'type' => 'limit', 'group_name' => 'Organization', 'description' => 'Maximum Pharmacy Branches Allowed', 'sort' => 20],
@@ -82,6 +84,8 @@ class Phase2PlansAndFeaturesSeeder extends Seeder
                     'audit_log_view' => ['bool_value' => false],
                     'bank_reconciliation' => ['bool_value' => false],
                     'period_closing' => ['bool_value' => false],
+                    'team_rbac' => ['bool_value' => true],
+                    'branches' => ['bool_value' => true],
 
                     'max_branches' => ['limit_value' => 1],
                     'max_users' => ['limit_value' => 2],
@@ -122,6 +126,8 @@ class Phase2PlansAndFeaturesSeeder extends Seeder
                     'audit_log_view' => ['bool_value' => true],
                     'bank_reconciliation' => ['bool_value' => false],
                     'period_closing' => ['bool_value' => false],
+                    'team_rbac' => ['bool_value' => true],
+                    'branches' => ['bool_value' => true],
 
                     'max_branches' => ['limit_value' => 3],
                     'max_users' => ['limit_value' => 5],
@@ -162,6 +168,8 @@ class Phase2PlansAndFeaturesSeeder extends Seeder
                     'audit_log_view' => ['bool_value' => true],
                     'bank_reconciliation' => ['bool_value' => true],
                     'period_closing' => ['bool_value' => true],
+                    'team_rbac' => ['bool_value' => true],
+                    'branches' => ['bool_value' => true],
 
                     'max_branches' => ['limit_value' => null], // unlimited
                     'max_users' => ['limit_value' => 20],
@@ -202,6 +210,8 @@ class Phase2PlansAndFeaturesSeeder extends Seeder
                     'audit_log_view' => ['bool_value' => true],
                     'bank_reconciliation' => ['bool_value' => true],
                     'period_closing' => ['bool_value' => true],
+                    'team_rbac' => ['bool_value' => true],
+                    'branches' => ['bool_value' => true],
 
                     'max_branches' => ['limit_value' => 1],
                     'max_users' => ['limit_value' => 3],

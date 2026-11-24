@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import {
-    ArrowRight,
     Building2,
     Eye,
     EyeOff,
@@ -235,7 +234,6 @@ export default function Register({ initialPlan }: RegisterProps) {
                     className="h-10 font-semibold mt-1"
                 >
                     Continue to Plans
-                    <ArrowRight className="h-4 w-4" />
                 </Button>
             </form>
 

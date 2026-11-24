@@ -668,9 +668,9 @@ export default function Welcome({ plans = [], demoRoles = [] }: WelcomeProps) {
 
                                     <Link
                                         href={route('register')}
-                                        className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-lg cursor-pointer"
+                                        className="w-full h-10 rounded-md bg-[#FF4A1C] hover:bg-[#e03e15] text-white font-bold text-xs sm:text-sm flex items-center justify-center transition-colors shadow-none cursor-pointer"
                                     >
-                                        {isBn ? 'আপনার ফার্মেসির ফ্রি ট্রায়াল শুরু করুন →' : 'Start Your Pharmacy Free Trial →'}
+                                        {isBn ? 'আপনার ফার্মেসির ফ্রি ট্রায়াল শুরু করুন' : 'Start Your Pharmacy Free Trial'}
                                     </Link>
 
                                     <p className="text-center text-[11px] text-slate-400 mt-2.5">
@@ -857,8 +857,8 @@ export default function Welcome({ plans = [], demoRoles = [] }: WelcomeProps) {
                                             <span>🚀</span>
                                             <span>
                                                 {isBn
-                                                    ? `${activeRole.titleBn} হিসেবে ডেমোতে ঢুকুন →`
-                                                    : `Enter Demo as ${activeRole.titleEn} →`}
+                                                    ? `${activeRole.titleBn} হিসেবে ডেমোতে ঢুকুন`
+                                                    : `Enter Demo as ${activeRole.titleEn}`}
                                             </span>
                                         </>
                                     )}

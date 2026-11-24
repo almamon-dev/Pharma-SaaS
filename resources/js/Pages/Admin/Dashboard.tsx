@@ -227,7 +227,7 @@ export default function SuperAdminDashboard({
                             href={route('admin.subscribers')}
                             className="text-xs font-semibold text-[#FF4A1F] hover:underline"
                         >
-                            Manage Subscribers →
+                            Manage Subscribers
                         </Link>
                     </CardHeader>
                     <CardContent className="p-0">
@@ -263,7 +263,7 @@ export default function SuperAdminDashboard({
                             href={route('admin.plans')}
                             className="text-xs font-semibold text-[#FF4A1F] hover:underline"
                         >
-                            Manage Plans →
+                            Manage Plans
                         </Link>
                     </CardHeader>
                     <CardContent className="p-0">
