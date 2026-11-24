@@ -85,6 +85,69 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+                {/* 1-Click Test Role Accounts */}
+                {!isAdminDomain && (
+                    <div className="rounded-[4px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                Quick Test Sign-In by Role:
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                                Pass: password
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                            {[
+                                {
+                                    label: '👑 Admin',
+                                    email: 'admin@pharmacore.test',
+                                    desc: 'Owner',
+                                },
+                                {
+                                    label: '👔 Manager',
+                                    email: 'manager@pharmacore.test',
+                                    desc: 'Branch',
+                                },
+                                {
+                                    label: '💊 Pharmacist',
+                                    email: 'pharmacist@pharmacore.test',
+                                    desc: 'Clinical',
+                                },
+                                {
+                                    label: '🛒 Cashier',
+                                    email: 'cashier@pharmacore.test',
+                                    desc: 'POS',
+                                },
+                                {
+                                    label: '📦 Clerk',
+                                    email: 'clerk@pharmacore.test',
+                                    desc: 'Inventory',
+                                },
+                            ].map((roleItem) => (
+                                <button
+                                    key={roleItem.email}
+                                    type="button"
+                                    onClick={() => {
+                                        setData({
+                                            ...data,
+                                            email: roleItem.email,
+                                            password: 'password',
+                                        });
+                                    }}
+                                    className="flex flex-col items-start px-2 py-1.5 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-[#FF4A1F] dark:hover:border-[#FF4A1F] transition-all text-left group"
+                                >
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#FF4A1F]">
+                                        {roleItem.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 truncate w-full">
+                                        {roleItem.email}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <Input
                     label="Email Address"
                     type="email"

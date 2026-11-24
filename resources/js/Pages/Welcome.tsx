@@ -170,6 +170,35 @@ const roleDemoItems: RoleDemoItem[] = [
         ],
     },
     {
+        id: 'clerk',
+        roleKey: 'inventory_clerk',
+        titleBn: 'ইনভেন্টরি ক্লার্ক',
+        titleEn: 'Inventory Clerk',
+        subtitleBn: 'স্টক ইনটেক ও সরবরাহকারী',
+        subtitleEn: 'Stock intake & suppliers',
+        email: 'clerk@pharmacore.test',
+        tagsBn: ['স্টক ইনটেক', 'ব্যাচ ট্র্যাকার', 'সাপ্লায়ার', 'লট ট্র্যাকিং'],
+        tagsEn: ['Stock Intake', 'Batch Tracker', 'Suppliers', 'Lot Tracking'],
+        canDoBn: [
+            'নতুন ওষুধ ব্যাচ ও সরবরাহকারী চালান এন্ট্রি',
+            'মেয়াদোত্তীর্ণ ও ড্যামেজ ওষুধের স্টক ট্র্যাকিং',
+            'সাপ্লায়ার ডিরেক্টরি ও ডেলিভারি চালান সংরক্ষণ',
+        ],
+        canDoEn: [
+            'Record purchase delivery shipments and stock-in batches',
+            'Monitor FEFO expiry dates and defective lot disposal',
+            'Maintain vendor directory and delivery notes',
+        ],
+        cannotDoBn: [
+            'বিক্রি রাজস্ব বা লাভের মার্জিন দেখা যায় না',
+            'সাবস্ক্রিপশন ও কেন্দ্রীয় সেটিংস বন্ধ',
+        ],
+        cannotDoEn: [
+            'Cannot view retail revenue or net gross margins',
+            'SaaS master subscription and company settings locked',
+        ],
+    },
+    {
         id: 'pathologist',
         roleKey: 'manager',
         titleBn: 'প্যাথলজিস্ট',

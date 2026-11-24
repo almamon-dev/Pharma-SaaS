@@ -130,6 +130,7 @@ class AuthenticatedSessionController extends Controller
                 'superadmin' => 'superadmin@pharmacore.test',
                 'pharmacist' => 'pharmacist@pharmacore.test',
                 'cashier' => 'cashier@pharmacore.test',
+                'inventory_clerk', 'clerk' => 'clerk@pharmacore.test',
                 'manager', 'pathologist', 'radiologist' => 'manager@pharmacore.test',
                 default => 'admin@pharmacore.test',
             };
@@ -169,11 +170,9 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        $targetRoute = ($role === 'cashier' || $user->email === 'cashier@pharmacore.test')
-            ? 'pos.index'
-            : 'dashboard';
+        $targetRoute = $request->input('target', 'dashboard');
 
-        return redirect()->route($targetRoute);
+        return redirect()->route($targetRoute === 'pos' ? 'pos.index' : 'dashboard');
     }
 
     private function isSubdomainPortal(Request $request): bool

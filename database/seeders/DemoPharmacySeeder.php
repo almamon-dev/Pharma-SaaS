@@ -107,6 +107,19 @@ class DemoPharmacySeeder extends Seeder
             ]
         );
 
+        $clerk = User::query()->updateOrCreate(
+            ['email' => 'clerk@pharmacore.test'],
+            [
+                'name' => 'Kabir Hossain',
+                'phone' => '+880 1711-000404',
+                'password' => Hash::make('password'),
+                'account_type' => 'staff',
+                'subscriber_id' => $admin->id,
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]
+        );
+
         // Tenant 1: GreenLife Pharmacy & Diagnostics
         $greenlife = Tenant::query()->updateOrCreate(
             ['slug' => 'greenlife-pharmacy'],
@@ -211,6 +224,14 @@ class DemoPharmacySeeder extends Seeder
                 'roles' => json_encode([TenantRole::CASHIER->value]),
                 'is_active' => true,
                 'joined_at' => now()->subWeeks(3),
+            ],
+            $clerk->id => [
+                'branch_id' => $bananiBranch->id,
+                'is_owner' => false,
+                'role' => TenantRole::INVENTORY_CLERK->value,
+                'roles' => json_encode([TenantRole::INVENTORY_CLERK->value]),
+                'is_active' => true,
+                'joined_at' => now()->subMonth(),
             ],
         ]);
 

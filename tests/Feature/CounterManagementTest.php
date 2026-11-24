@@ -232,4 +232,158 @@ class CounterManagementTest extends TestCase
         $this->assertEquals(50.00, (float) $session->total_sales_amount);
         $this->assertEquals(1050.00, (float) $session->system_expected_cash);
     }
+
+    public function test_counter_and_shift_session_deletion(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'Deletion Test Pharmacy',
+            'plan_key' => 'growth',
+        ]);
+        $branch = $tenant->branches()->first();
+
+        [$activeCounter, $closedCounter, $session] = app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branch, $owner) {
+            $activeCounter = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-ACT',
+                'name' => 'Active Counter',
+                'status' => 'active',
+                'current_user_id' => $owner->id,
+            ]);
+
+            $closedCounter = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-CLS',
+                'name' => 'Closed Counter',
+                'status' => 'closed',
+            ]);
+
+            $session = CounterSession::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'counter_id' => $closedCounter->id,
+                'user_id' => $owner->id,
+                'status' => 'closed',
+                'opening_float' => 100,
+                'closing_cash_counted' => 100,
+                'system_expected_cash' => 100,
+            ]);
+
+            return [$activeCounter, $closedCounter, $session];
+        });
+
+        app(CurrentTenant::class)->set($tenant);
+
+        // 1. Deleting active counter fails with error
+        $this->actingAs($owner)
+            ->withSession(['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id])
+            ->from('/counters')
+            ->delete("/counters/{$activeCounter->id}")
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('counters', ['id' => $activeCounter->id]);
+
+        // 2. Deleting closed session succeeds
+        $this->actingAs($owner)
+            ->withSession(['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id])
+            ->from('/counters')
+            ->delete("/counters/sessions/{$session->id}")
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('counter_sessions', ['id' => $session->id]);
+
+        // 3. Deleting closed counter succeeds
+        $this->actingAs($owner)
+            ->withSession(['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id])
+            ->from('/counters')
+            ->delete("/counters/{$closedCounter->id}")
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('counters', ['id' => $closedCounter->id]);
+    }
+
+    public function test_cashier_sees_only_own_shift_and_cannot_manage_counters(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'Cashier Scoped Pharmacy',
+            'plan_key' => 'growth',
+        ]);
+        $branch = $tenant->branches()->first();
+
+        $cashier = User::factory()->create([
+            'account_type' => 'staff',
+            'subscriber_id' => $owner->id,
+            'status' => 'active',
+        ]);
+        $tenant->users()->attach($cashier->id, [
+            'branch_id' => $branch->id,
+            'is_owner' => false,
+            'role' => \App\Enums\TenantRole::CASHIER->value,
+            'roles' => json_encode([\App\Enums\TenantRole::CASHIER->value]),
+            'is_active' => true,
+        ]);
+
+        app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branch, $cashier, $owner) {
+            $counter1 = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-01',
+                'name' => 'Cashier Terminal',
+                'status' => 'active',
+                'current_user_id' => $cashier->id,
+            ]);
+
+            $counter2 = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-02',
+                'name' => 'Other Station',
+                'status' => 'closed',
+            ]);
+
+            // Cashier's session
+            CounterSession::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'counter_id' => $counter1->id,
+                'user_id' => $cashier->id,
+                'status' => 'open',
+                'opening_float' => 500,
+                'system_expected_cash' => 500,
+            ]);
+
+            // Other user's closed session
+            CounterSession::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'counter_id' => $counter2->id,
+                'user_id' => $owner->id,
+                'status' => 'closed',
+                'opening_float' => 1000,
+                'closing_cash_counted' => 1000,
+                'system_expected_cash' => 1000,
+            ]);
+        });
+
+        app(CurrentTenant::class)->set($tenant);
+
+        $response = $this->actingAs($cashier)
+            ->withSession(['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id])
+            ->get('/counters');
+
+        $response->assertOk()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->component('Counters/Index')
+                ->where('canManageCounters', false)
+                ->where('isCashier', true)
+                ->has('counters', 1)
+                ->where('counters.0.code', 'C-01')
+                ->has('recentSessions', 1) // cashier only sees their own 1 session, not other users'
+            );
+    }
 }

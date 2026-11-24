@@ -22,13 +22,57 @@ class CounterController extends Controller
     {
         $branch = $tenantContext->branch();
         $tenant = $tenantContext->tenant();
+        $user = $request->user();
 
-        $counters = Counter::query()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
-            ->with([
-                'currentUser:id,name,email',
-                'currentSession' => fn ($q) => $q->with('user:id,name'),
-            ])
+        $canManageCounters = $tenantContext->hasRole(['admin', 'manager']) || ($user && $user->isSubscriberAdmin());
+        $isCashier = ! $canManageCounters;
+
+        if ($isCashier && $user) {
+            // Cashier context: only personal shift and available stations
+            $myActiveSession = CounterSession::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'open')
+                ->first();
+
+            $countersQuery = Counter::query()
+                ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+                ->with([
+                    'currentUser:id,name,email',
+                    'currentSession' => fn ($q) => $q->with('user:id,name'),
+                ])
+                ->where('is_active', true);
+
+            if ($myActiveSession) {
+                // If cashier currently has an open shift, show only their assigned counter
+                $countersQuery->where('id', $myActiveSession->counter_id);
+            } else {
+                // If cashier has no shift, show only available counters ready for float intake
+                $countersQuery->where('status', 'closed');
+            }
+
+            $recentSessionsQuery = CounterSession::query()
+                ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+                ->where('user_id', $user->id)
+                ->with(['counter:id,code,name', 'user:id,name'])
+                ->latest('opened_at')
+                ->limit(20);
+        } else {
+            // Admin / Manager context: full counter terminal management & branch-wide audit logs
+            $countersQuery = Counter::query()
+                ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+                ->with([
+                    'currentUser:id,name,email',
+                    'currentSession' => fn ($q) => $q->with('user:id,name'),
+                ]);
+
+            $recentSessionsQuery = CounterSession::query()
+                ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+                ->with(['counter:id,code,name', 'user:id,name'])
+                ->latest('opened_at')
+                ->limit(20);
+        }
+
+        $counters = $countersQuery
             ->orderBy('code')
             ->get()
             ->map(fn (Counter $c) => [
@@ -59,11 +103,7 @@ class CounterController extends Controller
                 ] : null,
             ]);
 
-        $recentSessions = CounterSession::query()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
-            ->with(['counter:id,code,name', 'user:id,name'])
-            ->latest('opened_at')
-            ->limit(20)
+        $recentSessions = $recentSessionsQuery
             ->get()
             ->map(fn (CounterSession $s) => [
                 'id' => $s->id,
@@ -87,6 +127,8 @@ class CounterController extends Controller
             'recentSessions' => $recentSessions,
             'branchName' => $branch?->name,
             'currency' => $tenant->currency_code ?? 'BDT',
+            'canManageCounters' => $canManageCounters,
+            'isCashier' => $isCashier,
         ]);
     }
 
@@ -408,5 +450,43 @@ class CounterController extends Controller
             : ($discrepancy > 0 ? "Cash surplus of +{$discrepancy}" : "Cash shortage of {$discrepancy}");
 
         return back()->with('success', "Shift closed on Counter {$counter->code}. Z-Report generated: {$discrepancyMsg}");
+    }
+
+    public function destroy(Request $request, Counter $counter, TenantContext $tenantContext): RedirectResponse
+    {
+        if ($counter->status !== 'closed') {
+            return back()->with('error', "Cannot delete Counter {$counter->code} while a cashier shift is active. Please close the active shift first.");
+        }
+
+        $code = $counter->code;
+        $name = $counter->name;
+        $counter->delete();
+
+        AuditLog::record(
+            action: 'counter.deleted',
+            description: "Deleted counter {$code} ({$name}).",
+            metadata: ['code' => $code, 'name' => $name]
+        );
+
+        return back()->with('success', "Counter {$code} ({$name}) deleted successfully.");
+    }
+
+    public function destroySession(Request $request, CounterSession $session, TenantContext $tenantContext): RedirectResponse
+    {
+        if ($session->status === 'open') {
+            return back()->with('error', 'Cannot delete an active open shift session. Close it first.');
+        }
+
+        $id = $session->id;
+        $counterCode = $session->counter?->code ?? 'Unknown';
+        $session->delete();
+
+        AuditLog::record(
+            action: 'counter_session.deleted',
+            description: "Deleted shift record #{$id} for counter {$counterCode}.",
+            metadata: ['session_id' => $id]
+        );
+
+        return back()->with('success', "Shift session record #{$id} deleted successfully.");
     }
 }

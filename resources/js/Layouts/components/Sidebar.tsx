@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
+    Clock,
     Contact2,
     CreditCard,
     GitBranch,
@@ -10,6 +11,7 @@ import {
     Package,
     Settings,
     ShieldCheck,
+    ShoppingCart,
     Sparkles,
     Store,
     UserCog,
@@ -135,21 +137,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             },
         ];
     } else {
-        const dispensingItems = [
-            ...(hasFeature('pos') && hasPerm('pos.sell')
-                ? [
-                      {
-                          name: 'Point of Sale',
-                          href: route('pos.index'),
-                          active: route().current('pos.*'),
-                      },
-                      {
-                          name: 'Counters & Shifts',
-                          href: route('counters.index'),
-                          active: route().current('counters.*'),
-                      },
-                  ]
-                : []),
+        const inventoryItems = [
             ...(hasFeature('inventory') &&
             hasPerm('inventory.view', 'inventory.manage', 'inventory.adjust')
                 ? [
@@ -212,7 +200,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       },
                   ]
                 : []),
-            ...(isSubscriberAdmin || hasFeature('branches') || hasPerm('branch.manage')
+            ...(isSubscriberAdmin || (hasFeature('branches') && hasPerm('branches.manage', 'branch.manage'))
                 ? [
                       {
                           category: 'Organization',
@@ -223,7 +211,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       },
                   ]
                 : []),
-            ...(isSubscriberAdmin || hasFeature('team_rbac') || hasPerm('user.manage', 'role.manage')
+            ...(isSubscriberAdmin || (hasFeature('team_rbac') && hasPerm('team.manage', 'user.manage', 'role.manage'))
                 ? [
                       {
                           category: 'Organization',
@@ -251,6 +239,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 : []),
         ];
 
+        const canManageCounters = isSubscriberAdmin || hasPerm('branch.manage') || tenant?.role === 'admin' || tenant?.role === 'manager';
+
         navEntries = [
             {
                 category: 'Main Menu',
@@ -259,13 +249,31 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 active: route().current('dashboard'),
                 icon: LayoutDashboard,
             },
-            ...(dispensingItems.length > 0
+            ...(hasFeature('pos') && hasPerm('pos.sell')
                 ? [
                       {
                           category: 'Main Menu',
-                          group: 'Dispensing & Stock',
+                          name: 'Point of Sale',
+                          href: route('pos.index'),
+                          active: route().current('pos.*'),
+                          icon: ShoppingCart,
+                      },
+                      {
+                          category: 'Main Menu',
+                          name: canManageCounters ? 'Counters & Shifts' : 'My Shift',
+                          href: route('counters.index'),
+                          active: route().current('counters.*'),
+                          icon: canManageCounters ? Store : Clock,
+                      },
+                  ]
+                : []),
+            ...(inventoryItems.length > 0
+                ? [
+                      {
+                          category: 'Main Menu',
+                          group: 'Inventory & Stock',
                           icon: Package,
-                          items: dispensingItems,
+                          items: inventoryItems,
                       },
                   ]
                 : []),

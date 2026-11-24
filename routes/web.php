@@ -105,6 +105,14 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::put('/counters/{counter}', [CounterController::class, 'update'])
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.update');
+    Route::delete('/counters/sessions/{session}', [CounterController::class, 'destroySession'])
+        ->whereNumber('session')
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.sessions.destroy');
+    Route::delete('/counters/{counter}', [CounterController::class, 'destroy'])
+        ->whereNumber('counter')
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.destroy');
     Route::post('/counters/{counter}/open-session', [CounterController::class, 'openSession'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.open-session');
