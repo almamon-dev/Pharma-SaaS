@@ -274,10 +274,12 @@ class InventoryController extends Controller
         };
 
         $today = now()->startOfDay();
+        $requestedPerPage = (int) $request->query('per_page', 10);
+        $perPage = in_array($requestedPerPage, [10, 15, 30, 50, 100], true) ? $requestedPerPage : 10;
         $paginated = $query
             ->orderBy('expiry_date')
             ->orderByDesc('id')
-            ->paginate(25)
+            ->paginate($perPage)
             ->withQueryString()
             ->through(function (MedicineBatch $batch) use ($today, $canViewCost): array {
                 $daysRemaining = $batch->expiry_date
@@ -328,6 +330,7 @@ class InventoryController extends Controller
                 'status' => $statusFilter,
                 'branch_id' => $branchScope['selectedBranchId'],
                 'supplier_id' => $supplierId ? (string) $supplierId : '',
+                'per_page' => $perPage,
             ],
         ]);
     }
@@ -369,6 +372,9 @@ class InventoryController extends Controller
             'totalCostMoved' => round((float) (clone $filteredQuery)->sum('total_cost'), 2),
         ];
 
+        $requestedPerPage = (int) $request->query('per_page', 10);
+        $perPage = in_array($requestedPerPage, [10, 15, 30, 50, 100], true) ? $requestedPerPage : 10;
+
         $movements = $filteredQuery
             ->with([
                 'medicine:id,name,sku,unit,deleted_at',
@@ -378,7 +384,7 @@ class InventoryController extends Controller
             ])
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
-            ->paginate(30)
+            ->paginate($perPage)
             ->withQueryString()
             ->through(function (StockMovement $movement): array {
                 $enum = StockMovementType::tryFrom($movement->movement_type);
@@ -419,6 +425,7 @@ class InventoryController extends Controller
                 'branch_id' => $branchScope['selectedBranchId'],
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
+                'per_page' => $perPage,
             ],
         ]);
     }

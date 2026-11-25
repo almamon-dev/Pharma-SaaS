@@ -4,6 +4,7 @@ import {
     AlertTriangle,
     Edit,
     Eye,
+    GitBranch,
     History,
     Key,
     Plus,
@@ -43,6 +44,8 @@ interface TeamMember {
     role_name: string;
     role_slug: string;
     branch_id: number | null;
+    branch_name?: string | null;
+    branch_code?: string | null;
     branch_ids: number[];
     access_all_branches: boolean;
     has_pin: boolean;
@@ -99,6 +102,7 @@ interface TeamProps {
     currentTenantId: number;
     isOwner: boolean;
     canManageRoles: boolean;
+    activeBranchId?: number | null;
     currentTab?: 'users' | 'matrix' | 'activity';
 }
 
@@ -106,15 +110,17 @@ export default function TeamIndex({
     members,
     roles,
     permissionsCatalog,
-    branches,
+    branches = [],
     activityLog,
     canManageRoles,
+    activeBranchId,
     currentTab,
 }: TeamProps) {
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const tabFromUrl = (currentTab || searchParams?.get('tab')) as 'users' | 'matrix' | 'activity';
     const activeTab: 'users' | 'matrix' | 'activity' =
         tabFromUrl === 'matrix' ? 'matrix' : tabFromUrl === 'activity' ? 'activity' : 'users';
+    const [selectedBranchId, setSelectedBranchId] = useState<number | 'all'>('all');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
     const [inspectingUser, setInspectingUser] = useState<TeamMember | null>(null);
@@ -123,13 +129,16 @@ export default function TeamIndex({
     const [editingRoleLimits, setEditingRoleLimits] = useState<RoleItem | null>(null);
     const [showNewRoleModal, setShowNewRoleModal] = useState(false);
 
+    const defaultBranchId = activeBranchId ?? branches[0]?.id ?? '';
+
     // Add User Form
     const addForm = useForm({
         name: '',
         email: '',
         phone: '',
         role_id: roles[3]?.id ?? roles[0]?.id ?? '',
-        branch_ids: [] as number[],
+        branch_id: defaultBranchId as number | string,
+        branch_ids: defaultBranchId ? [Number(defaultBranchId)] : ([] as number[]),
         access_all_branches: false,
         manager_pin: '',
         password: '',
@@ -138,6 +147,7 @@ export default function TeamIndex({
     // Edit Member Form
     const editForm = useForm({
         role_id: 0,
+        branch_id: '' as number | string,
         branch_ids: [] as number[],
         access_all_branches: false,
         is_active: true,
@@ -177,16 +187,54 @@ export default function TeamIndex({
         scopes: {} as Record<string, string>,
     });
 
+    const openAddModal = (presetBranchId?: number) => {
+        const targetBranchId =
+            presetBranchId ??
+            (selectedBranchId !== 'all'
+                ? selectedBranchId
+                : activeBranchId ?? branches[0]?.id ?? '');
+        addForm.setData((prev) => ({
+            ...prev,
+            branch_id: targetBranchId,
+            branch_ids: targetBranchId ? [Number(targetBranchId)] : [],
+        }));
+        setShowAddModal(true);
+    };
+
     const openEdit = (member: TeamMember) => {
         setEditingMember(member);
+        const primaryId = member.branch_id ?? member.branch_ids[0] ?? branches[0]?.id ?? '';
         editForm.setData({
             role_id: member.role_id ?? roles[0]?.id ?? 0,
-            branch_ids: member.branch_ids,
+            branch_id: primaryId,
+            branch_ids: member.branch_ids.length > 0 ? member.branch_ids : (primaryId ? [Number(primaryId)] : []),
             access_all_branches: member.access_all_branches,
             is_active: member.is_active,
             manager_pin: '',
         });
     };
+
+    const filteredMembers = useMemo(() => {
+        if (selectedBranchId === 'all') {
+            return members;
+        }
+        return members.filter((m) => {
+            if (m.access_all_branches) return true;
+            if (m.branch_id === selectedBranchId) return true;
+            if (m.branch_ids && m.branch_ids.includes(selectedBranchId)) return true;
+            return false;
+        });
+    }, [members, selectedBranchId]);
+
+    const branchCounts = useMemo(() => {
+        const counts: Record<number | string, number> = { all: members.length };
+        branches.forEach((b) => {
+            counts[b.id] = members.filter(
+                (m) => m.access_all_branches || m.branch_id === b.id || (m.branch_ids && m.branch_ids.includes(b.id))
+            ).length;
+        });
+        return counts;
+    }, [members, branches]);
 
     const openLimitsEditor = (role: RoleItem) => {
         setEditingRoleLimits(role);
@@ -312,18 +360,37 @@ export default function TeamIndex({
             },
             {
                 id: 'branches',
-                label: 'Branch Scope',
+                label: 'Assigned Branch',
                 render: (row) => (
-                    <div className="text-xs">
+                    <div className="text-xs space-y-0.5">
+                        <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-200">
+                            <GitBranch className="w-3 h-3 text-[#FF4A1F] shrink-0" />
+                            {row.branch_name ? (
+                                <span>
+                                    {row.branch_name}{' '}
+                                    {row.branch_code && (
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                            ({row.branch_code})
+                                        </span>
+                                    )}
+                                </span>
+                            ) : row.access_all_branches ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    All Branches
+                                </span>
+                            ) : (
+                                <span className="text-slate-400">Head Office</span>
+                            )}
+                        </div>
                         {row.access_all_branches ? (
-                            <span className="text-emerald-500 font-medium">All Branches</span>
-                        ) : row.branch_ids.length > 0 ? (
-                            <span className="text-slate-600 dark:text-slate-300">
-                                {row.branch_ids.length} branch(es) assigned
-                            </span>
-                        ) : (
-                            <span className="text-slate-400">Head Office</span>
-                        )}
+                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                Full Central Access
+                            </div>
+                        ) : row.branch_ids.length > 1 ? (
+                            <div className="text-[10px] text-slate-400">
+                                +{row.branch_ids.length - 1} roaming branch(es)
+                            </div>
+                        ) : null}
                     </div>
                 ),
             },
@@ -417,7 +484,7 @@ export default function TeamIndex({
             actions: (
                 <Button
                     size="sm"
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => openAddModal()}
                     className="bg-[#FF4A1F] hover:bg-[#e03e15] text-white gap-1.5 text-xs shadow-xs cursor-pointer"
                 >
                     <UserPlus className="w-3.5 h-3.5" />
@@ -461,18 +528,77 @@ export default function TeamIndex({
             <div className="space-y-4 max-w-7xl mx-auto pb-12">
                 {/* Tab 1: Users */}
                 {activeTab === 'users' && (
-                    <div className="bg-white dark:bg-[#1e2329] border border-slate-200/90 dark:border-slate-800 rounded-[4px] overflow-hidden shadow-2xs">
-                        <DataTable
-                            columns={userColumns}
-                            data={members}
-                            emptyState={
-                                <EmptyState
-                                    icon={Users}
-                                    title="No employees found"
-                                    description="No team members have been added to this pharmacy yet."
-                                />
-                            }
-                        />
+                    <div className="space-y-3">
+                        {branches.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/90 dark:bg-[#1a1f26] rounded-[4px] border border-slate-200/90 dark:border-slate-800 text-xs">
+                                <span className="text-[11px] font-semibold text-slate-500 uppercase px-2 py-1 flex items-center gap-1.5">
+                                    <GitBranch className="w-3.5 h-3.5 text-[#FF4A1F]" />
+                                    Filter Branch:
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedBranchId('all')}
+                                    className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                                        selectedBranchId === 'all'
+                                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                >
+                                    <span>All Branches</span>
+                                    <span
+                                        className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                                            selectedBranchId === 'all'
+                                                ? 'bg-[#FF4A1F]/10 text-[#FF4A1F] font-bold'
+                                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        {branchCounts['all'] ?? members.length}
+                                    </span>
+                                </button>
+                                {branches.map((b) => (
+                                    <button
+                                        key={b.id}
+                                        type="button"
+                                        onClick={() => setSelectedBranchId(b.id)}
+                                        className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                                            selectedBranchId === b.id
+                                                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
+                                    >
+                                        <span>{b.name}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">({b.code})</span>
+                                        <span
+                                            className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                                                selectedBranchId === b.id
+                                                    ? 'bg-[#FF4A1F]/10 text-[#FF4A1F] font-bold'
+                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                            }`}
+                                        >
+                                            {branchCounts[b.id] ?? 0}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="bg-white dark:bg-[#1e2329] border border-slate-200/90 dark:border-slate-800 rounded-[4px] overflow-hidden shadow-2xs">
+                            <DataTable
+                                columns={userColumns}
+                                data={filteredMembers}
+                                emptyState={
+                                    <EmptyState
+                                        icon={Users}
+                                        title="No employees found"
+                                        description={
+                                            selectedBranchId === 'all'
+                                                ? 'No team members have been added to this pharmacy yet.'
+                                                : 'No employees assigned to the selected branch.'
+                                        }
+                                    />
+                                }
+                            />
+                        </div>
                     </div>
                 )}
 
@@ -731,7 +857,38 @@ export default function TeamIndex({
                                 </Select>
                             </div>
                             <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Assign Branches</label>
+                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
+                                    Primary Assigned Branch *
+                                </label>
+                                <Select
+                                    value={String(addForm.data.branch_id)}
+                                    onChange={(e) => {
+                                        const newId = Number(e.target.value);
+                                        addForm.setData((prev) => ({
+                                            ...prev,
+                                            branch_id: newId,
+                                            branch_ids: prev.branch_ids.includes(newId)
+                                                ? prev.branch_ids
+                                                : [...prev.branch_ids, newId],
+                                        }));
+                                    }}
+                                    required
+                                >
+                                    <option value="" disabled>Select Primary Branch</option>
+                                    {branches.map((b) => (
+                                        <option key={b.id} value={String(b.id)}>
+                                            {b.name} ({b.code})
+                                        </option>
+                                    ))}
+                                </Select>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    The employee will primarily report to and operate at this branch.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
+                                    Additional Branch Access (Optional)
+                                </label>
                                 <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[4px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
                                     <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
                                         <input
@@ -741,27 +898,45 @@ export default function TeamIndex({
                                                 addForm.setData('access_all_branches', e.target.checked)
                                             }
                                         />
-                                        Grant Access to ALL Current and Future Branches
+                                        Grant Roaming Access to ALL Current and Future Branches
                                     </label>
                                     {!addForm.data.access_all_branches &&
-                                        branches.map((b) => (
-                                            <label key={b.id} className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={addForm.data.branch_ids.includes(b.id)}
-                                                    onChange={(e) => {
-                                                        const cur = addForm.data.branch_ids;
-                                                        addForm.setData(
-                                                            'branch_ids',
-                                                            e.target.checked
-                                                                ? [...cur, b.id]
-                                                                : cur.filter((id) => id !== b.id)
-                                                        );
-                                                    }}
-                                                />
-                                                <span>{b.name} ({b.code})</span>
-                                            </label>
-                                        ))}
+                                        branches.map((b) => {
+                                            const isPrimary = Number(addForm.data.branch_id) === b.id;
+                                            return (
+                                                <label
+                                                    key={b.id}
+                                                    className={`flex items-center justify-between text-xs cursor-pointer ${
+                                                        isPrimary
+                                                            ? 'opacity-75 font-medium'
+                                                            : 'text-slate-700 dark:text-slate-300'
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={isPrimary}
+                                                            checked={isPrimary || addForm.data.branch_ids.includes(b.id)}
+                                                            onChange={(e) => {
+                                                                const cur = addForm.data.branch_ids;
+                                                                addForm.setData(
+                                                                    'branch_ids',
+                                                                    e.target.checked
+                                                                        ? [...cur, b.id]
+                                                                        : cur.filter((id) => id !== b.id)
+                                                                );
+                                                            }}
+                                                        />
+                                                        <span>{b.name} ({b.code})</span>
+                                                    </span>
+                                                    {isPrimary && (
+                                                        <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
+                                                            Primary Branch
+                                                        </span>
+                                                    )}
+                                                </label>
+                                            );
+                                        })}
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -830,7 +1005,38 @@ export default function TeamIndex({
                                 </Select>
                             </div>
                             <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Assigned Branches</label>
+                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
+                                    Primary Assigned Branch *
+                                </label>
+                                <Select
+                                    value={String(editForm.data.branch_id)}
+                                    onChange={(e) => {
+                                        const newId = Number(e.target.value);
+                                        editForm.setData((prev) => ({
+                                            ...prev,
+                                            branch_id: newId,
+                                            branch_ids: prev.branch_ids.includes(newId)
+                                                ? prev.branch_ids
+                                                : [...prev.branch_ids, newId],
+                                        }));
+                                    }}
+                                    required
+                                >
+                                    <option value="" disabled>Select Primary Branch</option>
+                                    {branches.map((b) => (
+                                        <option key={b.id} value={String(b.id)}>
+                                            {b.name} ({b.code})
+                                        </option>
+                                    ))}
+                                </Select>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    Main operational branch where this employee's shifts and transactions default.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
+                                    Additional Branch Access (Optional)
+                                </label>
                                 <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[4px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
                                     <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
                                         <input
@@ -840,27 +1046,45 @@ export default function TeamIndex({
                                                 editForm.setData('access_all_branches', e.target.checked)
                                             }
                                         />
-                                        Grant Access to ALL Branches
+                                        Grant Roaming Access to ALL Branches
                                     </label>
                                     {!editForm.data.access_all_branches &&
-                                        branches.map((b) => (
-                                            <label key={b.id} className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={editForm.data.branch_ids.includes(b.id)}
-                                                    onChange={(e) => {
-                                                        const cur = editForm.data.branch_ids;
-                                                        addForm.setData(
-                                                            'branch_ids',
-                                                            e.target.checked
-                                                                ? [...cur, b.id]
-                                                                : cur.filter((id) => id !== b.id)
-                                                        );
-                                                    }}
-                                                />
-                                                <span>{b.name} ({b.code})</span>
-                                            </label>
-                                        ))}
+                                        branches.map((b) => {
+                                            const isPrimary = Number(editForm.data.branch_id) === b.id;
+                                            return (
+                                                <label
+                                                    key={b.id}
+                                                    className={`flex items-center justify-between text-xs cursor-pointer ${
+                                                        isPrimary
+                                                            ? 'opacity-75 font-medium'
+                                                            : 'text-slate-700 dark:text-slate-300'
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={isPrimary}
+                                                            checked={isPrimary || editForm.data.branch_ids.includes(b.id)}
+                                                            onChange={(e) => {
+                                                                const cur = editForm.data.branch_ids;
+                                                                editForm.setData(
+                                                                    'branch_ids',
+                                                                    e.target.checked
+                                                                        ? [...cur, b.id]
+                                                                        : cur.filter((id) => id !== b.id)
+                                                                );
+                                                            }}
+                                                        />
+                                                        <span>{b.name} ({b.code})</span>
+                                                    </span>
+                                                    {isPrimary && (
+                                                        <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
+                                                            Primary Branch
+                                                        </span>
+                                                    )}
+                                                </label>
+                                            );
+                                        })}
                                 </div>
                             </div>
                             <div>
@@ -1228,7 +1452,7 @@ export default function TeamIndex({
                                     What can {inspectingUser.name} do?
                                 </h3>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Role: <strong className="text-slate-900 dark:text-white">{inspectingUser.role_name}</strong> | Data Scope: {inspectingUser.access_all_branches ? 'All Branches' : `${inspectingUser.branch_ids.length} Branch(es)`}
+                                    Role: <strong className="text-slate-900 dark:text-white">{inspectingUser.role_name}</strong> | Primary Branch: <strong className="text-slate-900 dark:text-white">{inspectingUser.branch_name || 'Head Office'}</strong> | Data Scope: {inspectingUser.access_all_branches ? 'All Branches' : `${inspectingUser.branch_ids.length} Branch(es)`}
                                 </p>
                             </div>
                             <button

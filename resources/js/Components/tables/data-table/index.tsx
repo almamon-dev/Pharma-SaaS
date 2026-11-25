@@ -1,3 +1,4 @@
+import React, { useRef, useState } from 'react';
 import { Column, DataTableProps } from './dataTableTypes';
 import { useDataTableState } from './useDataTableState';
 import { DataTableGridSection } from './DataTableGridSection';
@@ -47,14 +48,77 @@ export default function DataTable<T extends Record<string, any>>(
     const cellPaddingClass = compact ? 'px-2.5 py-1.5' : 'px-3.5 py-2.5';
 
     const state = useDataTableState(props);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const dragStateRef = useRef<{
+        active: boolean;
+        moved: boolean;
+        startX: number;
+        startY: number;
+        startScrollLeft: number;
+    }>({ active: false, moved: false, startX: 0, startY: 0, startScrollLeft: 0 });
+    const [isPanning, setIsPanning] = useState(false);
+
+    const handleScrollMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (disableHorizontalScroll || e.button !== 0) return;
+        const el = scrollContainerRef.current;
+        if (!el || el.scrollWidth <= el.clientWidth) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('button, a, input, select, textarea, [role="button"], th[draggable="true"]')) {
+            return;
+        }
+
+        dragStateRef.current = {
+            active: true,
+            moved: false,
+            startX: e.clientX,
+            startY: e.clientY,
+            startScrollLeft: el.scrollLeft,
+        };
+
+        const handleMouseMove = (moveEvt: MouseEvent) => {
+            const drag = dragStateRef.current;
+            if (!drag.active) return;
+            const dx = moveEvt.clientX - drag.startX;
+            const dy = moveEvt.clientY - drag.startY;
+            if (!drag.moved) {
+                if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+                    drag.moved = true;
+                    setIsPanning(true);
+                } else if (Math.abs(dy) > 6) {
+                    drag.active = false;
+                    return;
+                } else {
+                    return;
+                }
+            }
+            el.scrollLeft = drag.startScrollLeft - dx;
+            window.getSelection()?.removeAllRanges();
+        };
+
+        const handleMouseUp = () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            const wasMoved = dragStateRef.current.moved;
+            dragStateRef.current.active = false;
+            setIsPanning(false);
+            if (wasMoved) {
+                setTimeout(() => {
+                    dragStateRef.current.moved = false;
+                }, 0);
+            }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    };
 
     if (state.viewMode === 'grid') {
         return <DataTableGridSection props={props} state={state} />;
     }
 
     return (
-        <div className="bg-white dark:bg-[#12161c] rounded-[3px] border border-slate-200 dark:border-slate-800 shadow-none">
-            <div>
+        <div className="w-full min-w-0 bg-white dark:bg-[#12161c] rounded-[3px] border border-slate-200 dark:border-slate-800 shadow-none">
+            <div className="w-full min-w-0">
                 <DataTableToolbarSection
                     headerTabs={headerTabs}
                     banner={banner}
@@ -94,11 +158,31 @@ export default function DataTable<T extends Record<string, any>>(
                     </div>
                 ) : (
                     <div
+                        ref={scrollContainerRef}
+                        onMouseDown={handleScrollMouseDown}
+                        onClickCapture={(e) => {
+                            if (dragStateRef.current.moved) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }
+                        }}
                         className={
                             disableHorizontalScroll
-                                ? 'overflow-hidden'
-                                : 'overflow-x-auto custom-scrollbar'
+                                ? 'w-full overflow-hidden'
+                                : `w-full max-w-full overflow-x-auto custom-scrollbar ${
+                                      isPanning ? 'cursor-grabbing select-none' : ''
+                                  }`
                         }
+                        onWheel={(e) => {
+                            if (disableHorizontalScroll) return;
+                            if (e.shiftKey && e.deltaY !== 0) {
+                                const el = e.currentTarget;
+                                if (el.scrollWidth > el.clientWidth) {
+                                    e.preventDefault();
+                                    el.scrollLeft += e.deltaY;
+                                }
+                            }
+                        }}
                     >
                         <table
                             className={`w-full text-left border-collapse ${
@@ -122,7 +206,7 @@ export default function DataTable<T extends Record<string, any>>(
                                 actions={actions}
                                 actionsColumnClassName={actionsColumnClassName}
                             />
-                            <tbody className="divide-y divide-slate-200/90 dark:divide-slate-800 bg-white dark:bg-[#12161c]">
+                            <tbody className="bg-white dark:bg-[#12161c]">
                                 {isLoading ? (
                                     <DataTableSkeletonBody
                                         effectiveSkeletonCount={

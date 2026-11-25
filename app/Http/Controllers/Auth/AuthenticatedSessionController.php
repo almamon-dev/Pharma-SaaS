@@ -122,12 +122,19 @@ class AuthenticatedSessionController extends Controller
 
     public function demoEnter(Request $request): RedirectResponse
     {
-        $role = (string) $request->input('role', 'admin');
+        $role = strtolower((string) $request->input('role', 'admin'));
         $email = (string) $request->input('email', '');
+
+        // Super Admin accounts can NEVER be accessed via public demo bypass; credentials are required
+        if ($role === 'superadmin' || $role === 'super_admin' || $email === 'superadmin@pharmacore.test') {
+            return redirect()->route('login')->with(
+                'error',
+                'Super Admin access is strictly protected. Please sign in with your email and password credentials.'
+            );
+        }
 
         if ($email === '') {
             $email = match ($role) {
-                'superadmin' => 'superadmin@pharmacore.test',
                 'pharmacist' => 'pharmacist@pharmacore.test',
                 'cashier' => 'cashier@pharmacore.test',
                 'salesman' => 'salesman@pharmacore.test',
@@ -141,13 +148,17 @@ class AuthenticatedSessionController extends Controller
             ?? User::where('email', 'admin@pharmacore.test')->first()
             ?? User::firstOrFail();
 
+        // Enforce credential login for any Super Admin user
+        if ($user->isSuperAdmin()) {
+            return redirect()->route('login')->with(
+                'error',
+                'Super Admin accounts cannot be accessed via demo login. Please sign in with your credentials.'
+            );
+        }
+
         Auth::guard('web')->logout();
         Auth::login($user, true);
         $request->session()->regenerate();
-
-        if ($user->isSuperAdmin()) {
-            return redirect()->route('admin.dashboard');
-        }
 
         /** @var Tenant|null $domainTenant */
         $domainTenant = $request->attributes->get(IdentifyTenantFromDomain::REQUEST_ATTRIBUTE);

@@ -178,6 +178,23 @@ class PosController extends Controller
             }
         }
 
+        // Enforce open shift for cashiers before accepting any POS payment
+        $isAdminOrManager = $tenantContext->hasRole(['admin', 'manager']) || ($request->user()?->isSubscriberAdmin());
+        if (! $isAdminOrManager) {
+            $openShift = CounterSession::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('user_id', $request->user()->id)
+                ->where('status', 'open')
+                ->first();
+
+            if (! $openShift) {
+                return back()->with('error', 'You must have an open shift on a cash counter before taking payments.');
+            }
+
+            $counterId = $counterId ?: $openShift->counter_id;
+            $counterSessionId = $counterSessionId ?: $openShift->id;
+        }
+
         $sale = DB::transaction(function () use ($validated, $branch, $request, $counterId, $counterSessionId): Sale {
             $subtotal = 0;
             $allocatedLines = [];

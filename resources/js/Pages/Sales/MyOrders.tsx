@@ -12,7 +12,6 @@ import {
     RefreshCw,
     Search,
     ShoppingCart,
-    Store,
     User,
     X,
 } from 'lucide-react';
@@ -39,9 +38,17 @@ export interface MyOrderRecord {
     counter_code?: string | null;
     order_status: string;
     payment_status: string;
+    subtotal?: number;
+    discount_amount?: number;
+    discount_status?: string;
+    discount_percentage?: number;
+    tax_amount?: number;
     total_amount: number;
     paid_amount: number;
     items_count: number;
+    notes?: string | null;
+    internal_notes?: string | null;
+    prescription_reference?: string | null;
     created_at?: string;
     assigned_at?: string;
     completed_at?: string;
@@ -184,11 +191,11 @@ export default function MyOrders({
             className: 'w-[130px]',
             render: (order) => (
                 <div className="flex items-center gap-1.5">
-                    <span className="font-bold font-mono text-[#FF4A1F] text-xs">
+                    <span className="font-bold font-mono text-[#FF4A1F] text-[11.5px]">
                         {order.order_number}
                     </span>
                     {order.prescription_file && (
-                        <span className="text-[9px] px-1 py-0.2 rounded-[2px] bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                        <span className="text-[9.5px] px-1 py-0.2 rounded-[2px] bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
                             Rx
                         </span>
                     )}
@@ -201,15 +208,15 @@ export default function MyOrders({
             className: 'min-w-[150px]',
             render: (order) => (
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300 flex items-center justify-center shrink-0">
+                    <div className="w-6.5 h-6.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 flex items-center justify-center shrink-0">
                         <User className="h-3.5 w-3.5" />
                     </div>
                     <div className="truncate">
-                        <div className="font-bold text-xs text-slate-800 dark:text-slate-200 leading-tight truncate">
+                        <div className="font-bold text-[11.5px] text-slate-900 dark:text-slate-200 leading-tight truncate">
                             {order.customer_name}
                         </div>
                         {order.customer_phone ? (
-                            <div className="text-[10px] text-slate-400 font-mono leading-tight">
+                            <div className="text-[9.5px] text-slate-500 font-mono font-medium leading-tight">
                                 {order.customer_phone}
                             </div>
                         ) : null}
@@ -225,20 +232,20 @@ export default function MyOrders({
                 if (order.counter_code) {
                     return (
                         <div className="flex items-center gap-1.5 truncate">
-                            <div className="w-5 h-5 rounded-[3px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center shrink-0 font-mono">
+                            <span className="px-1.5 py-0.5 rounded-[3px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 text-[9.5px] font-bold font-mono shrink-0 whitespace-nowrap">
                                 {order.counter_code}
-                            </div>
-                            <span className="text-xs text-slate-700 dark:text-slate-300 truncate font-medium">
+                            </span>
+                            <span className="text-[11.5px] text-slate-800 dark:text-slate-200 truncate font-semibold">
                                 {order.counter_name}
                             </span>
                         </div>
                     );
                 }
                 if (order.order_status === 'draft') {
-                    return <span className="text-slate-400 text-xs italic">Unsubmitted Draft</span>;
+                    return <span className="text-slate-500 text-[11.5px] italic font-medium">Unsubmitted Draft</span>;
                 }
                 return (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-bold">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[9.5px] font-bold">
                         <AlertCircle className="h-3 w-3" />
                         Unassigned
                     </span>
@@ -253,7 +260,7 @@ export default function MyOrders({
                 <button
                     type="button"
                     onClick={() => setViewingItemsOrder(order)}
-                    className="text-xs text-slate-600 dark:text-slate-400 hover:text-[#FF4A1F] hover:underline cursor-pointer"
+                    className="text-[11.5px] font-semibold text-slate-700 dark:text-slate-300 hover:text-[#FF4A1F] hover:underline cursor-pointer"
                 >
                     {order.items_count} items
                 </button>
@@ -264,7 +271,7 @@ export default function MyOrders({
             label: 'Payable Amount',
             className: 'w-[120px]',
             render: (order) => (
-                <span className="font-bold text-slate-900 dark:text-white text-xs">
+                <span className="font-bold text-slate-900 dark:text-slate-200 text-[11.5px]">
                     {formatCurrency(order.total_amount, currency)}
                 </span>
             ),
@@ -275,10 +282,10 @@ export default function MyOrders({
             className: 'min-w-[130px]',
             render: (order) => (
                 <div>
-                    <div className="text-xs text-slate-700 dark:text-slate-300">
+                    <div className="text-[11.5px] font-medium text-slate-800 dark:text-slate-200">
                         {order.assigned_at || order.created_at}
                     </div>
-                    <div className="text-[10px] text-slate-400">
+                    <div className="text-[9.5px] font-medium text-slate-500">
                         {order.order_status === 'completed' ? 'Finished' : 'In queue'}
                     </div>
                 </div>
@@ -322,18 +329,54 @@ export default function MyOrders({
                     );
                 }
                 return (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-medium">
-                        <Clock className="h-3 w-3" />
-                        <span>Waiting</span>
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-medium">
+                            <Clock className="h-3 w-3" />
+                            <span>Waiting</span>
+                        </span>
+                        {order.discount_status === 'pending_approval' && (
+                            <span className="text-[9.5px] font-bold text-amber-600 dark:text-amber-400">
+                                Disc. Pending Approval
+                            </span>
+                        )}
+                    </div>
                 );
             },
         },
         {
             id: 'action',
             label: 'Action',
-            className: 'w-[160px] text-right',
+            className: 'w-[185px] text-right',
             render: (order) => {
+                if (order.order_status === 'draft') {
+                    return (
+                        <div className="flex items-center justify-end gap-1.5">
+                            <Link href={route('sales.orders.create', { draft_id: order.id })}>
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="sm"
+                                    className="h-6.5 px-2.5 text-xs bg-[#FF4A1F] hover:bg-[#e03d15] text-white font-bold rounded-[3px] flex items-center gap-1 cursor-pointer shrink-0"
+                                >
+                                    <span>Resume</span>
+                                </Button>
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (confirm(`Delete draft order #${order.order_number}?`)) {
+                                        router.delete(route('sales.orders.destroy-draft', order.id));
+                                    }
+                                }}
+                                className="h-6.5 w-6.5 rounded-[3px] bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 hover:bg-rose-100 dark:hover:bg-rose-900/60 flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-2xs"
+                                title="Delete Draft"
+                            >
+                                <X className="h-3.5 w-3.5 stroke-[2.2]" />
+                            </button>
+                        </div>
+                    );
+                }
+
                 const isCompleted = order.order_status === 'completed' || order.order_status === 'paid';
                 const isCancelled = order.order_status === 'cancelled';
                 const canCancel = !isCompleted && !isCancelled;
@@ -343,7 +386,7 @@ export default function MyOrders({
                         <button
                             type="button"
                             onClick={() => setViewingItemsOrder(order)}
-                            className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded-[3px] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1 font-medium cursor-pointer"
+                            className="h-6.5 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded-[3px] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1 font-medium cursor-pointer shrink-0"
                         >
                             <span>View Order</span>
                             <ChevronDown className="h-3 w-3 text-slate-400" />
@@ -353,7 +396,7 @@ export default function MyOrders({
                             variant="primary"
                             size="sm"
                             onClick={() => openTracker(order)}
-                            className="h-6.5 px-2.5 text-xs bg-[#FF4A1F] hover:bg-[#e03d15] text-white font-bold rounded-[3px] flex items-center gap-1 cursor-pointer"
+                            className="h-6.5 px-2.5 text-xs bg-[#FF4A1F] hover:bg-[#e03d15] text-white font-bold rounded-[3px] flex items-center gap-1 cursor-pointer shrink-0"
                         >
                             <span>Track</span>
                         </Button>
@@ -364,10 +407,10 @@ export default function MyOrders({
                                     setCancelOrderTarget(order);
                                     setCancelReason('');
                                 }}
-                                className="p-1 rounded-[3px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                className="h-6.5 w-6.5 rounded-[3px] bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 hover:bg-rose-100 dark:hover:bg-rose-900/60 flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-2xs"
                                 title="Cancel Order"
                             >
-                                <Ban className="h-3.5 w-3.5" />
+                                <X className="h-3.5 w-3.5 stroke-[2.2]" />
                             </button>
                         )}
                     </div>
@@ -413,11 +456,10 @@ export default function MyOrders({
                                 key={tab.id}
                                 type="button"
                                 onClick={() => handleFilterChange(tab.id)}
-                                className={`px-3 py-1.5 rounded-[3px] text-xs font-medium capitalize transition-colors cursor-pointer shrink-0 ${
-                                    activeStatus === tab.id
+                                className={`px-3 py-1.5 rounded-[3px] text-xs font-medium capitalize transition-colors cursor-pointer shrink-0 ${activeStatus === tab.id
                                         ? 'bg-white dark:bg-[#12161c] text-[#FF4A1F] font-bold border border-slate-200/80 dark:border-slate-700 shadow-2xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
+                                    }`}
                             >
                                 {tab.label}
                             </button>
@@ -454,7 +496,7 @@ export default function MyOrders({
                     </div>
 
                     {/* Simple DataTable without bulky extra toolbars */}
-                    <div className="[&_.border]:border-0 [&_.rounded-\[3px\]]:rounded-none">
+                    <div className="[&>div]:border-0 [&>div]:rounded-none">
                         <DataTable
                             data={orderList}
                             columns={columns}
@@ -463,7 +505,6 @@ export default function MyOrders({
                             hideCheckbox={true}
                             hideToolbar={true}
                             hideViewToggle={true}
-                            hidePagination={orderList.length <= 15}
                             syncUrlParams={false}
                             emptyState={
                                 <div className="py-14 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
@@ -515,82 +556,123 @@ export default function MyOrders({
                                 <span>Querying live counter routing status...</span>
                             </div>
                         ) : trackData ? (
-                            <div className="space-y-3.5">
-                                {/* Routing & Counter Summary Card */}
-                                <div className="p-3 rounded-[3px] bg-slate-50 dark:bg-[#181d26] border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+                            <div className="space-y-4">
+                                {/* Clean Flat Meta Overview (No Card Box) */}
+                                <div className="space-y-2 text-xs pb-3 border-b border-slate-100 dark:border-slate-800">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Current Order Status:</span>
-                                        <span className="px-2 py-0.5 rounded-full font-bold text-[10px] uppercase border bg-amber-50 text-amber-700 border-amber-200">
+                                        <span className="text-slate-400">Order Status</span>
+                                        <span className="font-semibold text-slate-800 dark:text-slate-200 uppercase text-[11.5px] tracking-wide">
                                             {trackData.order_status.replace('_', ' ')}
                                         </span>
                                     </div>
 
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Assigned Cash Counter:</span>
+                                        <span className="text-slate-400">Assigned Counter</span>
                                         {trackData.counter ? (
-                                            <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
-                                                <Store className="h-3 w-3 text-[#FF4A1F]" />
-                                                {trackData.counter.name} ({trackData.counter.code})
+                                            <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                                <span className="px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-mono text-[11.5px] font-bold">
+                                                    {trackData.counter.code}
+                                                </span>
+                                                <span>{trackData.counter.name}</span>
                                             </span>
                                         ) : (
-                                            <span className="text-rose-600 font-bold">Unassigned Queue</span>
+                                            <span className="text-rose-500 font-medium">Unassigned Queue</span>
                                         )}
                                     </div>
 
                                     {trackData.cashier_name && (
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-500">Serving Cashier:</span>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                            <span className="text-slate-400">Serving Cashier</span>
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">
                                                 {trackData.cashier_name}
                                             </span>
                                         </div>
                                     )}
 
-                                    <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
-                                        <span className="text-slate-500">Total Payable:</span>
+                                    <div className="flex items-center justify-between pt-1">
+                                        <span className="text-slate-400">Payable Amount</span>
                                         <span className="font-mono font-bold text-slate-900 dark:text-white">
                                             {formatCurrency(trackData.total_amount, currency)}
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* Timeline */}
-                                <div>
-                                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                        Status Transition Timeline
-                                    </h4>
+                                {/* Minimal Timeline (No Cards) */}
+                                <div className="pt-1">
+                                    <div className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                                        Status Timeline
+                                    </div>
 
                                     {trackData.timeline.length === 0 ? (
-                                        <div className="text-xs text-slate-400 py-3 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-[3px]">
+                                        <div className="text-xs text-slate-400 py-3 text-center">
                                             Order is currently in initial status.
                                         </div>
                                     ) : (
-                                        <div className="relative pl-4 space-y-3 before:absolute before:left-1.5 before:top-1.5 before:bottom-1.5 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
-                                            {trackData.timeline.map((step, idx) => (
-                                                <div key={idx} className="relative">
-                                                    <div className="absolute -left-4 top-1 w-2.5 h-2.5 rounded-full bg-[#FF4A1F] border-2 border-white dark:border-[#151921]" />
-                                                    <div className="text-xs">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="font-bold text-slate-900 dark:text-white uppercase text-[10px]">
-                                                                {step.status.replace('_', ' ')}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-400 font-mono">
-                                                                {step.timestamp}
-                                                            </span>
+                                        <div className="space-y-0 relative pl-1">
+                                            {trackData.timeline.map((step, idx) => {
+                                                const isLast = idx === trackData.timeline.length - 1;
+                                                const isCurrent = isLast;
+                                                const isCancelled = step.status === 'cancelled';
+                                                const isCompleted = step.status === 'completed' || step.status === 'paid';
+
+                                                return (
+                                                    <div key={idx} className="flex items-start gap-3 relative pb-4.5 last:pb-1">
+                                                        {/* Thin vertical connecting line (only between nodes) */}
+                                                        {!isLast && (
+                                                            <span
+                                                                className="absolute left-[3.5px] top-3 bottom-0 w-[1px] bg-slate-200 dark:bg-slate-700"
+                                                                aria-hidden="true"
+                                                            />
+                                                        )}
+
+                                                        {/* Minimal Dot (No bulky bubble) */}
+                                                        <div className="relative flex items-center justify-center shrink-0 mt-1 z-10">
+                                                            {isCancelled ? (
+                                                                <div className="w-2 h-2 rounded-full bg-rose-500 ring-2 ring-rose-100 dark:ring-rose-950" />
+                                                            ) : isCompleted ? (
+                                                                <div className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950" />
+                                                            ) : isCurrent ? (
+                                                                <div className="w-2 h-2 rounded-full bg-[#FF4A1F] ring-2 ring-orange-200 dark:ring-orange-950" />
+                                                            ) : (
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                                                            )}
                                                         </div>
-                                                        {step.user && (
-                                                            <div className="text-[10.5px] text-slate-500">
-                                                                By: <span className="text-slate-700 dark:text-slate-300 font-medium">{step.user}</span>
+
+                                                        {/* Step Content (Clean typography, no card) */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span
+                                                                    className={`text-xs font-semibold uppercase tracking-wide ${isCancelled
+                                                                            ? 'text-rose-600 dark:text-rose-400'
+                                                                            : isCompleted
+                                                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                                                : isCurrent
+                                                                                    ? 'text-slate-900 dark:text-white font-bold'
+                                                                                    : 'text-slate-500 dark:text-slate-400'
+                                                                        }`}
+                                                                >
+                                                                    {step.status.replace('_', ' ')}
+                                                                </span>
+                                                                <span className="text-[11.5px] text-slate-400 font-mono shrink-0">
+                                                                    {step.timestamp}
+                                                                </span>
                                                             </div>
-                                                        )}
-                                                        {step.reason && (
-                                                            <div className="text-[10.5px] text-slate-600 dark:text-slate-400 italic mt-0.5">
-                                                                "{step.reason}"
-                                                            </div>
-                                                        )}
+
+                                                            {step.user && (
+                                                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                                                    By <span className="text-slate-600 dark:text-slate-300">{step.user}</span>
+                                                                </div>
+                                                            )}
+
+                                                            {step.reason && (
+                                                                <div className="text-[11px] text-slate-500 dark:text-slate-400 italic mt-0.5">
+                                                                    "{step.reason}"
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>

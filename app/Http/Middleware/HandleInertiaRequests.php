@@ -17,6 +17,10 @@ class HandleInertiaRequests extends Middleware
 
     public function version(Request $request): ?string
     {
+        if (file_exists(public_path('hot'))) {
+            return 'dev-hot';
+        }
+
         return parent::version($request);
     }
 
@@ -60,6 +64,7 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
                 'lastSale' => fn () => $request->session()->get('lastSale'),
+                'lastClosedSessionId' => fn () => $request->session()->get('lastClosedSessionId'),
             ],
         ];
     }

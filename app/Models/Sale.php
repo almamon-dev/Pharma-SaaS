@@ -37,11 +37,19 @@ class Sale extends Model
         'payment_status',
         'doctor_name',
         'prescription_notes',
+        'prescription_reference',
         'prescription_file',
         'requires_verification',
         'verification_status', // 'not_required', 'pending', 'approved', 'rejected'
         'verified_by',
+        'discount_percentage',
+        'discount_status', // 'none', 'approved', 'pending_approval', 'rejected'
+        'discount_requested_by',
+        'discount_approved_by',
+        'discount_approved_at',
+        'discount_rejection_reason',
         'notes',
+        'internal_notes',
         'sold_at',
         'assigned_at',
         'processing_started_at',
@@ -55,6 +63,7 @@ class Sale extends Model
         return [
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'discount_percentage' => 'decimal:2',
             'tax_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
@@ -65,6 +74,7 @@ class Sale extends Model
             'processing_started_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'discount_approved_at' => 'datetime',
             'requires_verification' => 'boolean',
         ];
     }
@@ -107,6 +117,16 @@ class Sale extends Model
     public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function discountRequestedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'discount_requested_by');
+    }
+
+    public function discountApprovedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'discount_approved_by');
     }
 
     public function payments(): HasMany

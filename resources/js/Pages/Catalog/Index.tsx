@@ -13,8 +13,6 @@ import {
     Package,
     Plus,
     Printer,
-    RefreshCw,
-    Search,
     Tag,
     Trash2,
     UploadCloud,
@@ -26,6 +24,9 @@ import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { MetricCard } from '@/Components/cards/MetricCard';
+import { DataTable, Column, EmptyState, TableActionMenu } from '@/Components/tables';
+import { BarcodeSvg } from '@/Components/BarcodeSvg';
+import { formatCurrency } from '@/lib/format';
 import { SharedPageProps } from '@/types';
 
 interface CategoryItem {
@@ -89,6 +90,9 @@ interface ProductItem {
     strength: string | null;
     dosage_form: string | null;
     base_unit: string;
+    mrp?: number | string | null;
+    selling_price?: number | string | null;
+    purchase_price?: number | string | null;
     is_active: boolean;
     is_controlled: boolean;
     track_batch: boolean;
@@ -127,8 +131,9 @@ export default function CatalogIndex({
     canExport,
     canPrintLabels,
 }: Props) {
-    const { locale } = usePage<SharedPageProps>().props;
+    const { locale, tenant } = usePage<SharedPageProps>().props;
     const isBn = locale === 'bn';
+    const currency = tenant?.currentTenant?.currency_code ?? 'BDT';
 
     const [activeTab, setActiveTab] = useState<
         'products' | 'categories' | 'companies' | 'generics' | 'discounts' | 'import_export'
@@ -137,7 +142,7 @@ export default function CatalogIndex({
     // Products state
     const [products, setProducts] = useState<ProductItem[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery] = useState('');
     const [filterType, setFilterType] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterCompany, setFilterCompany] = useState('');
@@ -189,6 +194,9 @@ export default function CatalogIndex({
         strength: string;
         dosage_form: string;
         base_unit: string;
+        mrp: string;
+        selling_price: string;
+        purchase_price: string;
         track_batch: boolean;
         is_controlled: boolean;
         default_discount_type: string;
@@ -207,6 +215,9 @@ export default function CatalogIndex({
         strength: '',
         dosage_form: 'tablet',
         base_unit: 'pcs',
+        mrp: '',
+        selling_price: '',
+        purchase_price: '',
         track_batch: true,
         is_controlled: false,
         default_discount_type: 'none',
@@ -232,7 +243,7 @@ export default function CatalogIndex({
                 const params = new URLSearchParams({
                     q,
                     ...(filterType ? { type: filterType } : {}),
-                    limit: '30',
+                    limit: '50',
                 });
                 const res = await fetch(`/api/catalog/products/search?${params.toString()}`);
                 const data = await res.json();
@@ -244,7 +255,7 @@ export default function CatalogIndex({
                     ...(filterCompany ? { company_id: filterCompany } : {}),
                     ...(filterGeneric ? { generic_id: filterGeneric } : {}),
                     ...(filterStatus !== '' ? { is_active: filterStatus } : {}),
-                    per_page: '30',
+                    per_page: '100',
                 });
                 const res = await fetch(`/api/catalog/products?${params.toString()}`);
                 const data = await res.json();
@@ -263,6 +274,445 @@ export default function CatalogIndex({
         }, 200);
         return () => clearTimeout(timer);
     }, [searchQuery, filterType, filterCategory, filterCompany, filterGeneric, filterStatus]);
+
+    const [activeProductTab, setActiveProductTab] = useState<'all' | 'medicine' | 'non_medicine' | 'active' | 'inactive'>('all');
+
+    // Enriched products for fast in-memory filtering and column rendering
+    const enrichedProducts = useMemo(() => {
+        return products.map((p) => ({
+            ...p,
+            category_name: p.category?.name || '',
+            company_name: p.company?.name || '',
+            generic_name: p.generic?.name || '',
+            barcode_list: p.barcodes?.map((b) => b.barcode).join(' ') || '',
+        }));
+    }, [products]);
+
+    // Product columns matching PharmaCore standard design
+    const productColumns = useMemo<Column<any>[]>(
+        () => [
+            {
+                id: 'sku',
+                label: isBn ? 'এসকেইউ' : 'SKU',
+                sortable: true,
+                render: (p) => (
+                    <span className="font-mono font-bold text-[#FF4A1F] text-[11.5px]">
+                        {p.sku || '—'}
+                    </span>
+                ),
+            },
+            {
+                id: 'barcode',
+                label: isBn ? 'বারকোড' : 'Barcode',
+                render: (p) => {
+                    const primary = p.barcodes?.find((b: any) => b.is_primary) || p.barcodes?.[0];
+                    return primary ? (
+                        <div className="py-0.5">
+                            <BarcodeSvg value={primary.barcode} compact />
+                        </div>
+                    ) : (
+                        <span className="text-[11.5px] font-medium text-slate-400">—</span>
+                    );
+                },
+            },
+            {
+                id: 'name',
+                label: isBn ? 'ওষুধ / পণ্যের নাম' : 'Medicine / Product',
+                sortable: true,
+                render: (p) => (
+                    <div>
+                        <div className="font-bold text-slate-900 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap">
+                            <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">{p.name}</span>
+                            {p.strength && (
+                                <span className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300">
+                                    {p.strength}
+                                </span>
+                            )}
+                            {p.is_controlled && (
+                                <span className="text-[9.5px] font-extrabold text-[#FF4A1F] px-1 py-0.2 rounded bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900">
+                                    Rx
+                                </span>
+                            )}
+                        </div>
+                        {p.name_bn && (
+                            <div className="text-[9.5px] text-slate-500 dark:text-slate-400 font-bengali mt-0.5">
+                                {p.name_bn}
+                            </div>
+                        )}
+                    </div>
+                ),
+            },
+            {
+                id: 'generic_company',
+                label: isBn ? 'জেনেরিক ও কোম্পানি' : 'Generic / Mfg',
+                sortable: true,
+                render: (p) => {
+                    const summary = `${p.generic?.name || ''}${
+                        p.company?.name ? ` · ${p.company.name}` : ''
+                    }`;
+                    return (
+                        <span
+                            className="block max-w-[220px] truncate text-[11.5px] font-bold text-slate-900 dark:text-slate-200"
+                            title={summary}
+                        >
+                            {summary || '—'}
+                        </span>
+                    );
+                },
+            },
+            {
+                id: 'category',
+                label: isBn ? 'ক্যাটাগরি' : 'Category',
+                sortable: true,
+                render: (p) => (
+                    <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+                        {p.category?.name || '—'}
+                    </span>
+                ),
+            },
+            {
+                id: 'type',
+                label: isBn ? 'ধরন' : 'Type / Form',
+                sortable: true,
+                render: (p) => (
+                    <div className="flex flex-col items-start gap-0.5">
+                        <Badge variant={p.type === 'medicine' ? 'sky' : 'neutral'} className="text-[9.5px]">
+                            {p.type === 'medicine' ? (isBn ? 'ওষুধ' : 'Medicine') : (isBn ? 'অন্যান্য' : 'Item')}
+                        </Badge>
+                        {p.dosage_form && (
+                            <span className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300 capitalize">
+                                {p.dosage_form}
+                            </span>
+                        )}
+                    </div>
+                ),
+            },
+            {
+                id: 'base_unit',
+                label: isBn ? 'ইউনিট' : 'Base Unit',
+                render: (p) => (
+                    <span className="text-[11.5px] uppercase font-bold text-slate-900 dark:text-slate-200">
+                        {p.base_unit}
+                    </span>
+                ),
+            },
+            {
+                id: 'pricing',
+                label: isBn ? 'বিক্রয় মূল্য / MRP' : 'Sale / MRP',
+                sortable: true,
+                className: 'text-right',
+                render: (p) => {
+                    const mrp = Number(p.mrp ?? 0);
+                    const sale = Number(p.selling_price ?? 0) || mrp;
+                    return (
+                        <div className="inline-flex flex-col items-end whitespace-nowrap tabular-nums">
+                            <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+                                {sale > 0 ? formatCurrency(sale, currency) : '—'}
+                            </span>
+                            {mrp > 0 && (
+                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                    MRP {formatCurrency(mrp, currency)}
+                                </span>
+                            )}
+                        </div>
+                    );
+                },
+            },
+            {
+                id: 'is_active',
+                label: isBn ? 'স্ট্যাটাস' : 'Status',
+                sortable: true,
+                render: (p) => (
+                    <Badge variant={p.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+                        {p.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
+                    </Badge>
+                ),
+            },
+        ],
+        [isBn, currency]
+    );
+
+    // Categories columns
+    const categoryColumns = useMemo<Column<CategoryItem>[]>(
+        () => [
+            {
+                id: 'name',
+                label: isBn ? 'ক্যাটাগরির নাম' : 'Category Name',
+                sortable: true,
+                render: (c) => (
+                    <div style={{ paddingLeft: `${c.depth * 16}px` }} className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200 flex items-center">
+                        {c.depth > 0 && <span className="text-slate-400 dark:text-slate-500 mr-1.5 font-mono">└─</span>}
+                        <span>{c.name}</span>
+                    </div>
+                ),
+            },
+            {
+                id: 'name_bn',
+                label: isBn ? 'বাংলা নাম' : 'Bengali Name',
+                render: (c) => (
+                    <span className="text-slate-500 dark:text-slate-400 font-bengali text-[11.5px] font-bold">
+                        {c.name_bn || '—'}
+                    </span>
+                ),
+            },
+            {
+                id: 'depth',
+                label: isBn ? 'লেভেল / ডেপথ' : 'Depth',
+                render: (c) => (
+                    <Badge variant="slate" className="text-[9.5px]">
+                        Level {c.depth + 1}
+                    </Badge>
+                ),
+            },
+            {
+                id: 'parent',
+                label: isBn ? 'প্যারেন্ট ক্যাটাগরি' : 'Parent',
+                render: (c) => {
+                    const parent = initialCategories.find((p) => p.id === c.parent_id);
+                    return (
+                        <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+                            {parent?.name || 'Root'}
+                        </span>
+                    );
+                },
+            },
+            {
+                id: 'is_active',
+                label: isBn ? 'স্ট্যাটাস' : 'Status',
+                sortable: true,
+                render: (c) => (
+                    <Badge variant={c.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+                        {c.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
+                    </Badge>
+                ),
+            },
+        ],
+        [isBn, initialCategories]
+    );
+
+    // Companies columns
+    const companyColumns = useMemo<Column<CompanyItem>[]>(
+        () => [
+            {
+                id: 'name',
+                label: isBn ? 'কোম্পানির নাম' : 'Company Name',
+                sortable: true,
+                render: (c) => (
+                    <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+                        {c.name}
+                    </span>
+                ),
+            },
+            {
+                id: 'name_bn',
+                label: isBn ? 'বাংলা নাম' : 'Bengali Name',
+                render: (c) => (
+                    <span className="text-slate-500 dark:text-slate-400 font-bengali text-[11.5px] font-bold">
+                        {c.name_bn || '—'}
+                    </span>
+                ),
+            },
+            {
+                id: 'is_active',
+                label: isBn ? 'স্ট্যাটাস' : 'Status',
+                sortable: true,
+                render: (c) => (
+                    <Badge variant={c.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+                        {c.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
+                    </Badge>
+                ),
+            },
+        ],
+        [isBn]
+    );
+
+    // Generics columns
+    const genericColumns = useMemo<Column<GenericItem>[]>(
+        () => [
+            {
+                id: 'name',
+                label: isBn ? 'জেনেরিক নাম' : 'Generic Name',
+                sortable: true,
+                render: (g) => (
+                    <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+                        {g.name}
+                    </span>
+                ),
+            },
+            {
+                id: 'is_active',
+                label: isBn ? 'স্ট্যাটাস' : 'Status',
+                sortable: true,
+                render: (g) => (
+                    <Badge variant={g.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+                        {g.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
+                    </Badge>
+                ),
+            },
+        ],
+        [isBn]
+    );
+
+    // Header tabs for Products table
+    const productHeaderTabs = (
+        <div className="flex items-center gap-1.5 sm:gap-3 overflow-x-auto hide-scrollbar mb-[-1px]">
+            {[
+                { key: 'all', label: isBn ? 'সকল পণ্য' : 'All Products', count: products.length },
+                {
+                    key: 'medicine',
+                    label: isBn ? 'ওষুধ' : 'Medicines',
+                    count: products.filter((p) => p.type === 'medicine').length,
+                },
+                {
+                    key: 'non_medicine',
+                    label: isBn ? 'অন্যান্য পণ্য' : 'Non-Medicine',
+                    count: products.filter((p) => p.type !== 'medicine').length,
+                },
+                {
+                    key: 'active',
+                    label: isBn ? 'সক্রিয়' : 'Active',
+                    count: products.filter((p) => p.is_active).length,
+                },
+                {
+                    key: 'inactive',
+                    label: isBn ? 'নিষ্ক্রিয়' : 'Inactive',
+                    count: products.filter((p) => !p.is_active).length,
+                },
+            ].map((tab) => {
+                const isActive = activeProductTab === tab.key;
+                return (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => {
+                            setActiveProductTab(tab.key as any);
+                            if (tab.key === 'all') {
+                                setFilterType('');
+                                setFilterStatus('');
+                            } else if (tab.key === 'medicine' || tab.key === 'non_medicine') {
+                                setFilterType(tab.key);
+                                setFilterStatus('');
+                            } else if (tab.key === 'active') {
+                                setFilterType('');
+                                setFilterStatus('true');
+                            } else if (tab.key === 'inactive') {
+                                setFilterType('');
+                                setFilterStatus('false');
+                            }
+                        }}
+                        className={`flex items-center gap-1.5 pb-2.5 border-b transition-colors whitespace-nowrap cursor-pointer px-1 ${
+                            isActive
+                                ? 'border-[#ff4a1f] text-[#ff4a1f] dark:border-[#ff4a1f] dark:text-[#ff4a1f]'
+                                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                    >
+                        <span className={`text-[13px] ${isActive ? 'font-bold' : 'font-medium'}`}>
+                            {tab.label}
+                        </span>
+                        <span
+                            className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full transition-colors ${
+                                isActive
+                                    ? 'bg-orange-50 dark:bg-[#ff4a1f]/20 text-[#ff4a1f] dark:text-orange-400'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                            }`}
+                        >
+                            {tab.count}
+                        </span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+
+    // Filter popover content for Products table
+    const productFilterContent = (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {isBn ? 'ক্যাটাগরি' : 'Category'}
+                </label>
+                <Select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(String(e.target.value))}
+                    size="sm"
+                >
+                    <option value="">{isBn ? 'সব ক্যাটাগরি' : 'Select Category'}</option>
+                    {initialCategories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.name}
+                        </option>
+                    ))}
+                </Select>
+            </div>
+            <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {isBn ? 'কোম্পানি' : 'Company'}
+                </label>
+                <Select
+                    value={filterCompany}
+                    onChange={(e) => setFilterCompany(String(e.target.value))}
+                    size="sm"
+                >
+                    <option value="">{isBn ? 'সব কোম্পানি' : 'Select Company'}</option>
+                    {initialCompanies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.name}
+                        </option>
+                    ))}
+                </Select>
+            </div>
+            <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {isBn ? 'জেনেরিক' : 'Generic'}
+                </label>
+                <Select
+                    value={filterGeneric}
+                    onChange={(e) => setFilterGeneric(String(e.target.value))}
+                    size="sm"
+                >
+                    <option value="">{isBn ? 'সব জেনেরিক' : 'Select Generic'}</option>
+                    {initialGenerics.map((g) => (
+                        <option key={g.id} value={g.id}>
+                            {g.name}
+                        </option>
+                    ))}
+                </Select>
+            </div>
+            <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {isBn ? 'স্ট্যাটাস' : 'Status'}
+                </label>
+                <Select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(String(e.target.value))}
+                    size="sm"
+                >
+                    <option value="">{isBn ? 'সকল স্ট্যাটাস' : 'All Status'}</option>
+                    <option value="true">{isBn ? 'সক্রিয় (Active)' : 'Active'}</option>
+                    <option value="false">{isBn ? 'নিষ্ক্রিয় (Inactive)' : 'Inactive'}</option>
+                </Select>
+            </div>
+            {(filterCategory || filterCompany || filterGeneric || filterStatus || filterType) && (
+                <div className="sm:col-span-2 md:col-span-4 flex justify-end">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            setFilterCategory('');
+                            setFilterCompany('');
+                            setFilterGeneric('');
+                            setFilterStatus('');
+                            setFilterType('');
+                            setActiveProductTab('all');
+                        }}
+                    >
+                        {isBn ? 'ফিল্টার রিসেট করুন' : 'Reset Filters'}
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
 
     // Live unit conversion preview: e.g. "1 box = 10 strips = 100 pcs"
     const unitConversionSummary = useMemo(() => {
@@ -332,6 +782,14 @@ export default function CatalogIndex({
         try {
             const payload = {
                 ...prodForm,
+                mrp: prodForm.mrp !== '' ? Number(prodForm.mrp) : 0,
+                selling_price:
+                    prodForm.selling_price !== ''
+                        ? Number(prodForm.selling_price)
+                        : prodForm.mrp !== ''
+                          ? Number(prodForm.mrp)
+                          : 0,
+                purchase_price: prodForm.purchase_price !== '' ? Number(prodForm.purchase_price) : 0,
                 default_discount_type: prodForm.default_discount_type === 'none' ? null : prodForm.default_discount_type,
             };
 
@@ -562,6 +1020,9 @@ export default function CatalogIndex({
             strength: '',
             dosage_form: 'tablet',
             base_unit: 'pcs',
+            mrp: '',
+            selling_price: '',
+            purchase_price: '',
             track_batch: true,
             is_controlled: false,
             default_discount_type: 'none',
@@ -682,245 +1143,106 @@ export default function CatalogIndex({
                 {/* TAB 1: Products */}
                 {activeTab === 'products' && (
                     <div className="space-y-4">
-                        {/* Filters Bar */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 bg-white dark:bg-[#151921] p-3.5 sm:p-4 rounded-[3px] border border-slate-200 dark:border-slate-800 shadow-xs">
-                            <div className="relative md:col-span-2">
-                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                <Input
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder={
-                                        isBn ? 'নাম, জেনেরিক বা বারকোড দিয়ে সার্চ...' : 'Search by name, generic, barcode...'
-                                    }
-                                    className="pl-9 text-xs"
+                        <DataTable
+                            tableId="catalog-products-table"
+                            data={enrichedProducts}
+                            columns={productColumns}
+                            isLoading={loadingProducts}
+                            headerTabs={productHeaderTabs}
+                            filterContent={productFilterContent}
+                            searchPlaceholder={
+                                isBn
+                                    ? "নাম, জেনেরিক বা বারকোড দিয়ে সার্চ..."
+                                    : "Search by brand name, generic, SKU, or barcode..."
+                            }
+                            selectable={false}
+                            hideCheckbox={true}
+                            compact={true}
+                            syncUrlParams={false}
+                            onRefresh={() => fetchProducts()}
+                            isRefreshing={loadingProducts}
+                            actions={(p) => (
+                                <TableActionMenu
+                                    items={[
+                                        {
+                                            key: "barcode",
+                                            label: isBn ? "বারকোড লেবেল প্রিন্ট" : "Print Barcode Label",
+                                            icon: <Printer className="h-3.5 w-3.5" />,
+                                            hidden: !canPrintLabels || !p.barcodes?.length,
+                                            onClick: () => {
+                                                setSelectedLabelProduct(p);
+                                                setLabelModalOpen(true);
+                                            },
+                                        },
+                                        {
+                                            key: "toggle",
+                                            label: p.is_active
+                                                ? (isBn ? "নিষ্ক্রিয় করুন" : "Deactivate Product")
+                                                : (isBn ? "সক্রিয় করুন" : "Activate Product"),
+                                            icon: <Check className="h-3.5 w-3.5" />,
+                                            onClick: () => handleToggleActive(p),
+                                        },
+                                        {
+                                            key: "edit",
+                                            label: isBn ? "এডিট করুন" : "Edit Product",
+                                            icon: <Edit2 className="h-3.5 w-3.5" />,
+                                            onClick: () => {
+                                                setEditingProduct(p);
+                                                setProdForm({
+                                                    type: p.type,
+                                                    name: p.name,
+                                                    name_bn: p.name_bn || "",
+                                                    sku: p.sku || "",
+                                                    category_id: p.category?.id || "",
+                                                    company_id: p.company?.id || "",
+                                                    generic_id: p.generic?.id || "",
+                                                    strength: p.strength || "",
+                                                    dosage_form: p.dosage_form || "tablet",
+                                                    base_unit: p.base_unit || "pcs",
+                                                    mrp: p.mrp !== null && p.mrp !== undefined && Number(p.mrp) > 0 ? String(p.mrp) : "",
+                                                    selling_price: p.selling_price !== null && p.selling_price !== undefined && Number(p.selling_price) > 0 ? String(p.selling_price) : "",
+                                                    purchase_price: p.purchase_price !== null && p.purchase_price !== undefined && Number(p.purchase_price) > 0 ? String(p.purchase_price) : "",
+                                                    track_batch: p.track_batch,
+                                                    is_controlled: p.is_controlled,
+                                                    default_discount_type: p.default_discount_type || "none",
+                                                    default_discount_value: p.default_discount_value || 0,
+                                                    units: p.units || [
+                                                        { unit_name: p.base_unit, conversion_to_base: 1, is_sale_unit: true, is_purchase_unit: true, is_default_sale: true },
+                                                    ],
+                                                    barcodes: p.barcodes || [],
+                                                    branch_settings: branches.map((b) => ({
+                                                        branch_id: b.id,
+                                                        min_stock: 10,
+                                                        max_stock: 500,
+                                                        reorder_level: 20,
+                                                        shelf_location: "",
+                                                    })),
+                                                });
+                                                setProductDrawerOpen(true);
+                                            },
+                                        },
+                                        {
+                                            key: "delete",
+                                            label: isBn ? "ডিলিট করুন" : "Delete Product",
+                                            icon: <Trash2 className="h-3.5 w-3.5 text-rose-500" />,
+                                            variant: "danger",
+                                            onClick: () => handleDeleteProduct(p.id),
+                                        },
+                                    ]}
                                 />
-                            </div>
-
-                            <Select
-                                value={filterType}
-                                onChange={(e) => setFilterType(String(e.target.value))}
-                                className="text-xs"
-                            >
-                                <option value="">{isBn ? 'সব ধরন' : 'All Types'}</option>
-                                <option value="medicine">{isBn ? 'ওষুধ (Medicine)' : 'Medicine'}</option>
-                                <option value="non_medicine">{isBn ? 'অন্যান্য (Non-Medicine)' : 'Non-Medicine'}</option>
-                            </Select>
-
-                            <Select
-                                value={filterCategory}
-                                onChange={(e) => setFilterCategory(String(e.target.value))}
-                                className="text-xs"
-                            >
-                                <option value="">{isBn ? 'সব ক্যাটাগরি' : 'All Categories'}</option>
-                                {initialCategories.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.name}
-                                    </option>
-                                ))}
-                            </Select>
-
-                            <Select
-                                value={filterCompany}
-                                onChange={(e) => setFilterCompany(String(e.target.value))}
-                                className="text-xs"
-                            >
-                                <option value="">{isBn ? 'সব কোম্পানি' : 'All Companies'}</option>
-                                {initialCompanies.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.name}
-                                    </option>
-                                ))}
-                            </Select>
-
-                            <Select
-                                value={filterGeneric}
-                                onChange={(e) => setFilterGeneric(String(e.target.value))}
-                                className="text-xs"
-                            >
-                                <option value="">{isBn ? 'সব জেনেরিক' : 'All Generics'}</option>
-                                {initialGenerics.map((g) => (
-                                    <option key={g.id} value={g.id}>
-                                        {g.name}
-                                    </option>
-                                ))}
-                            </Select>
-
-                            <Select
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(String(e.target.value))}
-                                className="text-xs"
-                            >
-                                <option value="">{isBn ? 'সকল স্ট্যাটাস' : 'All Status'}</option>
-                                <option value="true">{isBn ? 'সক্রিয় (Active)' : 'Active'}</option>
-                                <option value="false">{isBn ? 'নিষ্ক্রিয় (Inactive)' : 'Inactive'}</option>
-                            </Select>
-                        </div>
-
-                        {/* Products Table */}
-                        <div className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#151921] overflow-hidden shadow-xs">
-                            <table className="w-full text-left text-xs">
-                                <thead className="bg-slate-50/80 dark:bg-[#12161c] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-                                    <tr>
-                                        <th className="px-4 py-3">{isBn ? 'পণ্যের নাম' : 'Product Name'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'ধরন / গ্রুপ' : 'Type / Group'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'জেনেরিক ও কোম্পানি' : 'Generic & Company'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'ইউনিট' : 'Base Unit'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'বারকোড' : 'Barcodes'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                                        <th className="px-4 py-3 text-right">{isBn ? 'অ্যাকশন' : 'Actions'}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
-                                    {loadingProducts ? (
-                                        <tr>
-                                            <td colSpan={7} className="text-center py-12 text-slate-400">
-                                                <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-[#FF4A1F]" />
-                                                <span>{isBn ? 'লোড হচ্ছে...' : 'Loading catalog...'}</span>
-                                            </td>
-                                        </tr>
-                                    ) : products.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={7} className="text-center py-12 text-slate-400">
-                                                <Package className="h-8 w-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                                                <p className="font-semibold text-slate-700 dark:text-slate-300">
-                                                    {isBn ? 'কোনো পণ্য পাওয়া যায়নি' : 'No products found'}
-                                                </p>
-                                                <p className="text-[11px] text-slate-500 mt-1">
-                                                    {isBn ? 'সার্চ ফিল্টার পরিবর্তন করুন বা নতুন পণ্য যোগ করুন।' : 'Try adjusting filters or add your first product.'}
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        products.map((p) => (
-                                            <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                                        <span>{p.name}</span>
-                                                        {p.strength && (
-                                                            <span className="text-[10px] px-1.5 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">
-                                                                {p.strength}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {p.name_bn && (
-                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bengali">
-                                                            {p.name_bn}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <Badge variant={p.type === 'medicine' ? 'sky' : 'neutral'}>
-                                                        {p.type === 'medicine' ? (isBn ? 'ওষুধ' : 'Medicine') : (isBn ? 'অন্যান্য' : 'Item')}
-                                                    </Badge>
-                                                    {p.dosage_form && (
-                                                        <span className="block text-[11px] text-slate-500 dark:text-slate-400 capitalize mt-0.5">
-                                                            {p.dosage_form}
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="text-slate-800 dark:text-slate-200 font-medium">{p.generic?.name || '—'}</div>
-                                                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{p.company?.name || '—'}</div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className="font-mono text-slate-800 dark:text-slate-200 uppercase font-semibold text-xs">
-                                                        {p.base_unit}
-                                                    </span>
-                                                    <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                                                        {p.units?.length || 1} {isBn ? 'টি ইউনিট' : 'units'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Barcode className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                                                        <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-                                                            {p.barcodes?.[0]?.barcode || '—'}
-                                                        </span>
-                                                        {p.barcodes && p.barcodes.length > 1 && (
-                                                            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1 rounded-[3px]">
-                                                                +{p.barcodes.length - 1}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <Badge variant={p.is_active ? 'success' : 'failed'}>
-                                                        {p.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
-                                                    </Badge>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        {canPrintLabels && (
-                                                            <button
-                                                                title={isBn ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Label'}
-                                                                onClick={() => {
-                                                                    setSelectedLabelProduct(p);
-                                                                    setLabelModalOpen(true);
-                                                                }}
-                                                                className="p-1.5 rounded-[3px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                                                            >
-                                                                <Printer className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            title={isBn ? 'স্ট্যাটাস পরিবর্তন' : 'Toggle Active'}
-                                                            onClick={() => handleToggleActive(p)}
-                                                            className="p-1.5 rounded-[3px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                                                        >
-                                                            <Check className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button
-                                                            title={isBn ? 'এডিট করুন' : 'Edit Product'}
-                                                            onClick={() => {
-                                                                setEditingProduct(p);
-                                                                setProdForm({
-                                                                    type: p.type,
-                                                                    name: p.name,
-                                                                    name_bn: p.name_bn || '',
-                                                                    sku: p.sku || '',
-                                                                    category_id: p.category?.id || '',
-                                                                    company_id: p.company?.id || '',
-                                                                    generic_id: p.generic?.id || '',
-                                                                    strength: p.strength || '',
-                                                                    dosage_form: p.dosage_form || 'tablet',
-                                                                    base_unit: p.base_unit || 'pcs',
-                                                                    track_batch: p.track_batch,
-                                                                    is_controlled: p.is_controlled,
-                                                                    default_discount_type: p.default_discount_type || 'none',
-                                                                    default_discount_value: p.default_discount_value || 0,
-                                                                    units: p.units || [
-                                                                        { unit_name: p.base_unit, conversion_to_base: 1, is_sale_unit: true, is_purchase_unit: true, is_default_sale: true },
-                                                                    ],
-                                                                    barcodes: p.barcodes || [],
-                                                                    branch_settings: branches.map((b) => ({
-                                                                        branch_id: b.id,
-                                                                        min_stock: 10,
-                                                                        max_stock: 500,
-                                                                        reorder_level: 20,
-                                                                        shelf_location: '',
-                                                                    })),
-                                                                });
-                                                                setProductDrawerOpen(true);
-                                                            }}
-                                                            className="p-1.5 rounded-[3px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                                                        >
-                                                            <Edit2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button
-                                                            title={isBn ? 'ডিলিট করুন' : 'Delete Product'}
-                                                            onClick={() => handleDeleteProduct(p.id)}
-                                                            className="p-1.5 rounded-[3px] hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                            )}
+                            emptyState={
+                                <EmptyState
+                                    icon={Package}
+                                    title={isBn ? "কোনো পণ্য পাওয়া যায়নি" : "No products found"}
+                                    description={
+                                        isBn
+                                            ? "সার্চ ফিল্টার পরিবর্তন করুন বা নতুন পণ্য যোগ করুন।"
+                                            : "Try adjusting filters or add your first product."
+                                    }
+                                />
+                            }
+                        />
                     </div>
                 )}
 
@@ -930,7 +1252,7 @@ export default function CatalogIndex({
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <FolderPlus className="h-4 w-4 text-[#FF4A1F]" />
-                                <span>{isBn ? 'ক্যাটাগরি তালিকা' : 'Categories Directory'}</span>
+                                <span>{isBn ? "ক্যাটাগরি তালিকা" : "Categories Directory"}</span>
                             </h2>
                             <Button
                                 size="sm"
@@ -939,49 +1261,31 @@ export default function CatalogIndex({
                                 className="gap-1.5 shadow-xs"
                             >
                                 <Plus className="h-3.5 w-3.5" />
-                                <span>{isBn ? 'নতুন ক্যাটাগরি' : 'Add Category'}</span>
+                                <span>{isBn ? "নতুন ক্যাটাগরি" : "Add Category"}</span>
                             </Button>
                         </div>
 
-                        <div className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#151921] overflow-hidden shadow-xs">
-                            <table className="w-full text-left text-xs">
-                                <thead className="bg-slate-50/80 dark:bg-[#12161c] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase text-[11px]">
-                                    <tr>
-                                        <th className="px-4 py-3">{isBn ? 'ক্যাটাগরির নাম' : 'Category Name'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'বাংলা নাম' : 'Bengali Name'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'লেভেল / ডেপথ' : 'Depth'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'প্যারেন্ট ক্যাটাগরি' : 'Parent'}</th>
-                                        <th className="px-4 py-3 text-right">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
-                                    {initialCategories.map((c) => (
-                                        <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
-                                                <div style={{ paddingLeft: `${c.depth * 16}px` }}>
-                                                    {c.depth > 0 && <span className="text-slate-400 dark:text-slate-500 mr-1.5">└─</span>}
-                                                    {c.name}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-bengali">{c.name_bn || '—'}</td>
-                                            <td className="px-4 py-3">
-                                                <Badge variant="slate">
-                                                    Level {c.depth + 1}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                                                {initialCategories.find((p) => p.id === c.parent_id)?.name || 'Root'}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Badge variant={c.is_active ? 'success' : 'neutral'}>
-                                                    {c.is_active ? 'Active' : 'Inactive'}
-                                                </Badge>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable
+                            tableId="catalog-categories-table"
+                            data={initialCategories}
+                            columns={categoryColumns}
+                            searchPlaceholder={isBn ? "ক্যাটাগরি সার্চ করুন..." : "Search categories..."}
+                            selectable={false}
+                            hideCheckbox={true}
+                            compact={true}
+                            syncUrlParams={false}
+                            emptyState={
+                                <EmptyState
+                                    icon={FolderPlus}
+                                    title={isBn ? "কোনো ক্যাটাগরি পাওয়া যায়নি" : "No categories found"}
+                                    description={
+                                        isBn
+                                            ? "নতুন ক্যাটাগরি তৈরি করতে উপরের বাটনে ক্লিক করুন।"
+                                            : "Create your first product category."
+                                    }
+                                />
+                            }
+                        />
                     </div>
                 )}
 
@@ -991,7 +1295,7 @@ export default function CatalogIndex({
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <Layers className="h-4 w-4 text-[#FF4A1F]" />
-                                <span>{isBn ? 'ফার্মাসিউটিক্যাল কোম্পানি তালিকা' : 'Pharmaceutical Companies'}</span>
+                                <span>{isBn ? "ফার্মাসিউটিক্যাল কোম্পানি তালিকা" : "Pharmaceutical Companies"}</span>
                             </h2>
                             <Button
                                 size="sm"
@@ -1000,34 +1304,31 @@ export default function CatalogIndex({
                                 className="gap-1.5 shadow-xs"
                             >
                                 <Plus className="h-3.5 w-3.5" />
-                                <span>{isBn ? 'নতুন কোম্পানি' : 'Add Company'}</span>
+                                <span>{isBn ? "নতুন কোম্পানি" : "Add Company"}</span>
                             </Button>
                         </div>
 
-                        <div className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#151921] overflow-hidden shadow-xs">
-                            <table className="w-full text-left text-xs">
-                                <thead className="bg-slate-50/80 dark:bg-[#12161c] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase text-[11px]">
-                                    <tr>
-                                        <th className="px-4 py-3">{isBn ? 'কোম্পানির নাম' : 'Company Name'}</th>
-                                        <th className="px-4 py-3">{isBn ? 'বাংলা নাম' : 'Bengali Name'}</th>
-                                        <th className="px-4 py-3 text-right">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
-                                    {initialCompanies.map((c) => (
-                                        <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{c.name}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-bengali">{c.name_bn || '—'}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Badge variant={c.is_active ? 'success' : 'neutral'}>
-                                                    {c.is_active ? 'Active' : 'Inactive'}
-                                                </Badge>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable
+                            tableId="catalog-companies-table"
+                            data={initialCompanies}
+                            columns={companyColumns}
+                            searchPlaceholder={isBn ? "কোম্পানি সার্চ করুন..." : "Search companies..."}
+                            selectable={false}
+                            hideCheckbox={true}
+                            compact={true}
+                            syncUrlParams={false}
+                            emptyState={
+                                <EmptyState
+                                    icon={Layers}
+                                    title={isBn ? "কোনো কোম্পানি পাওয়া যায়নি" : "No companies found"}
+                                    description={
+                                        isBn
+                                            ? "নতুন কোম্পানি যোগ করতে উপরের বাটনে ক্লিক করুন।"
+                                            : "Add pharmaceutical manufacturers and brands."
+                                    }
+                                />
+                            }
+                        />
                     </div>
                 )}
 
@@ -1037,7 +1338,7 @@ export default function CatalogIndex({
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <FileText className="h-4 w-4 text-[#FF4A1F]" />
-                                <span>{isBn ? 'ওষুধের জেনেরিক গ্রুপ তালিকা' : 'Generic Molecules'}</span>
+                                <span>{isBn ? "ওষুধের জেনেরিক গ্রুপ তালিকা" : "Generic Molecules"}</span>
                             </h2>
                             <Button
                                 size="sm"
@@ -1046,34 +1347,34 @@ export default function CatalogIndex({
                                 className="gap-1.5 shadow-xs"
                             >
                                 <Plus className="h-3.5 w-3.5" />
-                                <span>{isBn ? 'নতুন জেনেরিক' : 'Add Generic'}</span>
+                                <span>{isBn ? "নতুন জেনেরিক" : "Add Generic"}</span>
                             </Button>
                         </div>
 
-                        <div className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#151921] overflow-hidden shadow-xs">
-                            <table className="w-full text-left text-xs">
-                                <thead className="bg-slate-50/80 dark:bg-[#12161c] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase text-[11px]">
-                                    <tr>
-                                        <th className="px-4 py-3">{isBn ? 'জেনেরিক নাম' : 'Generic Name'}</th>
-                                        <th className="px-4 py-3 text-right">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
-                                    {initialGenerics.map((g) => (
-                                        <tr key={g.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{g.name}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Badge variant={g.is_active ? 'success' : 'neutral'}>
-                                                    {g.is_active ? 'Active' : 'Inactive'}
-                                                </Badge>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable
+                            tableId="catalog-generics-table"
+                            data={initialGenerics}
+                            columns={genericColumns}
+                            searchPlaceholder={isBn ? "জেনেরিক মলিকিউল সার্চ করুন..." : "Search generics..."}
+                            selectable={false}
+                            hideCheckbox={true}
+                            compact={true}
+                            syncUrlParams={false}
+                            emptyState={
+                                <EmptyState
+                                    icon={FileText}
+                                    title={isBn ? "কোনো জেনেরিক পাওয়া যায়নি" : "No generics found"}
+                                    description={
+                                        isBn
+                                            ? "নতুন জেনেরিক মলিকিউল যোগ করতে উপরের বাটনে ক্লিক করুন।"
+                                            : "Add drug active ingredients and molecule generics."
+                                    }
+                                />
+                            }
+                        />
                     </div>
                 )}
+
 
                 {/* TAB 5: Discount Rules */}
                 {activeTab === 'discounts' && (
@@ -1226,7 +1527,7 @@ export default function CatalogIndex({
                                                 }}
                                             />
                                         </label>
-                                        <p className="text-[10px] text-slate-400 mt-1">.CSV or .XLSX up to 10MB</p>
+                                        <p className="text-[11.5px] text-slate-400 mt-1">.CSV or .XLSX up to 10MB</p>
                                     </div>
 
                                     {importFile && (
@@ -1234,7 +1535,7 @@ export default function CatalogIndex({
                                             <div className="flex items-center gap-2">
                                                 <span className="text-slate-800 dark:text-slate-200 font-mono truncate">{importFile.name}</span>
                                                 {importJobId && (
-                                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                                                    <span className="text-[11.5px] text-emerald-600 dark:text-emerald-400 font-mono">
                                                         (Job: {importJobId.slice(0, 8)} · Step {importStep} · {Object.keys(columnMappings).length} fields)
                                                     </span>
                                                 )}
@@ -1410,11 +1711,131 @@ export default function CatalogIndex({
                                     </div>
                                 </div>
 
+                                {/* Pricing Section: MRP, Local Selling Price & Purchase Price */}
+                                <div>
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                                        <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">2</span>
+                                        <span>
+                                            {isBn
+                                                ? `মূল্য নির্ধারণ (প্রতি ${prodForm.base_unit || 'পিস'})`
+                                                : `Pricing (Per ${prodForm.base_unit || 'pcs'})`}
+                                        </span>
+                                    </h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                {isBn ? 'MRP (সর্বাধিক খুচরা মূল্য)' : 'MRP (Max Retail Price)'}
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={prodForm.mrp}
+                                                onChange={(e) => {
+                                                    const nextMrp = e.target.value;
+                                                    setProdForm((prev) => ({
+                                                        ...prev,
+                                                        mrp: nextMrp,
+                                                        selling_price:
+                                                            prev.selling_price === '' || prev.selling_price === prev.mrp
+                                                                ? nextMrp
+                                                                : prev.selling_price,
+                                                    }));
+                                                }}
+                                                placeholder="0.00"
+                                                className="text-xs"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                {isBn ? 'লোকাল বিক্রয় মূল্য (Sale Price)' : 'Local Selling Price'}
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={prodForm.selling_price}
+                                                onChange={(e) =>
+                                                    setProdForm({ ...prodForm, selling_price: e.target.value })
+                                                }
+                                                placeholder="0.00"
+                                                className="text-xs"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                {isBn ? 'ক্রয় মূল্য / TP (ঐচ্ছিক)' : 'Purchase / TP (Optional)'}
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={prodForm.purchase_price}
+                                                onChange={(e) =>
+                                                    setProdForm({ ...prodForm, purchase_price: e.target.value })
+                                                }
+                                                placeholder="0.00"
+                                                className="text-xs"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {(() => {
+                                        const mrpVal = parseFloat(prodForm.mrp) || 0;
+                                        const saleVal = parseFloat(prodForm.selling_price) || 0;
+                                        const tpVal = parseFloat(prodForm.purchase_price) || 0;
+                                        if (mrpVal <= 0 && saleVal <= 0 && tpVal <= 0) return null;
+                                        const discountPct =
+                                            mrpVal > 0 && saleVal > 0 && saleVal < mrpVal
+                                                ? (((mrpVal - saleVal) / mrpVal) * 100).toFixed(1)
+                                                : null;
+                                        const exceedsMrp = mrpVal > 0 && saleVal > mrpVal;
+                                        const profit = tpVal > 0 && saleVal > 0 ? saleVal - tpVal : null;
+                                        const marginPct =
+                                            profit !== null && saleVal > 0
+                                                ? ((profit / saleVal) * 100).toFixed(1)
+                                                : null;
+
+                                        return (
+                                            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px]">
+                                                {discountPct && (
+                                                    <span className="px-2 py-0.5 rounded-[3px] bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 font-semibold">
+                                                        {isBn
+                                                            ? `MRP থেকে ${discountPct}% কম (${formatCurrency(mrpVal - saleVal, currency)} ছাড়)`
+                                                            : `${discountPct}% below MRP (Save ${formatCurrency(mrpVal - saleVal, currency)})`}
+                                                    </span>
+                                                )}
+                                                {exceedsMrp && (
+                                                    <span className="px-2 py-0.5 rounded-[3px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 font-semibold">
+                                                        {isBn
+                                                            ? 'সতর্কতা: লোকাল বিক্রয় মূল্য MRP-এর চেয়ে বেশি!'
+                                                            : 'Warning: Local selling price exceeds MRP'}
+                                                    </span>
+                                                )}
+                                                {profit !== null && (
+                                                    <span
+                                                        className={`px-2 py-0.5 rounded-[3px] border font-semibold ${
+                                                            profit >= 0
+                                                                ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                                                                : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300'
+                                                        }`}
+                                                    >
+                                                        {isBn ? 'লাভ:' : 'Profit:'} {formatCurrency(profit, currency)}
+                                                        {marginPct ? ` (${marginPct}%)` : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
                                 {/* Units Table */}
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">2</span>
+                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">3</span>
                                             <span>{isBn ? 'প্যাকিং ও ইউনিট অনুপাত (পিস / পাতা / বক্স)' : 'Packaging & Units (Pcs / Strip / Box)'}</span>
                                         </h4>
                                         <Button
@@ -1516,7 +1937,7 @@ export default function CatalogIndex({
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">3</span>
+                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">4</span>
                                             <span>{isBn ? 'বারকোড ও স্ক্যান কোড' : 'Barcodes & Scan Codes'}</span>
                                         </h4>
                                         <Button

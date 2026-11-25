@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     ClipboardList,
@@ -40,8 +40,19 @@ interface SidebarProps {
     onClose?: () => void;
 }
 
+let persistedSidebarScrollTop = 0;
+
+const toPath = (name: string) => route(name, undefined, false);
+
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const { auth, subscription, tenant } = usePage<SharedPageProps>().props;
+    const navScrollRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        if (navScrollRef.current && persistedSidebarScrollTop > 0) {
+            navScrollRef.current.scrollTop = persistedSidebarScrollTop;
+        }
+    }, []);
     const user = auth?.user;
     const isSuperAdmin = Boolean(user?.is_super_admin);
     const isSubscriberAdmin = Boolean(user?.is_subscriber_admin);
@@ -62,42 +73,42 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {
                 category: 'SaaS Business Owner',
                 name: 'Platform Overview',
-                href: route('admin.dashboard'),
+                href: toPath('admin.dashboard'),
                 active: route().current('admin.dashboard'),
                 icon: LayoutDashboard,
             },
             {
                 category: 'SaaS Business Owner',
                 name: 'Subscription Plans',
-                href: route('admin.plans'),
+                href: toPath('admin.plans'),
                 active: route().current('admin.plans*'),
                 icon: CreditCard,
             },
             {
                 category: 'SaaS Business Owner',
                 name: 'Features & Access',
-                href: route('admin.features'),
+                href: toPath('admin.features'),
                 active: route().current('admin.features*'),
                 icon: Sparkles,
             },
             {
                 category: 'SaaS Business Owner',
                 name: 'Subscribers & Tenants',
-                href: route('admin.subscribers'),
+                href: toPath('admin.subscribers'),
                 active: route().current('admin.subscribers*'),
                 icon: Users,
             },
             {
                 category: 'SaaS Business Owner',
                 name: 'Demo Roles & Features',
-                href: route('admin.demo_roles'),
+                href: toPath('admin.demo_roles'),
                 active: route().current('admin.demo_roles*'),
                 icon: UserCog,
             },
             {
                 category: 'Account',
                 name: 'Profile & Security',
-                href: route('settings.profile'),
+                href: toPath('settings.profile'),
                 active: route().current('settings.profile*'),
                 icon: UserCog,
             },
@@ -107,14 +118,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {
                 category: 'Activate Subscription',
                 name: 'Choose a Plan',
-                href: route('plans.index'),
+                href: toPath('plans.index'),
                 active: route().current('plans.*'),
                 icon: Layers,
             },
             {
                 category: 'Activate Subscription',
                 name: 'Billing & Invoices',
-                href: route('subscription.index'),
+                href: toPath('subscription.index'),
                 active: route().current('subscription.*'),
                 icon: CreditCard,
             },
@@ -123,7 +134,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Activate Subscription',
                           name: 'Business Tenants',
-                          href: route('tenants.index'),
+                          href: toPath('tenants.index'),
                           active: route().current('tenants.*'),
                           icon: Store,
                       },
@@ -132,7 +143,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {
                 category: 'Account',
                 name: 'Profile & Security',
-                href: route('settings.profile'),
+                href: toPath('settings.profile'),
                 active: route().current('settings.profile*'),
                 icon: UserCog,
             },
@@ -144,27 +155,27 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 ? [
                       {
                           name: 'Product Catalog',
-                          href: route('catalog.ui'),
+                          href: toPath('catalog.ui'),
                           active: route().current('catalog.*'),
                       },
                       {
                           name: 'Inventory & FEFO',
-                          href: route('inventory.index'),
+                          href: toPath('inventory.index'),
                           active: route().current('inventory.index'),
                       },
                       {
                           name: 'Batches & Expiry',
                           href: hasFeature('batch_expiry')
-                              ? route('inventory.batches')
-                              : route('plans.browse'),
+                              ? toPath('inventory.batches')
+                              : toPath('plans.browse'),
                           active: route().current('inventory.batches'),
                           locked: !hasFeature('batch_expiry'),
                       },
                       {
                           name: 'Stock Movements',
                           href: hasFeature('batch_expiry')
-                              ? route('inventory.movements')
-                              : route('plans.browse'),
+                              ? toPath('inventory.movements')
+                              : toPath('plans.browse'),
                           active: route().current('inventory.movements'),
                           locked: !hasFeature('batch_expiry'),
                       },
@@ -177,12 +188,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 ? [
                       {
                           name: 'Customers (Patients)',
-                          href: route('crm.customers'),
+                          href: toPath('crm.customers'),
                           active: route().current('crm.customers*'),
                       },
                       {
                           name: 'Suppliers Directory',
-                          href: route('crm.suppliers'),
+                          href: toPath('crm.suppliers'),
                           active: route().current('crm.suppliers*'),
                       },
                   ]
@@ -195,7 +206,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Organization',
                           name: 'Business Tenants',
-                          href: route('tenants.index'),
+                          href: toPath('tenants.index'),
                           active: route().current('tenants.*'),
                           icon: Store,
                       },
@@ -206,7 +217,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Organization',
                           name: 'Branches',
-                          href: route('branches.index'),
+                          href: toPath('branches.index'),
                           active: route().current('branches.*'),
                           icon: GitBranch,
                       },
@@ -221,17 +232,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           items: [
                               {
                                   name: 'Staff Directory',
-                                  href: route('team.index'),
+                                  href: toPath('team.index'),
                                   active: route().current('team.index') && (typeof window === 'undefined' || !window.location.search.includes('tab=')),
                               },
                               {
                                   name: 'Roles & Permissions',
-                                  href: `${route('team.index')}?tab=matrix`,
+                                  href: `${toPath('team.index')}?tab=matrix`,
                                   active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=matrix'),
                               },
                               {
                                   name: 'Activity & Audit Log',
-                                  href: `${route('team.index')}?tab=activity`,
+                                  href: `${toPath('team.index')}?tab=activity`,
                                   active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=activity'),
                               },
                           ],
@@ -246,7 +257,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {
                 category: 'Main Menu',
                 name: 'Dashboard',
-                href: route('dashboard'),
+                href: toPath('dashboard'),
                 active: route().current('dashboard'),
                 icon: LayoutDashboard,
             },
@@ -259,12 +270,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           items: [
                               {
                                   name: 'New Sales Order',
-                                  href: route('sales.orders.create'),
+                                  href: toPath('sales.orders.create'),
                                   active: route().current('sales.orders.create'),
                               },
                               {
                                   name: 'My Orders & Tracking',
-                                  href: route('sales.orders.my-orders'),
+                                  href: toPath('sales.orders.my-orders'),
                                   active: route().current('sales.orders.my-orders'),
                               },
                           ],
@@ -276,7 +287,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Main Menu',
                           name: 'Cashier Station',
-                          href: route('cashier.dashboard'),
+                          href: toPath('cashier.dashboard'),
                           active: route().current('cashier.dashboard'),
                           icon: ReceiptText,
                       },
@@ -289,7 +300,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                 {
                                     category: 'Main Menu',
                                     name: 'Point of Sale (Direct)',
-                                    href: route('pos.index'),
+                                    href: toPath('pos.index'),
                                     active: route().current('pos.*'),
                                     icon: ShoppingCart,
                                 },
@@ -304,14 +315,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                     items: [
                                         {
                                             name: canManageCounters ? 'Counter Terminals' : 'My Terminal Shift',
-                                            href: route('counters.index'),
+                                            href: toPath('counters.index'),
                                             active: route().current('counters.index'),
                                         },
                                         ...(canManageCounters
                                             ? [
                                                   {
                                                       name: 'Live Queue Monitor',
-                                                      href: route('counters.monitoring'),
+                                                      href: toPath('counters.monitoring'),
                                                       active: route().current('counters.monitoring'),
                                                   },
                                               ]
@@ -348,21 +359,21 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Organization',
                           name: 'Feature Access',
-                          href: route('features.index'),
+                          href: toPath('features.index'),
                           active: route().current('features.*'),
                           icon: Sparkles,
                       },
                       {
                           category: 'Organization',
                           name: 'Browse Plans',
-                          href: route('plans.index'),
+                          href: toPath('plans.index'),
                           active: route().current('plans.*'),
                           icon: Layers,
                       },
                       {
                           category: 'Organization',
                           name: 'Billing & Subscription',
-                          href: route('subscription.index'),
+                          href: toPath('subscription.index'),
                           active: route().current('subscription.*'),
                           icon: CreditCard,
                       },
@@ -373,7 +384,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {
                           category: 'Organization',
                           name: 'Business Settings',
-                          href: route('settings.business'),
+                          href: toPath('settings.business'),
                           active: route().current('settings.business*'),
                           icon: Settings,
                       },
@@ -382,7 +393,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {
                 category: 'Organization',
                 name: 'Profile & Security',
-                href: route('settings.profile'),
+                href: toPath('settings.profile'),
                 active: route().current('settings.profile*'),
                 icon: UserCog,
             },
@@ -390,7 +401,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
 
     const handleLogout = () => {
-        router.post(route('logout'));
+        router.post(toPath('logout'));
     };
 
     return (
@@ -405,10 +416,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <Link
                     href={
                         isSuperAdmin
-                            ? route('admin.dashboard')
+                            ? toPath('admin.dashboard')
                             : isWorkspaceReady
-                              ? route('dashboard')
-                              : route('plans.index')
+                              ? toPath('dashboard')
+                              : toPath('plans.index')
                     }
                     onClick={() => {
                         if (window.innerWidth < 1024) onClose?.();
@@ -440,7 +451,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 )}
             </div>
 
-            <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 custom-scrollbar">
+            <div
+                ref={navScrollRef}
+                onScroll={(e) => {
+                    persistedSidebarScrollTop = e.currentTarget.scrollTop;
+                }}
+                className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 custom-scrollbar"
+            >
                 {navEntries.map((item, idx) => {
                     const prevCategory =
                         idx > 0 ? navEntries[idx - 1].category : null;

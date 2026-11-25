@@ -285,33 +285,6 @@ const roleDemoItems: RoleDemoItem[] = [
             'Pharmacy stock write-offs locked',
         ],
     },
-    {
-        id: 'superadmin',
-        roleKey: 'superadmin',
-        titleBn: 'সুপার অ্যাডমিন',
-        titleEn: 'Super Admin',
-        subtitleBn: 'SaaS প্ল্যাটফর্ম ও সাবস্ক্রিপশন',
-        subtitleEn: 'SaaS platform & subscribers',
-        email: 'superadmin@pharmacore.test',
-        tagsBn: ['SaaS কনসোল', 'প্ল্যান ব্যবস্থাপনা', 'গ্রাহক ফার্মেসি', 'অডিট লগ'],
-        tagsEn: ['SaaS Console', 'Plan Management', 'Pharmacy Subscribers', 'Audit Logs'],
-        canDoBn: [
-            'নতুন SaaS প্ল্যান তৈরি ও ফিচার অনুমোদন',
-            'সরাসরি প্ল্যাটফর্মের সব সাবস্ক্রাইবার পর্যবেক্ষণ',
-            'আন্তর্জাতিক কারেন্সি ও ট্যাক্স সেটিংস কন্ট্রোল',
-        ],
-        canDoEn: [
-            'Create & assign SaaS plans and module limits',
-            'Monitor all pharmacy subscriber accounts',
-            'Configure global platform compliance & currencies',
-        ],
-        cannotDoBn: [
-            'ফার্মেসির ব্যক্তিগত রোগীর চিকিৎসা তথ্য উন্মুক্ত নয়',
-        ],
-        cannotDoEn: [
-            'Patient clinical notes remain tenant encrypted',
-        ],
-    },
 ];
 
 interface DefaultPlanItem {
@@ -455,7 +428,11 @@ export default function Welcome({ plans = [], demoRoles = [] }: WelcomeProps) {
         const isIpOrLocal = currentHost === 'localhost' || currentHost === '127.0.0.1' || /^(\d{1,3}\.){3}\d{1,3}$/.test(currentHost);
 
         const selectedRole = roleKey || activeRoleId;
-        const isSuper = selectedRole === 'superadmin';
+
+        if (selectedRole === 'superadmin' || selectedRole === 'super_admin') {
+            window.location.href = '/login';
+            return;
+        }
 
         let targetUrl: string;
 
@@ -465,10 +442,7 @@ export default function Welcome({ plans = [], demoRoles = [] }: WelcomeProps) {
             const scheme = tenancy?.scheme || (typeof window !== 'undefined' ? window.location.protocol.replace(':', '') : 'http');
             const portSuffix = tenancy?.portSuffix || (typeof window !== 'undefined' && window.location.port ? `:${window.location.port}` : '');
             const baseDomain = tenancy?.baseDomain || currentHost;
-
-            const targetHost = isSuper
-                ? (tenancy?.adminDomain || `admin.${baseDomain}`)
-                : `demo.${baseDomain}`;
+            const targetHost = `demo.${baseDomain}`;
 
             targetUrl = `${scheme}://${targetHost}${portSuffix}/demo/enter?role=${encodeURIComponent(selectedRole)}&email=${encodeURIComponent(email)}`;
         }

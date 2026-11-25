@@ -127,6 +127,16 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/counters/{counter}/close-session', [CounterController::class, 'closeSession'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.close-session');
+    Route::post('/counters/{counter}/force-close-session', [CounterController::class, 'forceCloseSession'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.force-close-session');
+    Route::post('/counters/{counter}/cash-movement', [CounterController::class, 'recordCashMovement'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.cash_in,cash_register.cash_out,admin,manager,pharmacist,cashier'])
+        ->name('counters.cash-movement');
+    Route::get('/counters/sessions/{session}/z-report', [CounterController::class, 'zReport'])
+        ->whereNumber('session')
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.reconcile,admin,manager,pharmacist,cashier'])
+        ->name('counters.sessions.z-report');
     Route::post('/counters/{counter}/assign-cashier', [CounterController::class, 'assignCashier'])
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.assign-cashier');
@@ -171,11 +181,29 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/sales/orders/{sale}/cancel', [SalesOrderController::class, 'cancel'])
         ->middleware(['feature:pos', 'tenant.role:sales_orders.cancel,admin,manager,salesman'])
         ->name('sales.orders.cancel');
+    Route::post('/sales/customers/quick-store', [SalesOrderController::class, 'quickStoreCustomer'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,admin,manager,salesman,cashier'])
+        ->name('sales.customers.quick-store');
+    Route::delete('/sales/orders/{sale}/draft', [SalesOrderController::class, 'destroyDraft'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,sales_orders.view_own,admin,manager,salesman'])
+        ->name('sales.orders.destroy-draft');
+    Route::post('/sales/orders/{sale}/approve-discount', [SalesOrderController::class, 'approveDiscount'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('sales.orders.approve-discount');
+    Route::post('/sales/orders/{sale}/reject-discount', [SalesOrderController::class, 'rejectDiscount'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('sales.orders.reject-discount');
 
     // Cashier Workstation & Dynamic Queue Dashboard
     Route::get('/cashier/dashboard', [CashierDashboardController::class, 'dashboard'])
         ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
         ->name('cashier.dashboard');
+    Route::post('/cashier/shift/auto-open', [CashierDashboardController::class, 'autoOpenShift'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
+        ->name('cashier.shift.auto-open');
+    Route::post('/cashier/shift/resume', [CashierDashboardController::class, 'resumeShift'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
+        ->name('cashier.shift.resume');
     Route::post('/cashier/orders/{sale}/accept', [CashierDashboardController::class, 'accept'])
         ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
         ->name('cashier.orders.accept');

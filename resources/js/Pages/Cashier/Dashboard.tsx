@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
     Activity,
@@ -12,10 +12,12 @@ import {
     Coffee,
     CreditCard,
     Eye,
+    FileText,
     Layers,
     List,
     Loader2,
     LogOut,
+    Play,
     Plus,
     Printer,
     ReceiptText,
@@ -25,6 +27,7 @@ import {
     TrendingUp,
     User,
     Users,
+    Wallet,
     X,
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
@@ -37,8 +40,11 @@ import {
     CloseShiftModal,
     OpenShiftModal,
     PosCounterData,
+    QuickStartShiftModal,
     TakeBreakModal,
 } from '../Pos/components/PosShiftModals';
+import CashMovementModal from '../Counters/components/CashMovementModal';
+import ZReportModal from '../Counters/components/ZReportModal';
 
 interface CashierOrderItem {
     id: number;
@@ -157,10 +163,32 @@ export default function CashierDashboard({
 
     const [activeTab, setActiveTab] = useState<'incoming' | 'processing' | 'completed'>('incoming');
 
-    // Shift modals
+    // Shift modals & instant actions
     const [openShiftModal, setOpenShiftModal] = useState(false);
+    const [quickStartModal, setQuickStartModal] = useState(false);
+    const [resumingShift, setResumingShift] = useState(false);
     const [breakModal, setBreakModal] = useState(false);
+    const [cashMovementModal, setCashMovementModal] = useState(false);
     const [closeShiftModal, setCloseShiftModal] = useState(false);
+    const [zReportSessionId, setZReportSessionId] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (flash?.lastClosedSessionId) {
+            setZReportSessionId(flash.lastClosedSessionId);
+        }
+    }, [flash?.lastClosedSessionId]);
+
+    const handleResumeShift = () => {
+        setResumingShift(true);
+        router.post(
+            route('cashier.shift.resume', undefined, false),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setResumingShift(false),
+            }
+        );
+    };
 
     // Processing / Payment Tender Modal
     const [tenderOrder, setTenderOrder] = useState<CashierOrder | null>(null);
@@ -672,9 +700,35 @@ export default function CashierDashboard({
             title="Cashier Station & Queue"
             subtitle={`${branchName ?? 'Dhanmondi 27 Care Point'} • Process incoming salesman orders, collect payments, and print invoices`}
             actions={
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {hasOpenShift ? (
                         <>
+                            {isServing && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCashMovementModal(true)}
+                                    className="gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-[4px] hover:border-[#FF4A1F] hover:text-[#FF4A1F]"
+                                >
+                                    <Wallet className="h-3.5 w-3.5" />
+                                    <span>Cash In/Out</span>
+                                </Button>
+                            )}
+
+                            {activeSession && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setZReportSessionId(activeSession.id)}
+                                    className="gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-[4px] hover:border-blue-500 hover:text-blue-600"
+                                >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span>X-Report</span>
+                                </Button>
+                            )}
+
                             {isServing ? (
                                 <Button
                                     type="button"
@@ -684,7 +738,23 @@ export default function CashierDashboard({
                                     className="gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-[4px] hover:bg-amber-50 dark:hover:bg-amber-950/40"
                                 >
                                     <Coffee className="h-3.5 w-3.5" />
-                                    <span>Take Break</span>
+                                    <span>Lunch / Break</span>
+                                </Button>
+                            ) : isOnBreak ? (
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={resumingShift}
+                                    onClick={handleResumeShift}
+                                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-[4px] shadow-xs"
+                                >
+                                    {resumingShift ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Play className="h-3.5 w-3.5" />
+                                    )}
+                                    <span>Resume Shift</span>
                                 </Button>
                             ) : null}
 
@@ -704,10 +774,10 @@ export default function CashierDashboard({
                             type="button"
                             variant="primary"
                             size="sm"
-                            onClick={() => setOpenShiftModal(true)}
+                            onClick={() => setQuickStartModal(true)}
                             className="gap-1.5 bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-bold rounded-[4px] shadow-xs px-3.5 py-2"
                         >
-                            <Plus className="h-4 w-4" />
+                            <Play className="h-4 w-4" />
                             <span>Open Cash Register Shift</span>
                         </Button>
                     )}
@@ -726,7 +796,7 @@ export default function CashierDashboard({
                                 <Store className="h-3.5 w-3.5" />
                             </div>
                             <span className="font-bold text-slate-900 dark:text-white">
-                                Counter {activeCounter?.code || 'C-01'}
+                                {activeCounter ? `Counter ${activeCounter.code}` : 'No Active Counter'}
                             </span>
                             <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
@@ -742,7 +812,11 @@ export default function CashierDashboard({
                                         isServing ? 'bg-emerald-500' : isOnBreak ? 'bg-amber-500' : 'bg-slate-400'
                                     }`}
                                 />
-                                {isServing ? 'Active' : isOnBreak ? 'On Break' : 'Closed'}
+                                {isServing
+                                    ? 'Active'
+                                    : isOnBreak
+                                    ? `On ${activeCounter?.current_break_reason ? `${activeCounter.current_break_reason.charAt(0).toUpperCase()}${activeCounter.current_break_reason.slice(1)} ` : ''}Break`
+                                    : 'Closed'}
                             </span>
                         </div>
 
@@ -770,7 +844,7 @@ export default function CashierDashboard({
                             <span>
                                 Shift Opened:{' '}
                                 <strong className="font-semibold text-slate-900 dark:text-white">
-                                    {activeSession?.opened_date_time || 'Today, 8:02 AM'}
+                                    {activeSession?.opened_date_time || 'Not Started'}
                                 </strong>
                             </span>
                         </div>
@@ -970,7 +1044,6 @@ export default function CashierDashboard({
                                     hideCheckbox={true}
                                     hideToolbar={true}
                                     hideViewToggle={true}
-                                    hidePagination={true}
                                     syncUrlParams={false}
                                     emptyState={
                                         <EmptyState
@@ -1017,7 +1090,6 @@ export default function CashierDashboard({
                                     hideCheckbox={true}
                                     hideToolbar={true}
                                     hideViewToggle={true}
-                                    hidePagination={true}
                                     syncUrlParams={false}
                                     emptyState={
                                         <EmptyState
@@ -1475,6 +1547,14 @@ export default function CashierDashboard({
             )}
 
             {/* Shift Operation Modals */}
+            {quickStartModal && (
+                <QuickStartShiftModal
+                    open={quickStartModal}
+                    currency={currency}
+                    onClose={() => setQuickStartModal(false)}
+                />
+            )}
+
             {openShiftModal && (
                 <OpenShiftModal
                     open={openShiftModal}
@@ -1492,6 +1572,15 @@ export default function CashierDashboard({
                 />
             )}
 
+            {cashMovementModal && activeCounter && (
+                <CashMovementModal
+                    open={cashMovementModal}
+                    counter={activeCounter as any}
+                    currency={currency}
+                    onClose={() => setCashMovementModal(false)}
+                />
+            )}
+
             {closeShiftModal && activeCounter && (
                 <CloseShiftModal
                     open={closeShiftModal}
@@ -1500,6 +1589,11 @@ export default function CashierDashboard({
                     onClose={() => setCloseShiftModal(false)}
                 />
             )}
+
+            <ZReportModal
+                sessionId={zReportSessionId}
+                onClose={() => setZReportSessionId(null)}
+            />
 
             {/* Pos Receipt Modal */}
             {receiptModalOpen && (

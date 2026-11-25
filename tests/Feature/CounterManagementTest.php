@@ -386,4 +386,347 @@ class CounterManagementTest extends TestCase
                 ->has('recentSessions', 1) // cashier only sees their own 1 session, not other users'
             );
     }
+
+    public function test_industry_standard_shift_rules_cash_movements_exact_math_and_z_report(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'Labaid Standard Cash Pharmacy',
+            'plan_key' => 'growth',
+        ]);
+        $branch = $tenant->branches()->first();
+
+        $cashierA = User::factory()->create([
+            'account_type' => 'staff',
+            'subscriber_id' => $owner->id,
+            'status' => 'active',
+        ]);
+        $cashierB = User::factory()->create([
+            'account_type' => 'staff',
+            'subscriber_id' => $owner->id,
+            'status' => 'active',
+        ]);
+
+        foreach ([$cashierA, $cashierB] as $staff) {
+            $tenant->users()->attach($staff->id, [
+                'branch_id' => $branch->id,
+                'is_owner' => false,
+                'role' => \App\Enums\TenantRole::CASHIER->value,
+                'roles' => json_encode([\App\Enums\TenantRole::CASHIER->value]),
+                'is_active' => true,
+            ]);
+            \Illuminate\Support\Facades\DB::table('user_branches')->insert([
+                'user_id' => $staff->id,
+                'branch_id' => $branch->id,
+            ]);
+        }
+
+        [$counter1, $counter2, $medicine] = app(CurrentTenant::class)->run($tenant, function () use ($tenant, $branch) {
+            $c1 = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-01',
+                'name' => 'Main Cash Counter',
+                'type' => 'billing',
+                'status' => 'closed',
+                'is_active' => true,
+            ]);
+            $c2 = Counter::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'code' => 'C-02',
+                'name' => 'Express Counter',
+                'type' => 'express',
+                'status' => 'closed',
+                'is_active' => true,
+            ]);
+
+            $med = Medicine::create([
+                'tenant_id' => $tenant->id,
+                'name' => 'Napa Extra 500mg',
+                'sku' => 'NAPA-EX-01',
+                'dosage_form' => 'tablet',
+                'unit' => 'piece',
+                'units_per_strip' => 10,
+                'units_per_box' => 100,
+                'default_purchase_price' => 2.00,
+                'default_selling_price' => 10.10,
+                'is_active' => true,
+            ]);
+
+            MedicineBatch::create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'medicine_id' => $med->id,
+                'batch_number' => 'B-STD-01',
+                'expiry_date' => now()->addYear(),
+                'quantity_received' => 500,
+                'quantity_available' => 500,
+                'purchase_price' => 2.00,
+                'selling_price' => 10.10,
+                'status' => 'active',
+            ]);
+
+            return [$c1, $c2, $med];
+        });
+
+        app(CurrentTenant::class)->set($tenant);
+        $sessionCtx = ['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id];
+
+        // 1. Cashier A opens shift on Counter 1 with Opening Float 1000.00
+        $this->actingAs($cashierA)
+            ->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/open-session", [
+                'opening_float' => 1000.00,
+                'shift' => 'morning',
+            ])
+            ->assertSessionHas('success');
+
+        $shiftA = CounterSession::query()
+            ->where('counter_id', $counter1->id)
+            ->where('status', 'open')
+            ->firstOrFail();
+
+        // 2. Rule: One open shift per cashier (Cashier A cannot open Counter 2)
+        $this->actingAs($cashierA)
+            ->withSession($sessionCtx)
+            ->post("/counters/{$counter2->id}/open-session", [
+                'opening_float' => 500.00,
+            ])
+            ->assertSessionHas('error');
+
+        // 3. Rule: One active cashier per counter (Cashier B cannot hijack Counter 1)
+        $this->actingAs($cashierB)
+            ->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/open-session", [
+                'opening_float' => 500.00,
+            ])
+            ->assertSessionHas('error');
+
+        // 4. Rule: Cashier B cannot record cash movement or close Cashier A's shift
+        $this->actingAs($cashierB)
+            ->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/cash-movement", [
+                'type' => 'cash_in',
+                'amount' => 200.00,
+                'reason' => 'Unauthorized attempt',
+            ])
+            ->assertSessionHas('error');
+
+        $this->actingAs($cashierB)
+            ->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/close-session", [
+                'closing_cash_counted' => 1000.00,
+            ])
+            ->assertSessionHas('error');
+
+        // 5. Record a POS Cash Sale (10 units * 10.10 = 101.00; paid 150.00 cash -> 49.00 change -> net cash 101.00)
+        $posResponse = $this->actingAs($cashierA)
+            ->withSession($sessionCtx)
+            ->post('/pos/checkout', [
+                'counter_id' => $counter1->id,
+                'counter_session_id' => $shiftA->id,
+                'customer_name' => 'Walk-in',
+                'payment_method' => 'cash',
+                'paid_amount' => 150.00,
+                'items' => [
+                    ['medicine_id' => $medicine->id, 'quantity' => 10, 'sale_unit' => 'piece'],
+                ],
+            ]);
+        $posResponse->assertRedirect();
+        $posResponse->assertSessionHas('lastSale');
+
+        // 6. Record Cash In (+500.25), Cash Out (-50.10), Safe Drop (-200.00), Cash Refund (-30.05)
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/cash-movement", [
+                'type' => 'cash_in',
+                'amount' => '500.25',
+                'reason' => 'Float top-up from manager',
+            ])->assertSessionHas('success');
+
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/cash-movement", [
+                'type' => 'cash_out',
+                'amount' => '50.10',
+                'reason' => 'Water bottle expense',
+            ])->assertSessionHas('success');
+
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/cash-movement", [
+                'type' => 'safe_drop',
+                'amount' => '200.00',
+                'reason' => 'Mid-shift vault drop',
+            ])->assertSessionHas('success');
+
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/cash-movement", [
+                'type' => 'cash_refund',
+                'amount' => '30.05',
+                'reason' => 'Customer medicine return',
+                'reference_number' => 'RET-001',
+            ])->assertSessionHas('success');
+
+        // Exact Expected Cash = 1000.00 + 101.00 + 500.25 - 50.10 - 200.00 - 30.05 = 1321.10
+        $shiftA->refresh();
+        $this->assertSame('1321.10', (string) $shiftA->system_expected_cash);
+        $this->assertSame('500.25', (string) $shiftA->cash_in_total);
+        $this->assertSame('250.10', (string) $shiftA->cash_out_total);
+        $this->assertSame('30.05', (string) $shiftA->cash_refunds_total);
+
+        // 7. Live X-Report accessible by Cashier A, blocked for Cashier B
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->getJson("/counters/sessions/{$shiftA->id}/z-report")
+            ->assertOk()
+            ->assertJsonPath('report_type', 'X-REPORT (LIVE)')
+            ->assertJsonPath('drawer.expected_cash', 1321.1);
+
+        $this->actingAs($cashierB)->withSession($sessionCtx)
+            ->getJson("/counters/sessions/{$shiftA->id}/z-report")
+            ->assertForbidden();
+
+        // 8. Close Shift with counted 1300.00 -> exact discrepancy -21.10 + sequential ZR-000001
+        $this->actingAs($cashierA)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/close-session", [
+                'closing_cash_counted' => '1300.00',
+                'closing_denominations' => ['1000' => 1, '100' => 3],
+                'notes' => 'Shortage of 21.10 noted',
+            ])
+            ->assertSessionHas('success')
+            ->assertSessionHas('lastClosedSessionId', $shiftA->id);
+
+        $shiftA->refresh();
+        $this->assertSame('closed', $shiftA->status);
+        $this->assertSame('ZR-000001', $shiftA->z_report_number);
+        $this->assertSame('1321.10', (string) $shiftA->system_expected_cash);
+        $this->assertSame('1300.00', (string) $shiftA->closing_cash_counted);
+        $this->assertSame('-21.10', (string) $shiftA->discrepancy);
+        $this->assertSame(1, $shiftA->closing_denominations[1000]);
+        $this->assertSame(3, $shiftA->closing_denominations[100]);
+
+        // 9. Z-Report endpoint returns immutable Z-REPORT snapshot (accessible by Admin too)
+        $this->actingAs($owner)->withSession($sessionCtx)
+            ->getJson("/counters/sessions/{$shiftA->id}/z-report")
+            ->assertOk()
+            ->assertJsonPath('report_type', 'Z-REPORT')
+            ->assertJsonPath('z_report_number', 'ZR-000001')
+            ->assertJsonPath('drawer.discrepancy_status', 'shortage')
+            ->assertJsonPath('drawer.discrepancy', -21.1)
+            ->assertJsonPath('drawer.cash_refunds', 30.05);
+
+        // 10. Next shift closed gets sequential gapless ZR-000002
+        $this->actingAs($cashierB)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/open-session", [
+                'opening_float' => 500.00,
+                'shift' => 'evening',
+            ])->assertSessionHas('success');
+
+        $this->actingAs($cashierB)->withSession($sessionCtx)
+            ->post("/counters/{$counter1->id}/close-session", [
+                'closing_cash_counted' => 500.00,
+            ])->assertSessionHas('success');
+
+        $shiftB = CounterSession::query()->where('user_id', $cashierB->id)->firstOrFail();
+        $this->assertSame('ZR-000002', $shiftB->z_report_number);
+        $this->assertSame('0.00', (string) $shiftB->discrepancy);
+    }
+
+    public function test_opening_float_notes_mandatory_discrepancy_reason_force_close_and_immutability(): void
+    {
+        $provisioning = app(TenantProvisioningService::class);
+        $owner = User::factory()->create(['account_type' => 'admin']);
+        $tenant = $provisioning->createTenantForUser($owner, [
+            'name' => 'GreenLife Pharmacy & Diagnostics',
+            'plan_key' => 'growth',
+        ]);
+        $branch = $tenant->branches()->first();
+
+        $cashier = User::factory()->create([
+            'account_type' => 'staff',
+            'subscriber_id' => $owner->id,
+            'status' => 'active',
+        ]);
+        $tenant->users()->attach($cashier->id, [
+            'branch_id' => $branch->id,
+            'is_owner' => false,
+            'role' => \App\Enums\TenantRole::CASHIER->value,
+            'roles' => json_encode([\App\Enums\TenantRole::CASHIER->value]),
+            'is_active' => true,
+        ]);
+        \Illuminate\Support\Facades\DB::table('user_branches')->insert([
+            'user_id' => $cashier->id,
+            'branch_id' => $branch->id,
+        ]);
+
+        $counter = app(CurrentTenant::class)->run($tenant, fn () => Counter::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'code' => 'C-02',
+            'name' => 'Cashier & Billing Station',
+            'type' => 'billing',
+            'status' => 'closed',
+            'is_active' => true,
+        ]));
+
+        app(CurrentTenant::class)->set($tenant);
+        $sessionCtx = ['active_tenant_id' => $tenant->id, 'active_branch_id' => $branch->id];
+
+        // 1. Open Shift with BDT Note Count (1000 x 2 + 500 x 4 + 100 x 10 = 5000.00)
+        $this->actingAs($cashier)->withSession($sessionCtx)
+            ->post("/counters/{$counter->id}/open-session", [
+                'opening_float' => 5000.00,
+                'opening_denominations' => ['1000' => 2, '500' => 4, '100' => 10],
+            ])
+            ->assertSessionHas('success');
+
+        $session = CounterSession::query()->where('counter_id', $counter->id)->where('status', 'open')->firstOrFail();
+        $this->assertSame('5000.00', (string) $session->opening_float);
+        $this->assertSame(2, $session->opening_denominations[1000]);
+        $this->assertSame(4, $session->opening_denominations[500]);
+        $this->assertSame(10, $session->opening_denominations[100]);
+
+        // 2. Discrepancy without reason is REJECTED server-side
+        $this->actingAs($cashier)->withSession($sessionCtx)
+            ->post("/counters/{$counter->id}/close-session", [
+                'closing_cash_counted' => 4500.00,
+                'notes' => '',
+            ])
+            ->assertSessionHas('error');
+
+        $session->refresh();
+        $this->assertSame('open', $session->status);
+
+        // 3. Cashier CANNOT call Force Close endpoint (403 Forbidden)
+        $this->actingAs($cashier)->withSession($sessionCtx)
+            ->post("/counters/{$counter->id}/force-close-session", [
+                'force_close_reason' => 'Trying to bypass',
+            ])
+            ->assertForbidden();
+
+        // 4. Admin Force Closes forgotten shift with mandatory reason -> generates Z-Report + audit log
+        $this->actingAs($owner)->withSession($sessionCtx)
+            ->post("/counters/{$counter->id}/force-close-session", [
+                'force_close_reason' => 'Cashier left early without closing terminal',
+                'closing_cash_counted' => 4800.00,
+            ])
+            ->assertSessionHas('success')
+            ->assertSessionHas('lastClosedSessionId', $session->id);
+
+        $session->refresh();
+        $this->assertSame('closed', $session->status);
+        $this->assertTrue($session->is_force_closed);
+        $this->assertSame('Cashier left early without closing terminal', $session->force_close_reason);
+        $this->assertSame('-200.00', (string) $session->discrepancy);
+        $this->assertSame('ZR-000001', $session->z_report_number);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $tenant->id,
+            'action' => 'counter.shift_force_closed',
+            'auditable_id' => (string) $session->id,
+        ]);
+
+        // 5. Closed shift is strictly immutable
+        $this->expectException(\LogicException::class);
+        $session->update(['closing_cash_counted' => 5000.00]);
+    }
 }

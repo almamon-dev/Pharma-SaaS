@@ -18,6 +18,7 @@ import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Badge } from '@/Components/ui/Badge';
+import { TablePagination } from '@/Components/tables';
 import { BatchAdjustModal } from '@/Components/inventory/BatchAdjustModal';
 import { BatchTransferModal } from '@/Components/inventory/BatchTransferModal';
 import {
@@ -47,6 +48,7 @@ interface BatchesPageProps {
         status: string;
         branch_id: string;
         supplier_id: string;
+        per_page?: number;
     };
 }
 
@@ -86,6 +88,7 @@ export default function InventoryBatches({
             status: overrides?.status ?? status,
             branch_id: overrides?.branch_id ?? branchId,
             supplier_id: overrides?.supplier_id ?? supplierId,
+            per_page: overrides?.per_page ?? batches.per_page ?? filters.per_page ?? 10,
         };
 
         router.get(
@@ -95,6 +98,7 @@ export default function InventoryBatches({
                 status: next.status !== 'all' ? next.status : undefined,
                 branch_id: next.branch_id || undefined,
                 supplier_id: next.supplier_id || undefined,
+                per_page: next.per_page,
             },
             { preserveState: true, replace: true }
         );
@@ -241,7 +245,7 @@ export default function InventoryBatches({
                         />
                         <Select
                             label="Branch Scope"
-                            size="sm"
+                            size="md"
                             value={branchId}
                             options={branchOptions}
                             onChange={(e) => {
@@ -252,7 +256,7 @@ export default function InventoryBatches({
                         />
                         <Select
                             label="Supplier"
-                            size="sm"
+                            size="md"
                             value={supplierId}
                             options={supplierOptions}
                             onChange={(e) => {
@@ -262,14 +266,14 @@ export default function InventoryBatches({
                             }}
                         />
                         <div className="flex items-center gap-2">
-                            <Button type="submit" variant="primary" size="sm">
+                            <Button type="submit" variant="primary" size="md">
                                 Apply
                             </Button>
                             {(search || supplierId || status !== 'all') && (
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    size="sm"
+                                    size="md"
                                     onClick={() => {
                                         setSearch('');
                                         setSupplierId('');
@@ -284,23 +288,23 @@ export default function InventoryBatches({
                     </form>
 
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse text-[12.5px]">
+                        <table className="w-full text-left border-collapse text-[11.5px]">
                             <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#151921] text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th className="px-3.5 py-2.5">Batch #</th>
-                                    <th className="px-3.5 py-2.5">Medicine</th>
-                                    <th className="px-3.5 py-2.5">Branch</th>
-                                    <th className="px-3.5 py-2.5">Supplier / Rack</th>
-                                    <th className="px-3.5 py-2.5">Mfg / Expiry</th>
-                                    <th className="px-3.5 py-2.5 text-right">Avail / Rcvd</th>
-                                    <th className="px-3.5 py-2.5 text-right">Cost Val</th>
-                                    <th className="px-3.5 py-2.5">Status</th>
+                                <tr className="border-b border-slate-200 dark:border-slate-800 bg-[#f8fafc] dark:bg-[#151921] text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                    <th className="px-3.5 py-2.5 border-r border-slate-200/80 dark:border-slate-800/80">Batch #</th>
+                                    <th className="px-3.5 py-2.5 border-r border-slate-200/80 dark:border-slate-800/80">Medicine</th>
+                                    <th className="px-3.5 py-2.5 border-r border-slate-200/80 dark:border-slate-800/80">Branch</th>
+                                    <th className="px-3.5 py-2.5 border-r border-slate-200/80 dark:border-slate-800/80">Supplier / Rack</th>
+                                    <th className="px-3.5 py-2.5 border-r border-slate-200/80 dark:border-slate-800/80">Mfg / Expiry</th>
+                                    <th className="px-3.5 py-2.5 text-right border-r border-slate-200/80 dark:border-slate-800/80">Avail / Rcvd</th>
+                                    <th className="px-3.5 py-2.5 text-right border-r border-slate-200/80 dark:border-slate-800/80">Cost Val</th>
+                                    <th className={`px-3.5 py-2.5 ${canAdjust ? 'border-r border-slate-200/80 dark:border-slate-800/80' : ''}`}>Status</th>
                                     {canAdjust && (
                                         <th className="px-3.5 py-2.5 text-right">Action</th>
                                     )}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                            <tbody>
                                 {batches.data.length === 0 ? (
                                     <tr>
                                         <td
@@ -311,55 +315,58 @@ export default function InventoryBatches({
                                         </td>
                                     </tr>
                                 ) : (
-                                    batches.data.map((batch) => (
+                                    batches.data.map((batch, bIdx) => {
+                                        const isEven = bIdx % 2 === 1;
+                                        const rowBg = isEven ? 'bg-[#f8fafc] dark:bg-[#161a22]' : 'bg-white dark:bg-[#12161c]';
+                                        return (
                                         <tr
                                             key={batch.id}
-                                            className="hover:bg-slate-50/70 dark:hover:bg-[#161b22]"
+                                            className={`${rowBg} hover:bg-slate-100/70 dark:hover:bg-[#1a202c] border-b border-slate-200/80 dark:border-slate-800/80 transition-colors`}
                                         >
-                                            <td className="px-3.5 py-2.5 font-mono font-bold text-[#FF4A1F] whitespace-nowrap">
+                                            <td className="px-2.5 py-1.5 font-mono font-bold text-[#FF4A1F] text-[11.5px] whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {batch.batch_number}
                                             </td>
-                                            <td className="px-3.5 py-2.5">
-                                                <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                            <td className="px-2.5 py-1.5 border-r border-slate-200/80 dark:border-slate-800/80">
+                                                <div className="font-bold text-[11.5px] text-slate-900 dark:text-slate-200">
                                                     {batch.medicine_name}
                                                 </div>
-                                                <div className="text-[11px] font-mono text-slate-400">
+                                                <div className="text-[9.5px] font-mono text-slate-400">
                                                     {batch.medicine_sku}
                                                 </div>
                                             </td>
-                                            <td className="px-3.5 py-2.5 whitespace-nowrap">
+                                            <td className="px-2.5 py-1.5 whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80">
                                                 <Badge variant="slate">
                                                     {batch.branch_code || batch.branch_name}
                                                 </Badge>
                                             </td>
-                                            <td className="px-3.5 py-2.5 text-slate-600 dark:text-slate-300">
-                                                <div>{batch.supplier_name || 'Direct / Opening'}</div>
+                                            <td className="px-2.5 py-1.5 text-slate-600 dark:text-slate-300 border-r border-slate-200/80 dark:border-slate-800/80">
+                                                <div className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">{batch.supplier_name || 'Direct / Opening'}</div>
                                                 {batch.rack_location && (
-                                                    <div className="text-[11px] text-slate-400">
+                                                    <div className="text-[9.5px] text-slate-400">
                                                         Rack: {batch.rack_location}
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">
+                                            <td className="px-2.5 py-1.5 font-mono whitespace-nowrap font-bold text-[11.5px] text-slate-900 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800/80">
                                                 <div>Exp: {batch.expiry_date || '—'}</div>
                                                 {batch.manufacturing_date && (
-                                                    <div className="text-[10.5px] text-slate-400">
+                                                    <div className="text-[9.5px] text-slate-400 font-normal">
                                                         Mfg: {batch.manufacturing_date}
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap">
-                                                <span className="font-bold text-slate-900 dark:text-slate-100">
+                                            <td className="px-2.5 py-1.5 text-right tabular-nums whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80">
+                                                <span className="font-bold text-[11.5px] text-slate-900 dark:text-slate-200">
                                                     {batch.quantity_available}
                                                 </span>
-                                                <span className="text-slate-400">
+                                                <span className="text-slate-400 text-[11.5px]">
                                                     {' '}/ {batch.quantity_received} {batch.unit}
                                                 </span>
                                             </td>
-                                            <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap font-semibold text-slate-900 dark:text-slate-100">
+                                            <td className="px-2.5 py-1.5 text-right tabular-nums whitespace-nowrap font-bold text-[11.5px] text-slate-900 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {formatCurrency(batch.stock_cost_value ?? 0, currency)}
                                             </td>
-                                            <td className="px-3.5 py-2.5 whitespace-nowrap">
+                                            <td className={`px-3.5 py-2.5 whitespace-nowrap ${canAdjust ? 'border-r border-slate-200/80 dark:border-slate-800/80' : ''}`}>
                                                 {renderStatusBadge(batch)}
                                                 {batch.disposal_reason && (
                                                     <div className="text-[10.5px] text-slate-400 max-w-[160px] truncate" title={batch.disposal_reason}>
@@ -399,42 +406,27 @@ export default function InventoryBatches({
                                                 </td>
                                             )}
                                         </tr>
-                                    ))
+                                    );
+                                    })
                                 )}
                             </tbody>
                         </table>
                     </div>
 
-                    {batches.last_page > 1 && (
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500">
-                            <span>
-                                Showing {batches.from ?? 0}–{batches.to ?? 0} of {batches.total} batches
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!batches.prev_page_url}
-                                    onClick={() => batches.prev_page_url && router.visit(batches.prev_page_url)}
-                                >
-                                    Previous
-                                </Button>
-                                <span>
-                                    Page {batches.current_page} / {batches.last_page}
-                                </span>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!batches.next_page_url}
-                                    onClick={() => batches.next_page_url && router.visit(batches.next_page_url)}
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        </div>
-                    )}
+                    <TablePagination
+                        total={batches.total}
+                        fromIdx={batches.from ?? 0}
+                        toIdx={batches.to ?? 0}
+                        perPage={batches.per_page ?? 10}
+                        currentPage={batches.current_page}
+                        totalPages={batches.last_page}
+                        onPerPageChange={(val) => applyFilters({ per_page: val })}
+                        onPrevPage={() => batches.prev_page_url && router.visit(batches.prev_page_url, { preserveState: true })}
+                        onNextPage={() => batches.next_page_url && router.visit(batches.next_page_url, { preserveState: true })}
+                        hasPrev={Boolean(batches.prev_page_url)}
+                        hasNext={Boolean(batches.next_page_url)}
+                        variant="table"
+                    />
                 </div>
             </div>
 

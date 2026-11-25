@@ -112,7 +112,7 @@ export function TableActionMenu({
 
     return (
         <div
-            className={`inline-flex items-center justify-end ${className}`}
+            className={`inline-flex items-center justify-center ${className}`}
             data-no-click
         >
             <button

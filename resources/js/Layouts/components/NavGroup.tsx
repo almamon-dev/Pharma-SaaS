@@ -22,19 +22,36 @@ interface NavGroupProps {
     onClose?: () => void;
 }
 
+const persistedExpandedGroups = new Set<string>();
+
 export const NavGroup: React.FC<NavGroupProps> = ({
     item,
     isOpen,
     onClose,
 }) => {
     const isActiveGroup = item.items.some((sub) => sub.active);
-    const [isExpanded, setIsExpanded] = useState(isActiveGroup);
+    const [isExpanded, setIsExpanded] = useState(
+        () => isActiveGroup || persistedExpandedGroups.has(item.group)
+    );
 
     useEffect(() => {
         if (isActiveGroup) {
+            persistedExpandedGroups.add(item.group);
             setIsExpanded(true);
         }
-    }, [isActiveGroup]);
+    }, [isActiveGroup, item.group]);
+
+    const toggleExpanded = () => {
+        setIsExpanded((prev) => {
+            const next = !prev;
+            if (next) {
+                persistedExpandedGroups.add(item.group);
+            } else {
+                persistedExpandedGroups.delete(item.group);
+            }
+            return next;
+        });
+    };
 
     if (!item.items.length) return null;
 
@@ -45,7 +62,7 @@ export const NavGroup: React.FC<NavGroupProps> = ({
         <div className="mb-0.5">
             <button
                 type="button"
-                onClick={() => setIsExpanded((prev) => !prev)}
+                onClick={toggleExpanded}
                 title={!isOpen ? item.group : undefined}
                 className={`w-full flex items-center ${
                     isOpen ? 'justify-between px-3' : 'justify-center'

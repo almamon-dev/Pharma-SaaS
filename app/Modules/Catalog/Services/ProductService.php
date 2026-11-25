@@ -153,6 +153,14 @@ class ProductService
             $product->sku = $sku;
             $product->description = $data['description'] ?? null;
             $product->base_unit = $baseUnit;
+            $mrp = isset($data['mrp']) ? round((float) $data['mrp'], 2) : 0.0;
+            $sellingPrice = array_key_exists('selling_price', $data) && $data['selling_price'] !== null && $data['selling_price'] !== ''
+                ? round((float) $data['selling_price'], 2)
+                : $mrp;
+            $purchasePrice = isset($data['purchase_price']) ? round((float) $data['purchase_price'], 2) : 0.0;
+            $product->mrp = $mrp;
+            $product->selling_price = $sellingPrice;
+            $product->purchase_price = $purchasePrice;
             $product->track_batch = $trackBatch;
             $product->is_controlled = $isControlled;
             $product->default_discount_type = $data['default_discount_type'] ?? null;
@@ -360,6 +368,15 @@ class ProductService
                 $product->description = $data['description'];
             }
             $product->base_unit = $baseUnit;
+            if (array_key_exists('mrp', $data)) {
+                $product->mrp = round((float) ($data['mrp'] ?? 0), 2);
+            }
+            if (array_key_exists('selling_price', $data)) {
+                $product->selling_price = round((float) ($data['selling_price'] ?? 0), 2);
+            }
+            if (array_key_exists('purchase_price', $data)) {
+                $product->purchase_price = round((float) ($data['purchase_price'] ?? 0), 2);
+            }
             $product->track_batch = $type === 'medicine' ? true : (bool) ($data['track_batch'] ?? $product->track_batch);
             $product->is_controlled = $type === 'medicine' ? (bool) ($data['is_controlled'] ?? $product->is_controlled) : false;
             if (array_key_exists('default_discount_type', $data)) {

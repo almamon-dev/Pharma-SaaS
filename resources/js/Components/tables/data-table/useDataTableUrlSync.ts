@@ -37,7 +37,7 @@ export function useDataTableUrlSync({
         const nextUrl = qs
             ? `${window.location.pathname}?${qs}`
             : window.location.pathname;
-        window.history.replaceState(null, '', nextUrl);
+        window.history.replaceState(window.history.state, '', nextUrl);
     }, [viewMode, currentPage, perPage, syncUrlParams]);
 }
 

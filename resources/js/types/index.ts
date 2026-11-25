@@ -234,6 +234,7 @@ export interface SharedPageProps {
         success?: string | null;
         error?: string | null;
         lastSale?: PosReceiptData | null;
+        lastClosedSessionId?: number | null;
     };
     errors: Record<string, string>;
     [key: string]: unknown;

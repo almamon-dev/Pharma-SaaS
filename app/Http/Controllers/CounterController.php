@@ -6,9 +6,11 @@ use App\Models\AuditLog;
 use App\Models\Counter;
 use App\Models\CounterBreakLog;
 use App\Models\CounterCashier;
+use App\Models\CounterCashMovement;
 use App\Models\CounterSession;
 use App\Models\Sale;
 use App\Models\User;
+use App\Services\CashCounterShiftService;
 use App\Services\CounterAssignmentService;
 use App\Support\TenantContext;
 use Carbon\Carbon;
@@ -18,11 +20,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CounterController extends Controller
 {
+    public function __construct(
+        private readonly CashCounterShiftService $shiftService
+    ) {}
     public function index(Request $request, TenantContext $tenantContext): Response
     {
         $branch = $tenantContext->branch();
@@ -114,17 +120,29 @@ class CounterController extends Controller
                     'id' => $c->currentUser->id,
                     'name' => $c->currentUser->name,
                 ] : null,
-                'current_session' => $c->currentSession ? [
-                    'id' => $c->currentSession->id,
-                    'user_id' => $c->currentSession->user_id,
-                    'user_name' => $c->currentSession->user?->name,
-                    'shift' => $c->currentSession->shift ?? 'morning',
-                    'opened_at' => $c->currentSession->opened_at?->toISOString(),
-                    'opening_float' => (float) $c->currentSession->opening_float,
-                    'total_sales_amount' => (float) $c->currentSession->total_sales_amount,
-                    'total_transactions' => (int) $c->currentSession->total_transactions,
-                    'system_expected_cash' => (float) $c->currentSession->system_expected_cash,
-                ] : null,
+                'current_session' => $c->currentSession ? (function () use ($c): array {
+                    $live = $this->shiftService->calculateLiveDrawerSummary($c->currentSession);
+
+                    return [
+                        'id' => $c->currentSession->id,
+                        'user_id' => $c->currentSession->user_id,
+                        'user_name' => $c->currentSession->user?->name,
+                        'shift' => $c->currentSession->shift ?? 'morning',
+                        'opened_at' => $c->currentSession->opened_at?->toISOString(),
+                        'opened_at_time' => $c->currentSession->opened_at?->format('h:i A'),
+                        'opening_float' => (float) $live['opening_float'],
+                        'opening_denominations' => $c->currentSession->opening_denominations,
+                        'cash_sales' => (float) $live['cash_sales'],
+                        'card_sales' => (float) $live['card_sales'],
+                        'mobile_sales' => (float) $live['mobile_sales'],
+                        'cash_in' => (float) $live['cash_in'],
+                        'cash_out_total' => (float) $live['cash_out_total'],
+                        'cash_refunds' => (float) $live['cash_refunds'],
+                        'total_sales_amount' => (float) $live['total_sales'],
+                        'total_transactions' => (int) $live['total_transactions'],
+                        'system_expected_cash' => (float) $live['expected_cash'],
+                    ];
+                })() : null,
                 'assigned_cashiers' => $c->cashierAssignments->map(fn (CounterCashier $ca) => [
                     'id' => $ca->id,
                     'user_id' => $ca->user_id,
@@ -139,6 +157,9 @@ class CounterController extends Controller
             ->get()
             ->map(fn (CounterSession $s) => [
                 'id' => $s->id,
+                'z_report_number' => $s->z_report_number,
+                'is_force_closed' => (bool) $s->is_force_closed,
+                'force_close_reason' => $s->force_close_reason,
                 'counter_code' => $s->counter?->code,
                 'counter_name' => $s->counter?->name,
                 'user_name' => $s->user?->name,
@@ -147,6 +168,9 @@ class CounterController extends Controller
                 'opened_at' => $s->opened_at?->format('d M Y, h:i A'),
                 'closed_at' => $s->closed_at?->format('d M Y, h:i A'),
                 'opening_float' => (float) $s->opening_float,
+                'cash_in_total' => (float) $s->cash_in_total,
+                'cash_out_total' => (float) $s->cash_out_total,
+                'cash_refunds_total' => (float) $s->cash_refunds_total,
                 'closing_cash_counted' => $s->closing_cash_counted !== null ? (float) $s->closing_cash_counted : null,
                 'system_expected_cash' => (float) $s->system_expected_cash,
                 'discrepancy' => $s->discrepancy !== null ? (float) $s->discrepancy : null,
@@ -360,73 +384,34 @@ class CounterController extends Controller
         $branch = $tenantContext->branch();
         $tenant = $tenantContext->tenant();
 
-        // Check if cashier already has an active session on another counter
-        $otherActiveSession = CounterSession::query()
-            ->where('user_id', $user->id)
-            ->where('status', 'open')
-            ->where('counter_id', '!=', $counter->id)
-            ->first();
-
-        if ($otherActiveSession) {
-            $otherCounter = $otherActiveSession->counter;
-
-            return back()->with('error', "You already have an active open shift on Counter {$otherCounter?->code}. Please close that shift first.");
-        }
-
-        if ($counter->status === 'active' && $counter->current_user_id && $counter->current_user_id !== $user->id) {
-            return back()->with('error', "Counter {$counter->code} is currently occupied by another cashier.");
+        if (! $tenant || ! $branch) {
+            return back()->with('error', 'Select an active branch before opening a shift.');
         }
 
         $validated = $request->validate([
             'opening_float' => ['required', 'numeric', 'min:0'],
+            'opening_denominations' => ['nullable', 'array'],
+            'opening_denominations.*' => ['nullable', 'integer', 'min:0'],
             'shift' => ['nullable', Rule::in(['morning', 'evening', 'night'])],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        DB::transaction(function () use ($counter, $user, $branch, $tenant, $validated) {
-            $existingSession = CounterSession::query()
-                ->where('counter_id', $counter->id)
-                ->where('status', 'open')
-                ->first();
-
-            if (! $existingSession) {
-                CounterSession::query()->create([
-                    'tenant_id' => $tenant->id,
-                    'branch_id' => $branch->id,
-                    'counter_id' => $counter->id,
-                    'user_id' => $user->id,
-                    'status' => 'open',
-                    'shift' => $validated['shift'] ?? 'morning',
-                    'opened_at' => now(),
-                    'opening_float' => $validated['opening_float'],
-                    'system_expected_cash' => $validated['opening_float'],
-                    'total_sales_amount' => 0,
-                    'total_transactions' => 0,
-                    'notes' => $validated['notes'] ?? null,
-                ]);
-            }
-
-            $counter->update([
-                'status' => 'active',
-                'current_user_id' => $user->id,
-                'current_break_reason' => null,
-                'break_started_at' => null,
-            ]);
-
-            AuditLog::record(
-                action: 'counter.shift_opened',
-                description: "Cashier {$user->name} opened shift on Counter {$counter->code} with opening float {$validated['opening_float']}.",
-                subject: $counter,
-                metadata: [
-                    'counter_id' => $counter->id,
-                    'opening_float' => $validated['opening_float'],
-                    'shift' => $validated['shift'] ?? 'morning',
-                ]
+        try {
+            $this->shiftService->openShift(
+                tenant: $tenant,
+                branch: $branch,
+                counter: $counter,
+                cashier: $user,
+                openingFloat: $validated['opening_float'],
+                shift: $validated['shift'] ?? null,
+                notes: $validated['notes'] ?? null,
+                openingDenominations: $validated['opening_denominations'] ?? null,
             );
-        });
+        } catch (ValidationException $e) {
+            $firstMessage = collect($e->errors())->flatten()->first() ?? 'Could not open shift.';
 
-        // Try dynamically assigning any pending unassigned orders to this newly opened counter!
-        app(CounterAssignmentService::class)->processUnassignedQueue($tenant->id, $branch->id);
+            return back()->with('error', $firstMessage);
+        }
 
         return back()->with('success', "Shift started on Counter {$counter->code} with opening float.");
     }
@@ -522,82 +507,149 @@ class CounterController extends Controller
         return back()->with('success', "Counter {$counter->code} service resumed. Welcome back!");
     }
 
-    public function closeSession(Request $request, Counter $counter): RedirectResponse
+    public function closeSession(Request $request, Counter $counter, TenantContext $tenantContext): RedirectResponse
     {
         $user = $request->user();
+        $canOverride = $tenantContext->hasRole(['admin', 'manager']) || ($user && $user->isSubscriberAdmin());
 
         $validated = $request->validate([
             'closing_cash_counted' => ['required', 'numeric', 'min:0'],
+            'closing_denominations' => ['nullable', 'array'],
+            'closing_denominations.*' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $session = $counter->currentSession;
-        if (! $session) {
-            $counter->update([
-                'status' => 'closed',
-                'current_user_id' => null,
-                'current_break_reason' => null,
-                'break_started_at' => null,
-            ]);
+        try {
+            $closedSession = $this->shiftService->closeShift(
+                counter: $counter,
+                actor: $user,
+                closingCashCounted: $validated['closing_cash_counted'],
+                denominations: $validated['closing_denominations'] ?? null,
+                notes: $validated['notes'] ?? null,
+                canOverrideOwnership: $canOverride,
+            );
+        } catch (ValidationException $e) {
+            $firstMessage = collect($e->errors())->flatten()->first() ?? 'Could not close shift.';
 
+            return back()->with('error', $firstMessage);
+        }
+
+        if (! $closedSession) {
             return back()->with('success', "Counter {$counter->code} closed.");
         }
 
-        $counted = round((float) $validated['closing_cash_counted'], 2);
-        $expected = round((float) $session->system_expected_cash, 2);
-        $discrepancy = round($counted - $expected, 2);
-
-        DB::transaction(function () use ($counter, $session, $user, $counted, $expected, $discrepancy, $validated) {
-            $openBreaks = CounterBreakLog::query()
-                ->where('counter_session_id', $session->id)
-                ->whereNull('ended_at')
-                ->get();
-
-            foreach ($openBreaks as $ob) {
-                $now = now();
-                $mins = max(1, $now->diffInMinutes($ob->started_at));
-                $ob->update([
-                    'ended_at' => $now,
-                    'duration_minutes' => $mins,
-                ]);
-            }
-
-            $session->update([
-                'status' => 'closed',
-                'closed_at' => now(),
-                'closing_cash_counted' => $counted,
-                'discrepancy' => $discrepancy,
-                'notes' => $validated['notes'] ?? null,
-            ]);
-
-            $counter->update([
-                'status' => 'closed',
-                'current_user_id' => null,
-                'current_break_reason' => null,
-                'break_started_at' => null,
-            ]);
-
-            AuditLog::record(
-                action: 'counter.shift_closed',
-                description: "Cashier {$user->name} closed shift on Counter {$counter->code}. Expected Cash: {$expected}, Counted: {$counted}, Discrepancy: {$discrepancy}.",
-                subject: $session,
-                metadata: [
-                    'counter_id' => $counter->id,
-                    'opening_float' => (float) $session->opening_float,
-                    'system_expected_cash' => $expected,
-                    'closing_cash_counted' => $counted,
-                    'discrepancy' => $discrepancy,
-                    'total_sales' => (float) $session->total_sales_amount,
-                    'total_transactions' => (int) $session->total_transactions,
-                ]
-            );
-        });
-
-        $discrepancyMsg = $discrepancy == 0
+        $discrepancy = (float) $closedSession->discrepancy;
+        $discrepancyMsg = $discrepancy == 0.0
             ? 'Cash matched 100%!'
-            : ($discrepancy > 0 ? "Cash surplus of +{$discrepancy}" : "Cash shortage of {$discrepancy}");
+            : ($discrepancy > 0 ? "Cash surplus of +{$closedSession->discrepancy}" : "Cash shortage of {$closedSession->discrepancy}");
 
-        return back()->with('success', "Shift closed on Counter {$counter->code}. Z-Report generated: {$discrepancyMsg}");
+        return back()
+            ->with('success', "Shift closed on Counter {$counter->code}. Z-Report {$closedSession->z_report_number} generated: {$discrepancyMsg}")
+            ->with('lastClosedSessionId', $closedSession->id);
+    }
+
+    /**
+     * Admin / Branch Manager force-closes a forgotten open shift with mandatory reason.
+     */
+    public function forceCloseSession(Request $request, Counter $counter, TenantContext $tenantContext): RedirectResponse
+    {
+        $user = $request->user();
+        $canForceClose = $tenantContext->hasRole(['admin', 'manager']) || ($user && $user->isSubscriberAdmin());
+        if (! $canForceClose) {
+            abort(403, 'Unauthorized. Only Admins and Branch Managers can force-close shifts.');
+        }
+
+        $validated = $request->validate([
+            'force_close_reason' => ['required', 'string', 'min:3', 'max:500'],
+            'closing_cash_counted' => ['nullable', 'numeric', 'min:0'],
+            'closing_denominations' => ['nullable', 'array'],
+            'closing_denominations.*' => ['nullable', 'integer', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $closedSession = $this->shiftService->closeShift(
+                counter: $counter,
+                actor: $user,
+                closingCashCounted: $validated['closing_cash_counted'] ?? null,
+                denominations: $validated['closing_denominations'] ?? null,
+                notes: $validated['notes'] ?? null,
+                canOverrideOwnership: true,
+                isForceClose: true,
+                forceCloseReason: $validated['force_close_reason'],
+            );
+        } catch (ValidationException $e) {
+            $firstMessage = collect($e->errors())->flatten()->first() ?? 'Could not force-close shift.';
+
+            return back()->with('error', $firstMessage);
+        }
+
+        if (! $closedSession) {
+            return back()->with('success', "Counter {$counter->code} closed.");
+        }
+
+        return back()
+            ->with('success', "Shift force-closed on Counter {$counter->code}. Z-Report {$closedSession->z_report_number} generated.")
+            ->with('lastClosedSessionId', $closedSession->id);
+    }
+
+    /**
+     * Record Cash In / Cash Out / Safe Drop / Cash Refund against an active open shift.
+     */
+    public function recordCashMovement(Request $request, Counter $counter, TenantContext $tenantContext): RedirectResponse
+    {
+        $user = $request->user();
+        $canOverride = $tenantContext->hasRole(['admin', 'manager']) || ($user && $user->isSubscriberAdmin());
+
+        $validated = $request->validate([
+            'type' => ['required', Rule::in(CounterCashMovement::TYPES)],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'reason' => ['required', 'string', 'max:255'],
+            'reference_number' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $movement = $this->shiftService->recordCashMovement(
+                counter: $counter,
+                actor: $user,
+                type: $validated['type'],
+                amount: $validated['amount'],
+                reason: $validated['reason'],
+                referenceNumber: $validated['reference_number'] ?? null,
+                notes: $validated['notes'] ?? null,
+                canOverrideOwnership: $canOverride,
+            );
+        } catch (ValidationException $e) {
+            $firstMessage = collect($e->errors())->flatten()->first() ?? 'Failed to record cash movement.';
+
+            return back()->with('error', $firstMessage);
+        }
+
+        $label = match ($movement->type) {
+            CounterCashMovement::TYPE_CASH_IN => 'Cash In',
+            CounterCashMovement::TYPE_CASH_OUT => 'Cash Out',
+            CounterCashMovement::TYPE_SAFE_DROP => 'Safe Drop',
+            CounterCashMovement::TYPE_CASH_REFUND => 'Cash Refund',
+            default => 'Cash Movement',
+        };
+
+        return back()->with('success', "{$label} of ৳{$movement->amount} recorded on Counter {$counter->code}.");
+    }
+
+    /**
+     * Return immutable Z-Report (for closed shifts) or live X-Report (for open shifts).
+     */
+    public function zReport(Request $request, CounterSession $session, TenantContext $tenantContext): JsonResponse
+    {
+        $user = $request->user();
+        $canViewAll = $tenantContext->hasRole(['admin', 'manager']) || ($user && $user->isSubscriberAdmin());
+
+        if (! $canViewAll && (int) $session->user_id !== (int) $user->id) {
+            abort(403, 'Unauthorized. You can only view Z-Reports for your own shift sessions.');
+        }
+
+        return response()->json($this->shiftService->getReportPayload($session));
     }
 
     public function destroy(Request $request, Counter $counter, TenantContext $tenantContext): RedirectResponse

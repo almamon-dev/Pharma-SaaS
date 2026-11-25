@@ -29,7 +29,8 @@ import {
     BarcodeScanFeedback,
 } from '@/Components/BarcodeCameraModal';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
-import QuickCustomerModal from '../Pos/components/QuickCustomerModal';
+import SalesCustomerModal from './components/SalesCustomerModal';
+import OrderPreviewModal from './components/OrderPreviewModal';
 import HeldBillsModal, { HeldBill } from '../Pos/components/HeldBillsModal';
 
 export interface BatchOption {
@@ -60,16 +61,49 @@ export interface MedicineItem {
 
 export interface CustomerItem {
     id: number;
+    customer_code?: string | null;
+    customer_type?: string;
     name: string;
     phone?: string | null;
     loyalty_points: number;
     allergies?: string | null;
     total_due: number;
+    purchase_count?: number;
+}
+
+export interface DraftOrderProp {
+    id: number;
+    order_number: string;
+    customer_id?: number | null;
+    customer?: CustomerItem | null;
+    doctor_name?: string | null;
+    prescription_notes?: string | null;
+    prescription_reference?: string | null;
+    requires_verification: boolean;
+    discount: number;
+    discount_percentage: number;
+    discount_type: 'fixed' | 'percent';
+    tax_amount: number;
+    notes?: string | null;
+    internal_notes?: string | null;
+    items: Array<{
+        medicine_id: number;
+        medicine_batch_id?: number | null;
+        quantity: number;
+        sale_unit: SaleUnit;
+        pack_quantity?: number;
+        unit_price: number;
+        line_total: number;
+    }>;
 }
 
 interface CreateOrderProps {
     medicines: MedicineItem[];
     customers: CustomerItem[];
+    customerTypes?: Array<{ value: string; label: string }>;
+    draftOrder?: DraftOrderProp | null;
+    permittedDiscountLimit?: number;
+    taxPercentage?: number;
     branchName?: string;
     currency: string;
 }
@@ -180,6 +214,10 @@ function CartQtyInput({
 export default function CreateOrder({
     medicines = [],
     customers = [],
+    customerTypes = [],
+    draftOrder = null,
+    permittedDiscountLimit = 2.0,
+    taxPercentage = 0.0,
     branchName,
     currency = 'BDT',
 }: CreateOrderProps) {
@@ -193,26 +231,69 @@ export default function CreateOrder({
     const scanInputRef = useRef<HTMLInputElement>(null);
 
     // Customer state
-    const [customerList, setCustomerList] = useState<CustomerItem[]>(customers);
-    const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-    const [walkInName, setWalkInName] = useState('Walk-in Customer');
-    const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
+    const [customerList, setCustomerList] = useState<CustomerItem[]>(() => {
+        if (draftOrder?.customer && !customers.some(c => c.id === draftOrder.customer?.id)) {
+            return [draftOrder.customer, ...customers];
+        }
+        return customers;
+    });
+    const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
+        draftOrder?.customer_id ? String(draftOrder.customer_id) : ''
+    );
+    const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all');
+    const [walkInName, setWalkInName] = useState(draftOrder?.customer?.name || 'Walk-in Customer');
+    const [walkInPhone, setWalkInPhone] = useState(draftOrder?.customer?.phone || '');
+    const [salesCustomerModalOpen, setSalesCustomerModalOpen] = useState(false);
 
-    // Cart state
-    const [cart, setCart] = useState<CartItem[]>([]);
-    const [discountType, setDiscountType] = useState<DiscountType>('fixed');
-    const [discount, setDiscount] = useState<string>('0');
-    const [taxAmount, setTaxAmount] = useState<string>('0');
-    const [orderNotes, setOrderNotes] = useState('');
+    // Cart state initialized from draft if present
+    const [cart, setCart] = useState<CartItem[]>(() => {
+        if (draftOrder?.items && draftOrder.items.length > 0) {
+            return draftOrder.items.map((item) => {
+                const med = medicines.find((m) => m.id === item.medicine_id);
+                if (!med) return null;
+                return {
+                    medicine: med,
+                    medicine_batch_id: item.medicine_batch_id,
+                    quantity: item.quantity,
+                    sale_unit: item.sale_unit || 'piece',
+                    unit_price: item.unit_price,
+                    line_total: item.line_total,
+                };
+            }).filter(Boolean) as CartItem[];
+        }
+        return [];
+    });
+
+    const [discountType, setDiscountType] = useState<DiscountType>(draftOrder?.discount_type || 'fixed');
+    const [discount, setDiscount] = useState<string>(draftOrder ? String(draftOrder.discount || 0) : '0');
+    const [taxAmount, setTaxAmount] = useState<string>(draftOrder ? String(draftOrder.tax_amount || 0) : '0');
+    const [orderNotes, setOrderNotes] = useState(draftOrder?.notes || '');
+    const [internalNotes, setInternalNotes] = useState(draftOrder?.internal_notes || '');
+    const [showOrderAdjustments, setShowOrderAdjustments] = useState<boolean>(
+        Boolean(
+            (draftOrder && Number(draftOrder.discount || 0) > 0) ||
+            (draftOrder && Number(draftOrder.tax_amount || 0) > 0) ||
+            draftOrder?.internal_notes ||
+            draftOrder?.notes
+        )
+    );
 
     // Prescription & Doctor details
-    const [showRxFields, setShowRxFields] = useState(false);
-    const [doctorName, setDoctorName] = useState('');
-    const [prescriptionNotes, setPrescriptionNotes] = useState('');
+    const [showRxFields, setShowRxFields] = useState(
+        Boolean(draftOrder?.doctor_name || draftOrder?.prescription_notes || draftOrder?.prescription_reference)
+    );
+    const [doctorName, setDoctorName] = useState(draftOrder?.doctor_name || '');
+    const [prescriptionReference, setPrescriptionReference] = useState(draftOrder?.prescription_reference || '');
+    const [prescriptionNotes, setPrescriptionNotes] = useState(draftOrder?.prescription_notes || '');
     const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
     const [prescriptionPreview, setPrescriptionPreview] = useState<string | null>(null);
-    const [requiresVerification, setRequiresVerification] = useState<boolean>(false);
+    const [requiresVerification, setRequiresVerification] = useState<boolean>(
+        draftOrder?.requires_verification || false
+    );
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Order Preview Modal
+    const [orderPreviewOpen, setOrderPreviewOpen] = useState(false);
 
     // Held Bills (Local Storage)
     const [heldBillsModalOpen, setHeldBillsModalOpen] = useState(false);
@@ -254,22 +335,27 @@ export default function CreateOrder({
         return customerList.find((c) => String(c.id) === selectedCustomerId) || null;
     }, [selectedCustomerId, customerList]);
 
-    // Customer options for Select component
-    const customerOptions = useMemo(
-        () => [
+    // Customer options for Select component with type filter
+    const customerOptions = useMemo(() => {
+        let list = customerList;
+        if (customerTypeFilter !== 'all') {
+            list = list.filter((c) => (c.customer_type || 'registered') === customerTypeFilter);
+        }
+        return [
             { id: 'walkin', value: '', name: 'Walk-in Customer (নগদ ক্রেতা)' },
-            ...customerList.map((c) => {
+            ...list.map((c) => {
+                const typeLabel = c.customer_type ? `[${c.customer_type.toUpperCase()}] ` : '';
+                const codeText = c.customer_code ? `${c.customer_code} · ` : '';
                 const dueText = c.total_due && c.total_due > 0 ? ` · বাকি: ${formatCurrency(c.total_due, currency)}` : '';
                 return {
                     id: c.id,
                     value: String(c.id),
-                    name: `${c.name}${c.phone ? ` (${c.phone})` : ''}${dueText}`,
-                    subtitle: `${c.loyalty_points} loyalty pts`,
+                    name: `${codeText}${c.name}${c.phone ? ` (${c.phone})` : ''}${dueText}`,
+                    subtitle: `${typeLabel}${c.loyalty_points || 0} pts · ${c.purchase_count ?? 0} orders`,
                 };
             }),
-        ],
-        [customerList, currency]
-    );
+        ];
+    }, [customerList, customerTypeFilter, currency]);
 
     // Cart by medicine ID for fast lookup in medicine table
     const cartById = useMemo(() => {
@@ -540,11 +626,29 @@ export default function CreateOrder({
         return Math.min(subtotal, val);
     }, [subtotal, discount, discountType]);
 
+    const effectiveDiscountPercentage = useMemo(() => {
+        if (subtotal <= 0 || discountAmount <= 0) return 0;
+        return Math.round(((discountAmount / subtotal) * 100) * 100) / 100;
+    }, [subtotal, discountAmount]);
+
+    const discountExceedsLimit = useMemo(() => {
+        const limit = permittedDiscountLimit ?? 2.0;
+        return discountAmount > 0 && effectiveDiscountPercentage > (limit + 0.01);
+    }, [discountAmount, effectiveDiscountPercentage, permittedDiscountLimit]);
+
+    const taxRate = taxPercentage ?? 0;
+    const computedTaxAmount = useMemo(() => {
+        if (taxRate > 0) {
+            const taxable = Math.max(0, subtotal - discountAmount);
+            return Math.round(taxable * (taxRate / 100) * 100) / 100;
+        }
+        return Math.max(0, parseFloat(taxAmount) || 0);
+    }, [subtotal, discountAmount, taxRate, taxAmount]);
+
     const totalPayable = useMemo(() => {
         const taxable = Math.max(0, subtotal - discountAmount);
-        const tax = Math.max(0, parseFloat(taxAmount) || 0);
-        return Math.max(0, Math.round((taxable + tax) * 100) / 100);
-    }, [subtotal, discountAmount, taxAmount]);
+        return Math.max(0, Math.round((taxable + computedTaxAmount) * 100) / 100);
+    }, [subtotal, discountAmount, computedTaxAmount]);
 
     // Handle barcode or Enter key search
     const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -601,12 +705,18 @@ export default function CreateOrder({
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    // Submit Order handler
-    const handleSubmitOrder = (isDraft: boolean) => {
+    // Prompt order preview modal prior to submission
+    const handleInitiateSubmit = () => {
         if (cart.length === 0) {
             alert('Your sales cart is empty. Please add at least one medicine.');
             return;
         }
+        setOrderPreviewOpen(true);
+    };
+
+    // Actual submission to backend
+    const executeSubmitOrder = (isDraft: boolean) => {
+        if (cart.length === 0) return;
 
         setSubmitting(true);
 
@@ -615,14 +725,19 @@ export default function CreateOrder({
             formData.append('customer_id', String(selectedCustomer.id));
         }
         if (doctorName) formData.append('doctor_name', doctorName);
+        if (prescriptionReference) formData.append('prescription_reference', prescriptionReference);
         if (prescriptionNotes) formData.append('prescription_notes', prescriptionNotes);
         if (orderNotes) formData.append('notes', orderNotes);
+        if (internalNotes) formData.append('internal_notes', internalNotes);
         if (prescriptionFile) formData.append('prescription_file', prescriptionFile);
         formData.append('requires_verification', requiresVerification ? '1' : '0');
         formData.append('is_draft', isDraft ? '1' : '0');
+        if (draftOrder?.id) {
+            formData.append('draft_id', String(draftOrder.id));
+        }
         formData.append('discount', String(discountAmount));
         formData.append('discount_type', discountType);
-        formData.append('tax_amount', String(parseFloat(taxAmount) || 0));
+        formData.append('tax_amount', String(computedTaxAmount));
 
         cart.forEach((item, idx) => {
             formData.append(`items[${idx}][medicine_id]`, String(item.medicine.id));
@@ -635,8 +750,12 @@ export default function CreateOrder({
 
         router.post(route('sales.orders.store'), formData as any, {
             forceFormData: true,
-            onFinish: () => setSubmitting(false),
+            onFinish: () => {
+                setSubmitting(false);
+                setOrderPreviewOpen(false);
+            },
             onError: (errs) => {
+                setSubmitting(false);
                 const firstErr = Object.values(errs)[0];
                 alert(firstErr || 'Failed to submit sales order. Please review inputs.');
             },
@@ -664,7 +783,7 @@ export default function CreateOrder({
             if (e.key === 'F9') {
                 e.preventDefault();
                 if (!submitting && cart.length > 0) {
-                    handleSubmitOrder(false);
+                    handleInitiateSubmit();
                 }
                 return;
             }
@@ -709,6 +828,24 @@ export default function CreateOrder({
             }
         >
             <Head title="New Sales Order" />
+
+            {/* Draft Notice if resuming a draft */}
+            {draftOrder && (
+                <div className="mb-3 px-3.5 py-2.5 rounded-[4px] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex items-center justify-between text-xs text-amber-800 dark:text-amber-200">
+                    <div className="flex items-center gap-2">
+                        <Save className="h-4 w-4 text-amber-600 shrink-0" />
+                        <span>
+                            <strong>Editing Saved Draft #{draftOrder.order_number}:</strong> Submitting this order will route it directly to the cash counter queue, or click "Save as Draft" to update the draft.
+                        </span>
+                    </div>
+                    <Link
+                        href={route('sales.orders.create')}
+                        className="text-[11px] font-bold text-amber-900 dark:text-amber-100 underline hover:no-underline shrink-0 ml-2"
+                    >
+                        Start New Blank Order
+                    </Link>
+                </div>
+            )}
 
             {/* Main 2-Column POS Layout (Left: 8 Cols Medicine Search & Table, Right: 4 Cols Order Register & Cart) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
@@ -1058,21 +1195,46 @@ export default function CreateOrder({
 
                     {/* Customer, Doctor, Prescription, Discount Controls */}
                     <div className="p-3.5 space-y-2.5 border-b border-slate-100 dark:border-slate-800">
-                        {/* Customer Selection */}
+                        {/* Customer Selection with Type Filters */}
                         <div>
-                            <div className="flex items-center justify-between mb-1">
-                                <label className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">
-                                    Customer (কাস্টমার)
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-[12.5px] font-bold text-slate-800 dark:text-slate-200">
+                                    Customer (ক্রেতা / রোগী)
                                 </label>
                                 <button
                                     type="button"
-                                    onClick={() => setQuickCustomerOpen(true)}
+                                    onClick={() => setSalesCustomerModalOpen(true)}
                                     className="text-[11px] font-bold text-[#FF4A1F] hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                     <UserPlus className="h-3 w-3" />
-                                    + New Customer
+                                    <span>+ New Customer</span>
                                 </button>
                             </div>
+
+                            {/* Customer Type Quick Filter Tabs */}
+                            <div className="flex items-center gap-1 mb-1.5 overflow-x-auto pb-0.5">
+                                {[
+                                    { id: 'all', label: 'All' },
+                                    { id: 'registered', label: 'Registered' },
+                                    { id: 'patient', label: 'Patient' },
+                                    { id: 'corporate', label: 'Corporate' },
+                                    { id: 'walk_in', label: 'Walk-in' },
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        onClick={() => setCustomerTypeFilter(tab.id)}
+                                        className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-[2px] transition-colors cursor-pointer ${
+                                            customerTypeFilter === tab.id
+                                                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200/70'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
                             <Select
                                 size="sm"
                                 value={selectedCustomerId}
@@ -1086,29 +1248,59 @@ export default function CreateOrder({
                                     }
                                 }}
                             />
-                            {selectedCustomer && (selectedCustomer.total_due ?? 0) > 0 && (
-                                <div className="mt-1 flex items-center justify-between px-2 py-1 rounded-[4px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-[11px] text-rose-700 dark:text-rose-300">
-                                    <span>⚠️ পূর্বের বকেয়া (Previous Due):</span>
-                                    <span className="font-bold">{formatCurrency(selectedCustomer.total_due, currency)}</span>
+
+                            {selectedCustomer ? (
+                                <div className="mt-1.5 p-2 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#181d26] space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 text-xs truncate">
+                                            <span>{selectedCustomer.name}</span>
+                                            {selectedCustomer.customer_type && (
+                                                <span className="text-[9.5px] font-semibold px-1 py-0.2 rounded border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 capitalize">
+                                                    {selectedCustomer.customer_type}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {selectedCustomer.customer_code && (
+                                            <span className="text-[10px] font-mono text-slate-400">
+                                                ID: {selectedCustomer.customer_code}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span>{selectedCustomer.phone || 'No phone'}</span>
+                                        <span>{selectedCustomer.purchase_count ?? 0} past orders • {selectedCustomer.loyalty_points ?? 0} pts</span>
+                                    </div>
+                                    {(selectedCustomer.total_due ?? 0) > 0 && (
+                                        <div className="flex items-center justify-between px-1.5 py-0.5 rounded-[2px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[10.5px] font-bold text-rose-700 dark:text-rose-300">
+                                            <span>⚠️ পূর্বের বকেয়া (Due Balance):</span>
+                                            <span className="tabular-nums">{formatCurrency(selectedCustomer.total_due, currency)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                                    <Input
+                                        placeholder="Walk-in Customer Name"
+                                        value={walkInName}
+                                        onChange={(e) => setWalkInName(e.target.value)}
+                                        className="h-7 text-xs"
+                                    />
+                                    <Input
+                                        placeholder="Walk-in Phone (Optional)"
+                                        value={walkInPhone}
+                                        onChange={(e) => setWalkInPhone(e.target.value)}
+                                        className="h-7 text-xs"
+                                    />
+                                </div>
+                            )}
+
+                            {selectedCustomer?.allergies && (
+                                <div className="mt-1.5 flex items-center gap-2 rounded-[3px] border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/20 px-2.5 py-1 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Allergy Note: {selectedCustomer.allergies}</span>
                                 </div>
                             )}
                         </div>
-
-                        {!selectedCustomerId && (
-                            <Input
-                                label="Walk-in Name"
-                                value={walkInName}
-                                onChange={(e) => setWalkInName(e.target.value)}
-                                placeholder="Walk-in Customer"
-                            />
-                        )}
-
-                        {selectedCustomer?.allergies && (
-                            <div className="flex items-center gap-2 rounded-[3px] border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/20 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 dark:text-rose-300">
-                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                Allergy Note: {selectedCustomer.allergies}
-                            </div>
-                        )}
 
                         {/* Doctor & Prescription Card */}
                         <div className="pt-0.5">
@@ -1129,12 +1321,20 @@ export default function CreateOrder({
                                             </button>
                                         )}
                                     </div>
-                                    <Input
-                                        placeholder="Doctor Name (ডাক্তারের নাম)"
-                                        value={doctorName}
-                                        onChange={(e) => setDoctorName(e.target.value)}
-                                        className="h-7 text-xs bg-white dark:bg-[#151921]"
-                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                        <Input
+                                            placeholder="Doctor Name (ডাক্তারের নাম)"
+                                            value={doctorName}
+                                            onChange={(e) => setDoctorName(e.target.value)}
+                                            className="h-7 text-xs bg-white dark:bg-[#151921]"
+                                        />
+                                        <Input
+                                            placeholder="Prescription Ref / Serial"
+                                            value={prescriptionReference}
+                                            onChange={(e) => setPrescriptionReference(e.target.value)}
+                                            className="h-7 text-xs bg-white dark:bg-[#151921]"
+                                        />
+                                    </div>
                                     <Input
                                         placeholder="Prescription / Dosage Instructions (নির্দেশনা বা নোট)"
                                         value={prescriptionNotes}
@@ -1206,109 +1406,176 @@ export default function CreateOrder({
                             )}
                         </div>
 
-                        {/* Discount Input */}
-                        <div className="flex flex-col gap-1 w-full font-sans antialiased">
-                            <div className="flex items-center justify-between gap-1">
-                                <label
-                                    htmlFor="sales-discount-input"
-                                    className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
+                        {/* Toggle Switch for Discount, VAT & Notes */}
+                        <div className="pt-1 border-t border-slate-200/70 dark:border-slate-800/80">
+                            <div className="flex items-center justify-between gap-2 py-0.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowOrderAdjustments((prev) => !prev)}
+                                    className="text-left text-[12px] font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                                 >
-                                    Discount
-                                </label>
-                                <div
-                                    role="group"
-                                    aria-label="Discount type"
-                                    className="inline-flex rounded-[3px] border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800/70"
+                                    Discount, VAT & Notes
+                                </button>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={showOrderAdjustments}
+                                    aria-label="Toggle Discount, VAT & Notes"
+                                    onClick={() => setShowOrderAdjustments((prev) => !prev)}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4A1F]/40 ${
+                                        showOrderAdjustments
+                                            ? 'bg-[#FF4A1F]'
+                                            : 'bg-slate-300 dark:bg-slate-700'
+                                    }`}
                                 >
-                                    <button
-                                        type="button"
-                                        aria-pressed={discountType === 'fixed'}
-                                        onClick={() => setDiscountType('fixed')}
-                                        title={`Fixed amount (${currencySymbol})`}
-                                        className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                            discountType === 'fixed'
-                                                ? 'bg-[#FF4A1F] text-white'
-                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                    <span
+                                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs transition-transform ${
+                                            showOrderAdjustments ? 'translate-x-[18px]' : 'translate-x-[2px]'
                                         }`}
-                                    >
-                                        {currencySymbol}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        aria-pressed={discountType === 'percent'}
-                                        onClick={() => setDiscountType('percent')}
-                                        title="Percentage (%)"
-                                        className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                            discountType === 'percent'
-                                                ? 'bg-[#FF4A1F] text-white'
-                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                                        }`}
-                                    >
-                                        %
-                                    </button>
-                                </div>
+                                    />
+                                </button>
                             </div>
-                            <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
-                                {discountType === 'fixed' && (
-                                    <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
-                                        {currencySymbol}
-                                    </span>
-                                )}
-                                <input
-                                    id="sales-discount-input"
-                                    type="number"
-                                    min="0"
-                                    max={discountType === 'percent' ? 100 : undefined}
-                                    step="0.01"
-                                    value={discount}
-                                    onChange={(e) => setDiscount(e.target.value)}
-                                    onFocus={(e) => e.currentTarget.select()}
-                                    onBlur={() => {
-                                        const num = Number(discount);
-                                        if (discount.trim() === '' || Number.isNaN(num) || num < 0) {
-                                            setDiscount('0');
-                                            return;
-                                        }
-                                        if (discountType === 'percent' && num > 100) {
-                                            setDiscount('100');
-                                        }
-                                    }}
-                                    placeholder={discountType === 'percent' ? '0' : '0.00'}
-                                    className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
-                                />
-                                {discountType === 'percent' && (
-                                    <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
-                                        %
-                                    </span>
-                                )}
-                            </div>
-                        </div>
 
-                        {/* VAT / Tax & Order Notes */}
-                        <div className="grid grid-cols-1 gap-2 pt-1">
-                            <div>
-                                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
-                                    VAT / Tax ({currencySymbol})
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    value={taxAmount}
-                                    onChange={(e) => setTaxAmount(e.target.value)}
-                                    className="h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2.5 text-xs font-medium tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F]"
-                                />
-                            </div>
-                            <div>
-                                <input
-                                    type="text"
-                                    placeholder="Salesman order remark / internal note..."
-                                    value={orderNotes}
-                                    onChange={(e) => setOrderNotes(e.target.value)}
-                                    className="h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F]"
-                                />
-                            </div>
+                            {showOrderAdjustments && (
+                                <div className="mt-2 space-y-2">
+                                    {/* Discount Input with Permitted Limit Display & Approval Badge */}
+                                    <div className="flex flex-col gap-1 w-full font-sans antialiased">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <label
+                                                    htmlFor="sales-discount-input"
+                                                    className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
+                                                >
+                                                    Discount
+                                                </label>
+                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                                    (Max: {permittedDiscountLimit ?? 2}%)
+                                                </span>
+                                            </div>
+                                            <div
+                                                role="group"
+                                                aria-label="Discount type"
+                                                className="inline-flex rounded-[3px] border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800/70"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={discountType === 'fixed'}
+                                                    onClick={() => setDiscountType('fixed')}
+                                                    title={`Fixed amount (${currencySymbol})`}
+                                                    className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                        discountType === 'fixed'
+                                                            ? 'bg-[#FF4A1F] text-white'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                                    }`}
+                                                >
+                                                    {currencySymbol}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={discountType === 'percent'}
+                                                    onClick={() => setDiscountType('percent')}
+                                                    title="Percentage (%)"
+                                                    className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
+                                                        discountType === 'percent'
+                                                            ? 'bg-[#FF4A1F] text-white'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                                                    }`}
+                                                >
+                                                    %
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
+                                            {discountType === 'fixed' && (
+                                                <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
+                                                    {currencySymbol}
+                                                </span>
+                                            )}
+                                            <input
+                                                id="sales-discount-input"
+                                                type="number"
+                                                min="0"
+                                                max={discountType === 'percent' ? 100 : undefined}
+                                                step="0.01"
+                                                value={discount}
+                                                onChange={(e) => setDiscount(e.target.value)}
+                                                onFocus={(e) => e.currentTarget.select()}
+                                                onBlur={() => {
+                                                    const num = Number(discount);
+                                                    if (discount.trim() === '' || Number.isNaN(num) || num < 0) {
+                                                        setDiscount('0');
+                                                        return;
+                                                    }
+                                                    if (discountType === 'percent' && num > 100) {
+                                                        setDiscount('100');
+                                                    }
+                                                }}
+                                                placeholder={discountType === 'percent' ? '0' : '0.00'}
+                                                className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                            />
+                                            {discountType === 'percent' && (
+                                                <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
+                                                    %
+                                                </span>
+                                            )}
+                                        </div>
+                                        {discountExceedsLimit && (
+                                            <div className="flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-[2px] border border-amber-200">
+                                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                <span>Exceeds limit ({permittedDiscountLimit}%) • Requires Manager Approval</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* VAT / Tax & Remarks */}
+                                    <div className="grid grid-cols-1 gap-2 pt-1">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-0.5">
+                                                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300">
+                                                    VAT / Tax {taxRate > 0 ? `(${taxRate}% Auto Calculated)` : `(${currencySymbol})`}
+                                                </label>
+                                                {taxRate > 0 && (
+                                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                        Pharmacy Setting
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="0.00"
+                                                disabled={taxRate > 0}
+                                                value={taxRate > 0 ? computedTaxAmount : taxAmount}
+                                                onChange={(e) => setTaxAmount(e.target.value)}
+                                                className={`h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] px-2.5 text-xs font-medium tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F] ${
+                                                    taxRate > 0 ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-white dark:bg-[#1e2329]'
+                                                }`}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <input
+                                                type="text"
+                                                placeholder="Salesman internal remark (ম্যানেজার ও ক্যাশিয়ারের জন্য)..."
+                                                value={internalNotes}
+                                                onChange={(e) => setInternalNotes(e.target.value)}
+                                                className="h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F]"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <input
+                                                type="text"
+                                                placeholder="Customer invoice note (রশিদে প্রিন্ট হবে - ঐচ্ছিক)..."
+                                                value={orderNotes}
+                                                onChange={(e) => setOrderNotes(e.target.value)}
+                                                className="h-[30px] w-full rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] px-2.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-[#FF4A1F]"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1473,11 +1740,11 @@ export default function CreateOrder({
                                     -{formatCurrency(discountAmount, currency)}
                                 </span>
                             </div>
-                            {parseFloat(taxAmount) > 0 && (
+                            {computedTaxAmount > 0 && (
                                 <div className="flex justify-between text-slate-500">
-                                    <span>VAT / Tax</span>
+                                    <span>VAT / Tax {taxRate > 0 ? `(${taxRate}%)` : ''}</span>
                                     <span className="font-semibold tabular-nums">
-                                        +{formatCurrency(parseFloat(taxAmount) || 0, currency)}
+                                        +{formatCurrency(computedTaxAmount, currency)}
                                     </span>
                                 </div>
                             )}
@@ -1497,11 +1764,11 @@ export default function CreateOrder({
                             fullWidth
                             isLoading={submitting}
                             disabled={cart.length === 0 || submitting}
-                            onClick={() => handleSubmitOrder(false)}
+                            onClick={handleInitiateSubmit}
                             className="h-10 bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[4px] font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                             <ShoppingCart className="h-4 w-4" />
-                            <span>Submit Sales Order & Assign Counter</span>
+                            <span>Submit Sales Order</span>
                             <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono">
                                 F9
                             </kbd>
@@ -1514,11 +1781,11 @@ export default function CreateOrder({
                             size="sm"
                             fullWidth
                             disabled={cart.length === 0 || submitting}
-                            onClick={() => handleSubmitOrder(true)}
+                            onClick={() => executeSubmitOrder(true)}
                             className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-[4px] cursor-pointer"
                         >
                             <Save className="h-3.5 w-3.5 mr-1" />
-                            <span>Save as Draft (অর্ডার ড্রাফট)</span>
+                            <span>Save as Draft</span>
                         </Button>
 
                         <p className="flex items-center justify-center gap-1 text-[11px] text-slate-400">
@@ -1529,24 +1796,46 @@ export default function CreateOrder({
                 </div>
             </div>
 
-            {/* Quick Customer Modal */}
-            {quickCustomerOpen && (
-                <QuickCustomerModal
-                    open={quickCustomerOpen}
-                    onClose={() => setQuickCustomerOpen(false)}
+            {/* Sales Customer Modal (With Customer Types, Duplicate Prevention) */}
+            {salesCustomerModalOpen && (
+                <SalesCustomerModal
+                    open={salesCustomerModalOpen}
+                    onClose={() => setSalesCustomerModalOpen(false)}
                     onCustomerCreated={(newCust) => {
-                        const fullCust: CustomerItem = {
-                            id: newCust.id,
-                            name: newCust.name,
-                            phone: newCust.phone || null,
-                            loyalty_points: 0,
-                            allergies: null,
-                            total_due: 0,
-                        };
-                        setCustomerList((prev) => [fullCust, ...prev]);
-                        setSelectedCustomerId(String(fullCust.id));
-                        setWalkInName(fullCust.name);
+                        setCustomerList((prev) => [newCust, ...prev.filter(c => c.id !== newCust.id)]);
+                        setSelectedCustomerId(String(newCust.id));
+                        setWalkInName(newCust.name);
                     }}
+                />
+            )}
+
+            {/* Pre-Submission Order Review Modal */}
+            {orderPreviewOpen && (
+                <OrderPreviewModal
+                    open={orderPreviewOpen}
+                    onClose={() => setOrderPreviewOpen(false)}
+                    onConfirm={executeSubmitOrder}
+                    submitting={submitting}
+                    cart={cart}
+                    customer={selectedCustomer}
+                    walkInName={walkInName}
+                    subtotal={subtotal}
+                    discount={discount}
+                    discountType={discountType}
+                    discountAmount={discountAmount}
+                    discountPercentage={effectiveDiscountPercentage}
+                    permittedDiscountLimit={permittedDiscountLimit}
+                    taxPercentage={taxRate}
+                    taxAmount={computedTaxAmount}
+                    totalPayable={totalPayable}
+                    doctorName={doctorName}
+                    prescriptionReference={prescriptionReference}
+                    prescriptionNotes={prescriptionNotes}
+                    prescriptionFile={prescriptionFile}
+                    requiresVerification={requiresVerification}
+                    orderNotes={orderNotes}
+                    internalNotes={internalNotes}
+                    currency={currency}
                 />
             )}
 

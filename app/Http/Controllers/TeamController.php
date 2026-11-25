@@ -136,6 +136,8 @@ class TeamController extends Controller
                 ];
             });
 
+            $branchModel = $branches->firstWhere('id', (int) $row->branch_id);
+
             return [
                 'id' => (int) $row->membership_id,
                 'user_id' => (int) $row->user_id,
@@ -147,6 +149,8 @@ class TeamController extends Controller
                 'role_name' => $assignedRole ? $assignedRole['name'] : 'No Role',
                 'role_slug' => $assignedRole ? $assignedRole['slug'] : '',
                 'branch_id' => $row->branch_id ? (int) $row->branch_id : null,
+                'branch_name' => $branchModel ? $branchModel->name : null,
+                'branch_code' => $branchModel ? $branchModel->code : null,
                 'branch_ids' => $assignedBranchIds,
                 'access_all_branches' => (bool) $row->access_all_branches,
                 'has_pin' => ! empty($row->manager_pin_hash),
@@ -178,6 +182,7 @@ class TeamController extends Controller
             'roles' => $roles,
             'permissionsCatalog' => $permissionsCatalog,
             'branches' => $branches,
+            'activeBranchId' => $tenantContext->branchId(),
             'activityLog' => $activityLog,
             'currentTenantId' => $currentTenant->id,
             'isOwner' => $isOwner,
@@ -199,12 +204,21 @@ class TeamController extends Controller
             'role_id' => ['nullable'],
             'roles' => ['nullable', 'array'],
             'role' => ['nullable', 'string'],
+            'branch_id' => ['nullable', Rule::exists('branches', 'id')->where('tenant_id', $tenant->id)],
             'branch_ids' => ['nullable', 'array'],
             'branch_ids.*' => [Rule::exists('branches', 'id')->where('tenant_id', $tenant->id)],
             'access_all_branches' => ['nullable', 'boolean'],
             'manager_pin' => ['nullable', 'string', 'digits:4'],
             'password' => ['nullable', 'string', 'min:8'],
         ]);
+
+        // Branch Manager restriction: must bind to manager's assigned branch
+        $isBranchManagerOnly = $tenantContext->hasRole('manager') && ! $tenantContext->hasRole('admin') && ! $isOwner;
+        if ($isBranchManagerOnly && $tenantContext->branchId()) {
+            $validated['branch_id'] = $tenantContext->branchId();
+            $validated['branch_ids'] = [$tenantContext->branchId()];
+            $validated['access_all_branches'] = false;
+        }
 
         $targetRole = null;
         if (! empty($validated['role_id'])) {
@@ -248,7 +262,7 @@ class TeamController extends Controller
             ? array_values(array_unique($validated['roles']))
             : [($targetRole?->slug ?: ($validated['role'] ?? 'pharmacist'))];
 
-        DB::transaction(function () use ($validated, $tenant, $targetRole, $assignedRoles, $user) {
+        DB::transaction(function () use ($validated, $tenant, $targetRole, $assignedRoles, $user, $tenantContext) {
             $member = User::where('email', $validated['email'])->first();
 
             if (! $member) {
@@ -275,12 +289,27 @@ class TeamController extends Controller
             }
 
             // Sync user branches
+            $primaryBranchId = ! empty($validated['branch_id']) ? (int) $validated['branch_id'] : null;
             $branchIds = $validated['branch_ids'] ?? [];
+
+            if ($primaryBranchId && ! in_array($primaryBranchId, $branchIds, true)) {
+                $branchIds[] = $primaryBranchId;
+            }
+
+            if (! $primaryBranchId && ! empty($branchIds)) {
+                $primaryBranchId = $branchIds[0];
+            }
+
+            if (! $primaryBranchId && ! ($validated['access_all_branches'] ?? false)) {
+                $primaryBranchId = $tenantContext->branchId() ?? $tenant->branches()->first()?->id;
+                if ($primaryBranchId && ! in_array($primaryBranchId, $branchIds, true)) {
+                    $branchIds[] = $primaryBranchId;
+                }
+            }
+
             if (! empty($branchIds)) {
                 $member->branches()->sync($branchIds);
             }
-
-            $primaryBranchId = ! empty($branchIds) ? $branchIds[0] : null;
 
             $tenant->users()->attach($member->id, [
                 'branch_id' => $primaryBranchId,
@@ -298,6 +327,7 @@ class TeamController extends Controller
                 metadata: [
                     'role' => $targetRole?->name ?? $assignedRoles[0],
                     'roles' => $assignedRoles,
+                    'branch_id' => $primaryBranchId,
                     'branches' => $branchIds,
                     'access_all_branches' => $validated['access_all_branches'] ?? false,
                 ],
@@ -347,6 +377,7 @@ class TeamController extends Controller
             'role_id' => ['nullable'],
             'roles' => ['nullable', 'array'],
             'role' => ['nullable', 'string'],
+            'branch_id' => ['nullable', Rule::exists('branches', 'id')->where('tenant_id', $tenant->id)],
             'branch_ids' => ['nullable', 'array'],
             'branch_ids.*' => [Rule::exists('branches', 'id')->where('tenant_id', $tenant->id)],
             'access_all_branches' => ['nullable', 'boolean'],
@@ -383,9 +414,19 @@ class TeamController extends Controller
             ? array_values(array_unique($validated['roles']))
             : [($newRole?->slug ?: ($validated['role'] ?? 'pharmacist'))];
 
-        DB::transaction(function () use ($membership, $targetUser, $newRole, $assignedRoles, $validated, $tenant) {
-            $branchIds = $validated['branch_ids'] ?? [];
-            if (! empty($branchIds)) {
+        $primaryBranchId = ! empty($validated['branch_id']) ? (int) $validated['branch_id'] : null;
+        $branchIds = $validated['branch_ids'] ?? [];
+
+        if ($primaryBranchId && ! in_array($primaryBranchId, $branchIds, true)) {
+            $branchIds[] = $primaryBranchId;
+        }
+
+        if (! $primaryBranchId && ! empty($branchIds)) {
+            $primaryBranchId = $branchIds[0];
+        }
+
+        DB::transaction(function () use ($membership, $targetUser, $newRole, $assignedRoles, $primaryBranchId, $branchIds, $validated, $tenant) {
+            if (array_key_exists('branch_id', $validated) || array_key_exists('branch_ids', $validated)) {
                 $targetUser->branches()->sync($branchIds);
             }
 
@@ -399,16 +440,21 @@ class TeamController extends Controller
             $targetUser->bumpPermissionVersion();
             $targetUser->save();
 
+            $updateData = [
+                'is_owner' => $newRole && $newRole->name === 'Owner',
+                'role' => $assignedRoles[0],
+                'roles' => json_encode($assignedRoles),
+                'is_active' => (bool) $validated['is_active'],
+                'updated_at' => now(),
+            ];
+
+            if (array_key_exists('branch_id', $validated) || array_key_exists('branch_ids', $validated)) {
+                $updateData['branch_id'] = $primaryBranchId;
+            }
+
             DB::table('tenant_user')
                 ->where('id', $membership->id)
-                ->update([
-                    'branch_id' => ! empty($branchIds) ? $branchIds[0] : null,
-                    'is_owner' => $newRole && $newRole->name === 'Owner',
-                    'role' => $assignedRoles[0],
-                    'roles' => json_encode($assignedRoles),
-                    'is_active' => (bool) $validated['is_active'],
-                    'updated_at' => now(),
-                ]);
+                ->update($updateData);
 
             AuditLog::record(
                 action: 'team.member_updated',

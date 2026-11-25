@@ -45,16 +45,16 @@ class DemoEntryTest extends TestCase
         $this->assertSame('cashier@pharmacore.test', $user->email);
     }
 
-    public function test_demo_entry_for_superadmin_redirects_to_admin_portal(): void
+    public function test_demo_entry_for_superadmin_is_strictly_forbidden_and_redirects_to_login(): void
     {
         $response = $this->get('/demo/enter?role=superadmin');
 
-        $response->assertRedirect('/admin');
-        $this->assertAuthenticated();
+        $response->assertRedirect('/login');
+        $this->assertGuest();
 
-        $user = auth()->user();
-        $this->assertSame('superadmin@pharmacore.test', $user->email);
-        $this->assertTrue($user->isSuperAdmin());
+        $responseByEmail = $this->get('/demo/enter?email=superadmin@pharmacore.test');
+        $responseByEmail->assertRedirect('/login');
+        $this->assertGuest();
     }
 
     public function test_demo_entry_for_pathologist_and_radiologist_redirects_to_dashboard(): void
@@ -119,18 +119,18 @@ class DemoEntryTest extends TestCase
         // 1. Visit admin demo roles page
         $this->actingAs($superAdmin)->get('/admin/demo-roles')->assertOk();
 
-        $role = \App\Models\DemoRole::where('role_id', 'superadmin')->firstOrFail();
+        $role = \App\Models\DemoRole::where('role_id', 'cashier')->firstOrFail();
 
         // 2. Super admin updates demo role features and description
         $this->actingAs($superAdmin)->put("/admin/demo-roles/{$role->id}", [
-            'title_en' => 'SaaS Super Admin (HQ)',
-            'title_bn' => 'সুপার অ্যাডমিন (হেডকোয়ার্টার)',
-            'subtitle_en' => 'Full Central Platform Oversight',
-            'subtitle_bn' => 'সম্পূর্ণ কেন্দ্রীয় নিয়ন্ত্রণ',
+            'title_en' => 'POS Cashier Lead',
+            'title_bn' => 'প্রধান ক্যাশিয়ার',
+            'subtitle_en' => 'Front Counter Billing & Shift Close',
+            'subtitle_bn' => 'কাউন্টার বিল ও শিফট ক্লোজ',
             'description_en' => 'Custom description configured dynamically from admin portal.',
             'description_bn' => 'অ্যাডমিন থেকে ডাইনামিকভাবে কনফিগার করা কাস্টম বিবরণ।',
-            'email' => 'superadmin@pharmacore.test',
-            'tags_en' => ['Global HQ', 'SaaS Oversight', 'Dynamic Modules'],
+            'email' => 'cashier@pharmacore.test',
+            'tags_en' => ['POS Terminal', 'Cash Register', 'Daily Sales'],
             'features_en' => [
                 'Dynamic Feature 1: Live custom override',
                 'Dynamic Feature 2: Real-time ledger monitoring',
@@ -143,7 +143,7 @@ class DemoEntryTest extends TestCase
 
         $this->assertDatabaseHas('demo_roles', [
             'id' => $role->id,
-            'title_en' => 'SaaS Super Admin (HQ)',
+            'title_en' => 'POS Cashier Lead',
         ]);
 
         // 3. Verify that landing page receives updated demo roles

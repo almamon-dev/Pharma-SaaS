@@ -48,6 +48,8 @@ class WelcomeController extends Controller
 
         $demoRoles = \App\Models\DemoRole::query()
             ->where('is_active', true)
+            ->whereNotIn('role_id', ['superadmin', 'super_admin'])
+            ->whereNotIn('role_key', ['superadmin', 'super_admin'])
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();

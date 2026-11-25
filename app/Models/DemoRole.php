@@ -291,41 +291,6 @@ class DemoRole extends Model
                 'sort_order' => 6,
                 'is_active' => true,
             ],
-            [
-                'role_id' => 'superadmin',
-                'role_key' => 'superadmin',
-                'title_en' => 'Super Admin',
-                'title_bn' => 'সুপার অ্যাডমিন',
-                'subtitle_en' => 'SaaS platform & subscribers',
-                'subtitle_bn' => 'প্ল্যাটফর্ম ও সাবস্ক্রিপশন',
-                'description_en' => 'Central SaaS platform owner overseeing multi-tenant pharmacy subscribers, subscription plan limits, custom feature module overrides, and platform compliance audit logs.',
-                'description_bn' => 'সেন্ট্রাল প্ল্যাটফর্ম বিজনেস অ্যাডমিনিস্ট্রেটর — সকল নিবন্ধিত ফার্মেসি সাবস্ক্রাইবার, প্ল্যান কনফিগারেশন, কাস্টম মডিউল অ্যাক্সেস এবং অডিট লগ পরিচালনার শীর্ষ রোল।',
-                'email' => 'superadmin@pharmacore.test',
-                'tags_en' => ['SaaS Console', 'Plan Management', 'Pharmacy Subscribers', 'Audit Logs', 'Platform Compliance'],
-                'tags_bn' => ['SaaS কনসোল', 'প্ল্যান ব্যবস্থাপনা', 'ফার্মেসি সাবস্ক্রাইবার', 'অডিট লগ', 'প্ল্যাটফর্ম কমপ্লায়েন্স'],
-                'features_en' => [
-                    'Create, update, and configure pricing for multi-tier SaaS subscription plans',
-                    'Override and customize feature modules per subscriber business or trial user',
-                    'Monitor platform-wide pharmacy businesses, active branches, and tenant quotas',
-                    'Inspect tamper-proof platform audit trails, ledger transactions, and compliance records',
-                ],
-                'features_bn' => [
-                    'SaaS সাবস্ক্রিপশন প্ল্যান তৈরি, মূল্য নির্ধারণ ও কোটা লিমিট পরিচালনা',
-                    'যেকোনো ফার্মেসি বা ডেমো ইউজারের জন্য মডিউলভিত্তিক কাস্টম ফিচার আনলক বা বন্ধ',
-                    'প্ল্যাটফর্মের সকল ফার্মেসি ব্যবসা, মোট শাখা এবং লাইভ ইউজার মনিটরিং',
-                    'সিস্টেম-ওয়াইড অডিট ট্রেইল, লেজার ট্রানজ্যাকশন এবং কমপ্লায়েন্স অ্যাক্টিভিটি পরিদর্শন',
-                ],
-                'restrictions_en' => [
-                    'Patient private clinical notes and prescriptions remain tenant-encrypted',
-                    'Individual store daily drawer cash cannot be tampered with centrally',
-                ],
-                'restrictions_bn' => [
-                    'রোগীর ব্যক্তিগত প্রেসক্রিপশন নোট টেন্যান্টের নিজস্ব চাবিতে এনক্রিপ্টেড থাকে',
-                    'নির্দিষ্ট কোনো দোকানের স্থানীয় ক্যাশ রেজিস্টার ট্রানজ্যাকশন কেন্দ্রীয়ভাবে পরিবর্তন নিষিদ্ধ',
-                ],
-                'sort_order' => 7,
-                'is_active' => true,
-            ],
         ];
 
         foreach ($defaults as $data) {

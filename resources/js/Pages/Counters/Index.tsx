@@ -1,35 +1,43 @@
-import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import React, { useEffect, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     Check,
     Coffee,
     Edit2,
+    FileText,
     KeyRound,
     Layers,
     LogOut,
     Plus,
+    Printer,
     Search,
+    ShieldAlert,
     ShoppingCart,
     Store,
     Trash2,
     User,
     UserCheck,
     Users,
+    Wallet,
     X,
     Zap,
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
-import { TableActionMenu, TableActionItem } from '@/Components/tables';
+import { TableActionMenu, TableActionItem, TablePagination } from '@/Components/tables';
 import { formatCurrency } from '@/lib/format';
+import { SharedPageProps } from '@/types';
 import {
     CloseShiftModal,
+    ForceCloseShiftModal,
     OpenShiftModal,
     PosCounterData,
     TakeBreakModal,
 } from '../Pos/components/PosShiftModals';
+import CashMovementModal from './components/CashMovementModal';
+import ZReportModal from './components/ZReportModal';
 
 export interface AssignedCashierData {
     id: number;
@@ -56,7 +64,15 @@ export interface ExtendedCounterData extends Omit<PosCounterData, 'current_sessi
         user_name?: string | null;
         shift?: string;
         opened_at?: string | null;
+        opened_at_time?: string | null;
         opening_float: number;
+        opening_denominations?: Record<string, number> | null;
+        cash_sales?: number;
+        card_sales?: number;
+        mobile_sales?: number;
+        cash_in?: number;
+        cash_out_total?: number;
+        cash_refunds?: number;
         total_sales_amount: number;
         total_transactions: number;
         system_expected_cash: number;
@@ -65,6 +81,9 @@ export interface ExtendedCounterData extends Omit<PosCounterData, 'current_sessi
 
 interface RecentSession {
     id: number;
+    z_report_number?: string | null;
+    is_force_closed?: boolean;
+    force_close_reason?: string | null;
     counter_code?: string;
     counter_name?: string;
     user_name?: string;
@@ -73,6 +92,9 @@ interface RecentSession {
     opened_at?: string;
     closed_at?: string;
     opening_float: number;
+    cash_in_total?: number;
+    cash_out_total?: number;
+    cash_refunds_total?: number;
     closing_cash_counted?: number | null;
     system_expected_cash: number;
     discrepancy?: number | null;
@@ -111,13 +133,24 @@ export default function CountersIndex({
     const [assignCashierCounter, setAssignCashierCounter] = useState<ExtendedCounterData | null>(null);
 
     // Active session modal targets
+    const { auth, flash } = usePage<SharedPageProps>().props;
+    const currentUserId = auth?.user?.id ?? null;
     const [openShiftCounter, setOpenShiftCounter] = useState<PosCounterData | null>(null);
     const [breakCounter, setBreakCounter] = useState<PosCounterData | null>(null);
     const [closeShiftCounter, setCloseShiftCounter] = useState<PosCounterData | null>(null);
+    const [forceCloseCounter, setForceCloseCounter] = useState<PosCounterData | null>(null);
+    const [cashMovementCounter, setCashMovementCounter] = useState<PosCounterData | null>(null);
+    const [zReportSessionId, setZReportSessionId] = useState<number | null>(null);
     const [resumeCounter, setResumeCounter] = useState<PosCounterData | null>(null);
     const [resumePin, setResumePin] = useState('');
     const [resumeError, setResumeError] = useState('');
     const [resumeSubmitting, setResumeSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (flash?.lastClosedSessionId) {
+            setZReportSessionId(flash.lastClosedSessionId);
+        }
+    }, [flash?.lastClosedSessionId]);
 
     const handleDeleteCounter = (counter: ExtendedCounterData) => {
         if (counter.status !== 'closed') {
@@ -142,6 +175,14 @@ export default function CountersIndex({
     // Filters
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'on_break' | 'closed'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [sessionPage, setSessionPage] = useState(1);
+    const [sessionPerPage, setSessionPerPage] = useState(10);
+
+    const sessionTotal = recentSessions.length;
+    const sessionTotalPages = Math.max(1, Math.ceil(sessionTotal / sessionPerPage));
+    const validSessionPage = Math.min(Math.max(1, sessionPage), sessionTotalPages);
+    const sessionStartIdx = (validSessionPage - 1) * sessionPerPage;
+    const paginatedSessions = recentSessions.slice(sessionStartIdx, sessionStartIdx + sessionPerPage);
 
     const filteredCounters = counters.filter((c) => {
         if (statusFilter !== 'all' && c.status !== statusFilter) return false;
@@ -161,6 +202,12 @@ export default function CountersIndex({
     const activeCount = counters.filter((c) => c.status === 'active').length;
     const breakCount = counters.filter((c) => c.status === 'on_break').length;
     const closedCount = counters.filter((c) => c.status === 'closed').length;
+    const myActiveCounter = counters.find(
+        (c) =>
+            c.status !== 'closed' &&
+            (c.current_session?.user_id === currentUserId || c.current_user?.id === currentUserId)
+    );
+    const canOpenPosNow = canManageCounters || (myActiveCounter?.status === 'active');
 
     const handleResumeService = (e: React.FormEvent) => {
         e.preventDefault();
@@ -190,7 +237,9 @@ export default function CountersIndex({
             title={isCashier ? 'My Shift & Register' : 'Counters & Shifts'}
             subtitle={
                 isCashier
-                    ? `${branchName ?? 'Branch'} · Personal shift station, float, and sales log`
+                    ? myActiveCounter
+                        ? `${branchName ?? 'Branch'} · Shift running on ${myActiveCounter.code}`
+                        : `${branchName ?? 'Branch'} · Personal shift station, float, and sales log`
                     : `${branchName ?? 'Branch'} · Counter terminals, cashier shift schedules, & dynamic queues`
             }
             actions={
@@ -220,8 +269,8 @@ export default function CountersIndex({
                             <Plus className="h-3.5 w-3.5" />
                             <span>Add Counter</span>
                         </Button>
-                    ) : (
-                        <Link href={route('pos.index')}>
+                    ) : canOpenPosNow ? (
+                        <Link href={route('pos.index', undefined, false)}>
                             <Button
                                 type="button"
                                 variant="primary"
@@ -232,6 +281,18 @@ export default function CountersIndex({
                                 <span>Open POS Terminal</span>
                             </Button>
                         </Link>
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            disabled
+                            title="Open a shift on a counter first to unlock POS Terminal"
+                            className="gap-1.5 bg-[#FF4A1F]/50 text-white text-xs font-semibold rounded-[3px] cursor-not-allowed"
+                        >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                            <span>Open POS Terminal</span>
+                        </Button>
                     )}
                 </div>
             }
@@ -363,6 +424,22 @@ export default function CountersIndex({
                                       ]
                                     : [
                                           {
+                                              key: 'cash-movement',
+                                              label: 'Cash In / Out / Refund',
+                                              icon: <Wallet className="h-3.5 w-3.5 text-emerald-600" />,
+                                              onClick: () => setCashMovementCounter(counter),
+                                          },
+                                          ...(session
+                                              ? [
+                                                    {
+                                                        key: 'x-report',
+                                                        label: 'Live X-Report',
+                                                        icon: <FileText className="h-3.5 w-3.5 text-blue-600" />,
+                                                        onClick: () => setZReportSessionId(session.id),
+                                                    },
+                                                ]
+                                              : []),
+                                          {
                                               key: 'take-break',
                                               label: 'Take Break',
                                               icon: <Coffee className="h-3.5 w-3.5 text-amber-600" />,
@@ -375,6 +452,17 @@ export default function CountersIndex({
                                               variant: 'danger' as const,
                                               onClick: () => setCloseShiftCounter(counter),
                                           },
+                                          ...(canManageCounters
+                                              ? [
+                                                    {
+                                                        key: 'force-close',
+                                                        label: 'Force Close Shift (Admin)',
+                                                        icon: <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />,
+                                                        variant: 'danger' as const,
+                                                        onClick: () => setForceCloseCounter(counter),
+                                                    },
+                                                ]
+                                              : []),
                                       ]),
                                 ...(canManageCounters
                                     ? [
@@ -401,10 +489,18 @@ export default function CountersIndex({
                                     : []),
                             ];
 
+                            const isOwnActive =
+                                !isClosed &&
+                                (session?.user_id === currentUserId || counter.current_user?.id === currentUserId);
+
                             return (
                                 <div
                                     key={counter.id}
-                                    className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none"
+                                    className={`rounded-[5px] border bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none ${
+                                        isActive
+                                            ? 'border-[#FF4A1F] ring-1 ring-[#FF4A1F]/15'
+                                            : 'border-slate-200 dark:border-slate-800'
+                                    }`}
                                 >
                                     {/* Card Header */}
                                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-[#151921]/50">
@@ -529,41 +625,131 @@ export default function CountersIndex({
                                         )}
 
                                         {/* Card Footer: Active Cashier & Status Menu */}
-                                        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11.5px] text-slate-600 dark:text-slate-400 gap-2">
-                                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
-                                                <User className="h-3 w-3 text-slate-400 shrink-0" />
-                                                <span className="text-[11px] text-slate-500">Active:</span>
-                                                <span className="font-semibold text-slate-900 dark:text-white truncate">
-                                                    {counter.current_user?.name || counter.current_user_name || (counter.status !== 'closed' ? 'Serving' : 'None')}
-                                                </span>
-                                            </div>
+                                        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                                            <div className="flex items-center justify-between text-[11.5px] text-slate-600 dark:text-slate-400 gap-2">
+                                                <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
+                                                    <User className="h-3 w-3 text-slate-400 shrink-0" />
+                                                    <span className="text-[11px] text-slate-500">Active:</span>
+                                                    <span className="font-semibold text-slate-900 dark:text-white truncate">
+                                                        {counter.current_user?.name || counter.current_user_name || (counter.status !== 'closed' ? 'Serving' : 'None')}
+                                                    </span>
+                                                </div>
 
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                {/* Status Pill */}
-                                                <span
-                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] text-[10px] font-semibold border ${
-                                                        isActive
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
-                                                            : isOnBreak
-                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80 animate-pulse'
-                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
-                                                    }`}
-                                                >
+                                                <div className="flex items-center gap-1.5 shrink-0">
                                                     <span
-                                                        className={`w-1.5 h-1.5 rounded-full ${
+                                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] text-[10px] font-semibold border ${
                                                             isActive
-                                                                ? 'bg-emerald-500'
+                                                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
                                                                 : isOnBreak
-                                                                ? 'bg-amber-500'
-                                                                : 'bg-slate-400'
+                                                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80 animate-pulse'
+                                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
                                                         }`}
-                                                    />
-                                                    {isActive ? 'Serving' : isOnBreak ? (counter.current_break_reason ? counter.current_break_reason.toUpperCase() : 'BREAK') : 'Closed'}
-                                                </span>
+                                                    >
+                                                        <span
+                                                            className={`w-1.5 h-1.5 rounded-full ${
+                                                                isActive
+                                                                    ? 'bg-emerald-500'
+                                                                    : isOnBreak
+                                                                    ? 'bg-amber-500'
+                                                                    : 'bg-slate-400'
+                                                            }`}
+                                                        />
+                                                        {isActive ? 'Open' : isOnBreak ? 'Break' : 'Closed'}
+                                                    </span>
 
-                                                {/* Three-Dot Action Menu */}
-                                                <TableActionMenu items={actionItems} label={`${counter.code} actions`} />
+                                                    <TableActionMenu items={actionItems} label={`${counter.code} actions`} />
+                                                </div>
                                             </div>
+
+                                            {session && !isClosed && (
+                                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
+                                                    Since {session.opened_at_time || '—'} · Float{' '}
+                                                    <strong className="font-mono text-slate-700 dark:text-slate-200">
+                                                        {formatCurrency(session.opening_float, currency)}
+                                                    </strong>{' '}
+                                                    · Sales{' '}
+                                                    <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                                                        {formatCurrency(session.total_sales_amount, currency)}
+                                                    </strong>
+                                                </div>
+                                            )}
+
+                                            {/* Primary Card Action Buttons (Matching Mockup) */}
+                                            {isClosed ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="primary"
+                                                    size="sm"
+                                                    disabled={!!myActiveCounter}
+                                                    onClick={() => setOpenShiftCounter(counter)}
+                                                    className="w-full justify-center bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-bold rounded-[4px]"
+                                                >
+                                                    {myActiveCounter ? 'Shift Active Elsewhere' : 'Open Shift'}
+                                                </Button>
+                                            ) : isActive ? (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {isOwnActive || canManageCounters ? (
+                                                        <Link href={route('pos.index', undefined, false)} className="w-full">
+                                                            <Button
+                                                                type="button"
+                                                                variant="primary"
+                                                                size="sm"
+                                                                className="w-full justify-center bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-[11px] font-bold rounded-[4px]"
+                                                            >
+                                                                Open POS Terminal
+                                                            </Button>
+                                                        </Link>
+                                                    ) : (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled
+                                                            className="w-full justify-center text-[11px] rounded-[4px]"
+                                                        >
+                                                            Locked
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            canManageCounters && !isOwnActive
+                                                                ? setForceCloseCounter(counter)
+                                                                : setCloseShiftCounter(counter)
+                                                        }
+                                                        className="w-full justify-center border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-rose-400 hover:text-rose-600 text-[11px] font-semibold rounded-[4px]"
+                                                    >
+                                                        {canManageCounters && !isOwnActive ? 'Force Close' : 'Close Shift'}
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        variant="primary"
+                                                        size="sm"
+                                                        onClick={() => setResumeCounter(counter)}
+                                                        className="w-full justify-center bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-[4px]"
+                                                    >
+                                                        Resume Shift
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            canManageCounters && !isOwnActive
+                                                                ? setForceCloseCounter(counter)
+                                                                : setCloseShiftCounter(counter)
+                                                        }
+                                                        className="w-full justify-center border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-rose-400 hover:text-rose-600 text-[11px] font-semibold rounded-[4px]"
+                                                    >
+                                                        {canManageCounters && !isOwnActive ? 'Force Close' : 'Close Shift'}
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -587,59 +773,79 @@ export default function CountersIndex({
                     </div>
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                            <thead className="bg-slate-50/80 dark:bg-[#181d26] text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <table className="w-full text-left text-xs border-collapse">
+                            <thead className="bg-[#f8fafc] dark:bg-[#181d26] text-slate-600 dark:text-slate-300 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <tr>
-                                    <th className="py-2 px-3">Counter</th>
-                                    <th className="py-2 px-3">Cashier</th>
-                                    <th className="py-2 px-3">Shift</th>
-                                    <th className="py-2 px-3">Timing</th>
-                                    <th className="py-2 px-3 text-right">Opening Float</th>
-                                    <th className="py-2 px-3 text-right">Sales Amount</th>
-                                    <th className="py-2 px-3 text-right">Counted Cash</th>
-                                    <th className="py-2 px-3 text-right">Discrepancy</th>
-                                    <th className="py-2 px-3 text-center">Status</th>
-                                    {canManageCounters && <th className="py-2 px-3 text-right">Actions</th>}
+                                    <th className="py-2 px-3 border-r border-slate-200/80 dark:border-slate-800/80">Counter</th>
+                                    <th className="py-2 px-3 border-r border-slate-200/80 dark:border-slate-800/80">Cashier</th>
+                                    <th className="py-2 px-3 border-r border-slate-200/80 dark:border-slate-800/80">Shift</th>
+                                    <th className="py-2 px-3 border-r border-slate-200/80 dark:border-slate-800/80">Timing</th>
+                                    <th className="py-2 px-3 text-right border-r border-slate-200/80 dark:border-slate-800/80">Opening Float</th>
+                                    <th className="py-2 px-3 text-right border-r border-slate-200/80 dark:border-slate-800/80">Sales Amount</th>
+                                    <th className="py-2 px-3 text-right border-r border-slate-200/80 dark:border-slate-800/80">Counted Cash</th>
+                                    <th className="py-2 px-3 text-right border-r border-slate-200/80 dark:border-slate-800/80">Discrepancy</th>
+                                    <th className="py-2 px-3 text-center border-r border-slate-200/80 dark:border-slate-800/80">Status</th>
+                                    <th className="py-2 px-3 text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
+                            <tbody className="font-mono text-[11px]">
                                 {recentSessions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={canManageCounters ? 10 : 9} className="text-center py-6 text-slate-400 font-sans">
+                                        <td colSpan={10} className="text-center py-6 text-slate-400 font-sans">
                                             No shift sessions recorded yet.
                                         </td>
                                     </tr>
                                 ) : (
-                                    recentSessions.map((s) => (
-                                        <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                                            <td className="py-2 px-3 font-sans font-bold text-slate-900 dark:text-white">
-                                                <span className="px-1 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 font-mono text-[10.5px] mr-1.5 text-slate-700 dark:text-slate-300">
-                                                    {s.counter_code}
-                                                </span>
-                                                {s.counter_name}
+                                    paginatedSessions.map((s, sIdx) => {
+                                        const isEven = sIdx % 2 === 1;
+                                        const rowBg = isEven ? 'bg-[#f8fafc] dark:bg-[#161a22]' : 'bg-white dark:bg-[#12161c]';
+                                        return (
+                                        <tr key={s.id} className={`${rowBg} hover:bg-slate-100/70 dark:hover:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800/80 transition-colors`}>
+                                            <td className="py-2 px-3 font-sans font-bold text-slate-900 dark:text-white border-r border-slate-200/80 dark:border-slate-800/80">
+                                                <div>
+                                                    <span className="px-1 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 font-mono text-[10.5px] mr-1.5 text-slate-700 dark:text-slate-300">
+                                                        {s.counter_code}
+                                                    </span>
+                                                    {s.counter_name}
+                                                </div>
+                                                {s.z_report_number && (
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <span className="text-[10px] font-mono text-[#FF4A1F]">
+                                                            {s.z_report_number}
+                                                        </span>
+                                                        {s.is_force_closed && (
+                                                            <span
+                                                                className="px-1 py-0.2 rounded-[2px] text-[9px] font-sans font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                                                title={s.force_close_reason || 'Force closed by supervisor'}
+                                                            >
+                                                                Force Closed
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
-                                            <td className="py-2 px-3 font-sans text-slate-700 dark:text-slate-300">
+                                            <td className="py-2 px-3 font-sans text-slate-700 dark:text-slate-300 border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {s.user_name || 'Staff'}
                                             </td>
-                                            <td className="py-2 px-3 font-sans capitalize text-slate-600 dark:text-slate-400 text-[10.5px]">
+                                            <td className="py-2 px-3 font-sans capitalize text-slate-600 dark:text-slate-400 text-[10.5px] border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {s.shift || 'Morning'}
                                             </td>
-                                            <td className="py-2 px-3 font-sans text-slate-500 text-[10.5px]">
+                                            <td className="py-2 px-3 font-sans text-slate-500 text-[10.5px] border-r border-slate-200/80 dark:border-slate-800/80">
                                                 <div>{s.opened_at}</div>
                                                 {s.closed_at && <div className="text-[10px] text-slate-400">Closed: {s.closed_at}</div>}
                                             </td>
-                                            <td className="py-2 px-3 text-right text-slate-700 dark:text-slate-300">
+                                            <td className="py-2 px-3 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {formatCurrency(s.opening_float, currency)}
                                             </td>
-                                            <td className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                            <td className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {formatCurrency(s.total_sales_amount, currency)} ({s.total_transactions})
                                             </td>
-                                            <td className="py-2 px-3 text-right font-semibold text-slate-900 dark:text-white">
+                                            <td className="py-2 px-3 text-right font-semibold text-slate-900 dark:text-white border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {s.closing_cash_counted !== null && s.closing_cash_counted !== undefined
                                                     ? formatCurrency(s.closing_cash_counted, currency)
                                                     : 'In Progress'}
                                             </td>
-                                            <td className="py-2 px-3 text-right">
+                                            <td className="py-2 px-3 text-right border-r border-slate-200/80 dark:border-slate-800/80">
                                                 {s.discrepancy !== null && s.discrepancy !== undefined ? (
                                                     <span
                                                         className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[3px] font-bold text-[10.5px] ${
@@ -665,7 +871,7 @@ export default function CountersIndex({
                                                     <span className="text-slate-400">—</span>
                                                 )}
                                             </td>
-                                            <td className="py-2 px-3 text-center">
+                                            <td className="py-2 px-3 text-center border-r border-slate-200/80 dark:border-slate-800/80">
                                                 <span
                                                     className={`px-1.5 py-0.5 rounded-[3px] text-[9.5px] font-bold uppercase font-sans ${
                                                         s.status === 'open'
@@ -676,26 +882,53 @@ export default function CountersIndex({
                                                     {s.status}
                                                 </span>
                                             </td>
-                                            {canManageCounters && (
-                                                <td className="py-2 px-3 text-right font-sans">
-                                                    {s.status === 'closed' && (
+                                            <td className="py-2 px-3 text-right font-sans">
+                                                <div className="inline-flex items-center justify-end gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setZReportSessionId(s.id)}
+                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-[3px] text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-[#FF4A1F] hover:text-white transition-colors cursor-pointer"
+                                                        title={s.status === 'closed' ? 'View & Print Z-Report' : 'View Live X-Report'}
+                                                    >
+                                                        <Printer className="h-3 w-3" />
+                                                        <span>{s.status === 'closed' ? 'Z-Report' : 'X-Report'}</span>
+                                                    </button>
+                                                    {canManageCounters && s.status === 'closed' && (
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteSession(s)}
-                                                            className="p-1 rounded-[3px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                                            className="p-1 rounded-[3px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                                                             title="Delete shift record"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     )}
-                                                </td>
-                                            )}
+                                                </div>
+                                            </td>
                                         </tr>
-                                    ))
+                                    );
+                                    })
                                 )}
                             </tbody>
                         </table>
                     </div>
+                    <TablePagination
+                        total={sessionTotal}
+                        fromIdx={sessionTotal > 0 ? sessionStartIdx + 1 : 0}
+                        toIdx={Math.min(sessionStartIdx + sessionPerPage, sessionTotal)}
+                        perPage={sessionPerPage}
+                        currentPage={validSessionPage}
+                        totalPages={sessionTotalPages}
+                        onPerPageChange={(val) => {
+                            setSessionPerPage(val);
+                            setSessionPage(1);
+                        }}
+                        onPrevPage={() => setSessionPage((p) => Math.max(1, p - 1))}
+                        onNextPage={() => setSessionPage((p) => Math.min(sessionTotalPages, p + 1))}
+                        hasPrev={validSessionPage > 1}
+                        hasNext={validSessionPage < sessionTotalPages}
+                        variant="table"
+                    />
                 </div>
             </div>
 
@@ -726,6 +959,7 @@ export default function CountersIndex({
                 <OpenShiftModal
                     open={!!openShiftCounter}
                     counters={counters}
+                    initialCounter={openShiftCounter}
                     currency={currency}
                     onClose={() => setOpenShiftCounter(null)}
                 />
@@ -747,6 +981,29 @@ export default function CountersIndex({
                     onClose={() => setCloseShiftCounter(null)}
                 />
             )}
+
+            {forceCloseCounter && (
+                <ForceCloseShiftModal
+                    open={!!forceCloseCounter}
+                    counter={forceCloseCounter}
+                    currency={currency}
+                    onClose={() => setForceCloseCounter(null)}
+                />
+            )}
+
+            {cashMovementCounter && (
+                <CashMovementModal
+                    open={!!cashMovementCounter}
+                    counter={cashMovementCounter}
+                    currency={currency}
+                    onClose={() => setCashMovementCounter(null)}
+                />
+            )}
+
+            <ZReportModal
+                sessionId={zReportSessionId}
+                onClose={() => setZReportSessionId(null)}
+            />
 
             {/* Resume Service PIN Modal */}
             {resumeCounter && (

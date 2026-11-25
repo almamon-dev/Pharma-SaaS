@@ -77,7 +77,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                             Boolean(icon) && 'pl-9',
                             Boolean(rightIcon) && 'pr-10',
                             error
-                                ? 'border-[#d82c0d] focus:border-[#d82c0d]'
+                                ? 'border-[#d82c0d]'
                                 : 'border-slate-300 dark:border-slate-700/80 focus:border-slate-400 dark:focus:border-slate-500',
                             className
                         )}

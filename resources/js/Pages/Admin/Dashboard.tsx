@@ -240,7 +240,6 @@ export default function SuperAdminDashboard({
                                 hideCheckbox
                                 hideToolbar
                                 hideViewToggle
-                                hidePagination
                                 syncUrlParams={false}
                                 emptyState={
                                     <EmptyState
@@ -276,7 +275,6 @@ export default function SuperAdminDashboard({
                                 hideCheckbox
                                 hideToolbar
                                 hideViewToggle
-                                hidePagination
                                 syncUrlParams={false}
                                 emptyState={
                                     <EmptyState

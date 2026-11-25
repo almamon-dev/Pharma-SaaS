@@ -766,7 +766,6 @@ export default function Dashboard({
                                     hideCheckbox={true}
                                     hideToolbar={true}
                                     hideViewToggle={true}
-                                    hidePagination={true}
                                     syncUrlParams={false}
                                     emptyState={
                                         <EmptyState
@@ -904,7 +903,6 @@ export default function Dashboard({
                                     hideCheckbox={true}
                                     hideToolbar={true}
                                     hideViewToggle={true}
-                                    hidePagination={true}
                                     syncUrlParams={false}
                                     emptyState={
                                         <EmptyState

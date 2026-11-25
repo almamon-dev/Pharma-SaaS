@@ -71,7 +71,7 @@ html.dark .main-auth-card {
     animation: equalizer 0.75s infinite ease-in-out;
 }
 
-/* Seamless scrolling without visible scrollbars */
+/* Seamless scrolling: hide scrollbars visually while keeping scroll active */
 html,
 body,
 * {
@@ -87,14 +87,20 @@ body,
 }
 
 .no-scrollbar::-webkit-scrollbar,
-.hide-scrollbar::-webkit-scrollbar {
+.hide-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
 }
 
 .no-scrollbar,
-.hide-scrollbar {
+.hide-scrollbar,
+.custom-scrollbar,
+.table-scroll,
+.overflow-x-auto {
     -ms-overflow-style: none !important;
     scrollbar-width: none !important;
 }
@@ -204,4 +210,10 @@ html.dark .animate-live-shimmer {
 
 table:not(.table-wrap-cells) tbody td:not(:first-child):not(:last-child) {
     white-space: nowrap;
+}
+
+/* Standardize all table data cells (td) across every table to 11.5px */
+table tbody td:not([colspan]),
+table tbody td:not([colspan]) :where(span, div, p, a, strong, b, button, label) {
+    font-size: 11.5px;
 }

@@ -40,11 +40,22 @@ export function DataTableDataBody<T extends Record<string, any>>({
     expandedRows,
     columnsCount,
 }: DataTableDataBodyProps<T>) {
+    const activeVisibleColumns = currentColumns.filter((col) =>
+        visibleColumns.includes(col.id)
+    );
+
     return (
         <>
             {paginatedData.map((item, index) => {
                 const id = keyExtractor(item);
                 const isSelected = isIdSelected(id);
+                const isEven = index % 2 === 1;
+                const rowBg = isSelected
+                    ? 'bg-orange-50/60 dark:bg-[#ff4a1f]/15'
+                    : isEven
+                    ? 'bg-[#f8fafc] dark:bg-[#161a22]'
+                    : 'bg-white dark:bg-[#12161c]';
+
                 return (
                     <React.Fragment key={id}>
                         <tr
@@ -62,11 +73,7 @@ export function DataTableDataBody<T extends Record<string, any>>({
                                     onRowClick(item);
                                 }
                             }}
-                            className={`transition-colors group ${rowHeightClass} ${
-                                isSelected
-                                    ? 'bg-orange-50/40 dark:bg-[#ff4a1f]/10'
-                                    : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/50'
-                            } ${
+                            className={`transition-colors group border-b border-slate-200/80 dark:border-slate-800/80 ${rowHeightClass} ${rowBg} hover:bg-slate-100/70 dark:hover:bg-slate-800/60 ${
                                 expandableContent || onRowClick
                                     ? 'cursor-pointer'
                                     : ''
@@ -74,7 +81,7 @@ export function DataTableDataBody<T extends Record<string, any>>({
                         >
                             {showCheckbox && (
                                 <td
-                                    className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap`}
+                                    className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80`}
                                 >
                                     <div className="flex items-center justify-center">
                                         <input
@@ -90,9 +97,10 @@ export function DataTableDataBody<T extends Record<string, any>>({
                                     </div>
                                 </td>
                             )}
-                            {currentColumns.map((col) => {
-                                if (!visibleColumns.includes(col.id))
-                                    return null;
+                            {activeVisibleColumns.map((col, colIdx) => {
+                                const isLastCell =
+                                    !actions &&
+                                    colIdx === activeVisibleColumns.length - 1;
                                 const isNoWrapCol =
                                     col.className?.includes(
                                         'whitespace-nowrap'
@@ -111,7 +119,11 @@ export function DataTableDataBody<T extends Record<string, any>>({
                                 return (
                                     <td
                                         key={col.id}
-                                        className={`${cellPaddingClass} ${cellWrapClass} text-[12.5px] font-medium text-slate-800 dark:text-slate-200 ${col.className || ''}`}
+                                        className={`${cellPaddingClass} ${cellWrapClass} text-[11.5px] font-bold text-slate-900 dark:text-slate-200 ${
+                                            !isLastCell
+                                                ? 'border-r border-slate-200/80 dark:border-slate-800/80'
+                                                : ''
+                                        } ${col.className || ''}`}
                                     >
                                         {col.render
                                             ? col.render(item, index)
@@ -121,12 +133,12 @@ export function DataTableDataBody<T extends Record<string, any>>({
                             })}
                             {actions && (
                                 <td
-                                    className={`${cellPaddingClass} whitespace-nowrap text-right pr-3 ${
+                                    className={`${cellPaddingClass} whitespace-nowrap text-center ${
                                         actionsColumnClassName ||
-                                        'w-[64px] min-w-[60px]'
+                                        'w-[64px] min-w-[64px]'
                                     }`}
                                 >
-                                    <div className="flex items-center justify-end gap-1.5 w-full min-h-[26px]">
+                                    <div className="flex items-center justify-center gap-1.5 w-full min-h-[26px]">
                                         {actions(item)}
                                     </div>
                                 </td>

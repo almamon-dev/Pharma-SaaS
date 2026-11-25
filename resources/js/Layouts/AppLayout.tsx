@@ -18,6 +18,8 @@ interface AppLayoutProps {
     children: React.ReactNode;
 }
 
+let persistedSidebarOpen: boolean | null = null;
+
 export const AppLayout: React.FC<AppLayoutProps> = ({
     title,
     subtitle,
@@ -39,12 +41,23 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         Boolean(tenant?.currentTenant) &&
         Boolean(subscription?.is_usable);
 
-    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const [isSidebarOpen, setIsSidebarOpenState] = useState(() => {
+        if (persistedSidebarOpen !== null) {
+            return persistedSidebarOpen;
+        }
         if (typeof window !== 'undefined') {
             return window.innerWidth >= 1024;
         }
         return true;
     });
+
+    const setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+        setIsSidebarOpenState((prev) => {
+            const next = typeof value === 'function' ? value(prev) : value;
+            persistedSidebarOpen = next;
+            return next;
+        });
+    };
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +101,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 />
 
                 <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 flex flex-col">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0 w-full">
                         {(flash?.success || flash?.error) && (
                             <div
                                 className={cn(

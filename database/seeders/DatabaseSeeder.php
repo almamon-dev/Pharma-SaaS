@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             PlanSeeder::class,
             Phase2PlansAndFeaturesSeeder::class,
             DemoPharmacySeeder::class,
+            CatalogModuleSeeder::class,
             RbacPermissionCatalogSeeder::class,
         ]);
 

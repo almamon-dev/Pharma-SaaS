@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Counter;
+use App\Models\CounterBreakLog;
+use App\Models\CounterCashier;
 use App\Models\CounterSession;
 use App\Models\Sale;
 use App\Models\SalePayment;
+use App\Services\CashCounterShiftService;
+use App\Services\CounterAssignmentService;
 use App\Services\SalesOrderService;
 use App\Support\TenantContext;
 use Carbon\Carbon;
@@ -14,13 +19,15 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CashierDashboardController extends Controller
 {
     public function __construct(
-        private readonly SalesOrderService $salesOrderService
+        private readonly SalesOrderService $salesOrderService,
+        private readonly CashCounterShiftService $shiftService
     ) {}
 
     public function dashboard(Request $request, TenantContext $tenantContext): Response
@@ -187,31 +194,50 @@ class CashierDashboardController extends Controller
                 'id' => $c->id,
                 'code' => $c->code,
                 'name' => $c->name,
+                'type' => $c->type ?? 'pos',
                 'status' => $c->status,
                 'location' => $c->location,
+                'current_user_id' => $c->current_user_id,
+                'current_user_name' => $c->currentUser?->name,
                 'current_cashier' => $c->currentUser?->name,
             ]);
+
+        $liveSessionSummary = $activeSession
+            ? $this->shiftService->calculateLiveDrawerSummary($activeSession)
+            : null;
+
+        $activeSessionPayload = ($activeSession && $liveSessionSummary) ? [
+            'id' => $activeSession->id,
+            'user_id' => $activeSession->user_id,
+            'user_name' => $user->name,
+            'opened_at' => $activeSession->opened_at?->format('h:i A'),
+            'opened_date_time' => $activeSession->opened_at ? ($activeSession->opened_at->isToday() ? 'Today, ' . $activeSession->opened_at->format('h:i A') : $activeSession->opened_at->format('M d, h:i A')) : 'Today, 8:00 AM',
+            'opening_float' => (float) $liveSessionSummary['opening_float'],
+            'cash_sales' => (float) $liveSessionSummary['cash_sales'],
+            'card_sales' => (float) $liveSessionSummary['card_sales'],
+            'mobile_sales' => (float) $liveSessionSummary['mobile_sales'],
+            'cash_in' => (float) $liveSessionSummary['cash_in'],
+            'cash_out_total' => (float) $liveSessionSummary['cash_out_total'],
+            'cash_refunds' => (float) $liveSessionSummary['cash_refunds'],
+            'system_expected_cash' => (float) $liveSessionSummary['expected_cash'],
+            'shift' => $activeSession->shift ?? 'morning',
+            'total_sales_amount' => (float) $liveSessionSummary['total_sales'],
+            'total_transactions' => (int) $liveSessionSummary['total_transactions'],
+        ] : null;
 
         return Inertia::render('Cashier/Dashboard', [
             'activeCounter' => $activeCounter ? [
                 'id' => $activeCounter->id,
                 'code' => $activeCounter->code,
                 'name' => $activeCounter->name,
+                'type' => $activeCounter->type ?? 'pos',
                 'status' => $activeCounter->status,
                 'location' => $activeCounter->location,
                 'max_queue_capacity' => (int) ($activeCounter->max_queue_capacity ?? 50),
                 'current_break_reason' => $activeCounter->current_break_reason,
+                'current_session' => $activeSessionPayload,
             ] : null,
-            'activeSession' => $activeSession ? [
-                'id' => $activeSession->id,
-                'opened_at' => $activeSession->opened_at?->format('h:i A'),
-                'opened_date_time' => $activeSession->opened_at ? ($activeSession->opened_at->isToday() ? 'Today, ' . $activeSession->opened_at->format('h:i A') : $activeSession->opened_at->format('M d, h:i A')) : 'Today, 8:00 AM',
-                'opening_float' => (float) $activeSession->opening_float,
-                'system_expected_cash' => (float) $activeSession->system_expected_cash,
-                'shift' => $activeSession->shift ?? 'morning',
-                'total_sales_amount' => (float) $activeSession->total_sales_amount,
-                'total_transactions' => (int) $activeSession->total_transactions,
-            ] : null,
+            'activeSession' => $activeSessionPayload,
             'metrics' => [
                 'total_collection' => (float) $totalCollection,
                 'cash_collection' => (float) $cashCollection,
@@ -232,6 +258,98 @@ class CashierDashboardController extends Controller
             'currency' => $tenant->currency_code ?? 'BDT',
             'branchName' => $branch?->name,
         ]);
+    }
+
+    public function autoOpenShift(Request $request, TenantContext $tenantContext): RedirectResponse
+    {
+        $user = $request->user();
+        $branch = $tenantContext->branch();
+        $tenant = $tenantContext->tenant();
+
+        if (! $tenant || ! $branch) {
+            return back()->with('error', 'Select an active branch before starting a shift.');
+        }
+
+        $validated = $request->validate([
+            'opening_float' => ['nullable', 'numeric', 'min:0'],
+            'shift' => ['nullable', Rule::in(['morning', 'evening', 'night'])],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $session = $this->shiftService->autoOpenShift(
+                tenant: $tenant,
+                branch: $branch,
+                cashier: $user,
+                openingFloat: $validated['opening_float'] ?? 0,
+                shift: $validated['shift'] ?? null,
+                notes: $validated['notes'] ?? null,
+            );
+        } catch (ValidationException $e) {
+            $firstMessage = collect($e->errors())->flatten()->first() ?? 'Could not start shift.';
+
+            return back()->with('error', $firstMessage);
+        }
+
+        $counter = $session->counter;
+
+        return back()->with('success', "Shift started on Counter {$counter?->code} ({$counter?->name}) with Opening Float ৳{$session->opening_float}.");
+    }
+
+    public function resumeShift(Request $request, TenantContext $tenantContext): RedirectResponse
+    {
+        $user = $request->user();
+        $branch = $tenantContext->branch();
+
+        $activeSession = CounterSession::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'open')
+            ->with('counter')
+            ->first();
+
+        $counter = $activeSession?->counter ?? Counter::query()
+            ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+            ->where('current_user_id', $user->id)
+            ->where('status', 'on_break')
+            ->first();
+
+        if (! $counter) {
+            return back()->with('error', 'No paused counter shift found to resume.');
+        }
+
+        DB::transaction(function () use ($counter, $user): void {
+            $activeBreak = CounterBreakLog::query()
+                ->where('counter_id', $counter->id)
+                ->whereNull('ended_at')
+                ->latest('started_at')
+                ->first();
+
+            if ($activeBreak) {
+                $ended = now();
+                $mins = max(1, (int) $ended->diffInMinutes($activeBreak->started_at));
+                $activeBreak->update([
+                    'ended_at' => $ended,
+                    'duration_minutes' => $mins,
+                ]);
+            }
+
+            $counter->update([
+                'status' => 'active',
+                'current_break_reason' => null,
+                'break_started_at' => null,
+            ]);
+
+            AuditLog::record(
+                action: 'counter.break_resumed',
+                description: "Cashier {$user->name} resumed service on Counter {$counter->code}.",
+                subject: $counter,
+                metadata: ['counter_id' => $counter->id]
+            );
+        });
+
+        app(CounterAssignmentService::class)->processUnassignedQueue($counter->tenant_id, $counter->branch_id);
+
+        return back()->with('success', "Counter {$counter->code} resumed from break. Ready for orders!");
     }
 
     public function accept(Request $request, Sale $sale): RedirectResponse

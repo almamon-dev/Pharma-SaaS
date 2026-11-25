@@ -259,7 +259,7 @@ export default function InventoryIndex({
         nextBranch = selectedBranchId
     ) => {
         router.get(
-            route('inventory.index'),
+            route('inventory.index', undefined, false),
             {
                 filter: nextFilter !== 'all' ? nextFilter : undefined,
                 category_id: nextCategory || undefined,
@@ -592,7 +592,7 @@ export default function InventoryIndex({
                             <BarcodeSvg value={med.barcode} compact />
                         </button>
                     ) : (
-                        <span className="text-[11.5px] text-slate-400">—</span>
+                        <span className="text-[11.5px] text-slate-400 font-medium">—</span>
                     ),
             },
             {
@@ -602,20 +602,21 @@ export default function InventoryIndex({
                 render: (med) => (
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <span
-                            className={`font-semibold ${med.is_active
-                                    ? 'text-slate-900 dark:text-slate-100'
+                            className={`text-[11.5px] font-bold ${
+                                med.is_active
+                                    ? 'text-slate-900 dark:text-slate-200'
                                     : 'text-slate-400 line-through'
-                                }`}
+                            }`}
                         >
                             {med.name}
                         </span>
                         {med.strength && (
-                            <span className="text-[11px] text-slate-400">
+                            <span className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300">
                                 {med.strength}
                             </span>
                         )}
                         {med.requires_prescription && (
-                            <span className="text-[10.5px] font-bold text-[#FF4A1F]">
+                            <span className="text-[9.5px] font-extrabold text-[#FF4A1F] px-1 py-0.2 rounded bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900">
                                 Rx
                             </span>
                         )}
@@ -630,11 +631,12 @@ export default function InventoryIndex({
                 label: 'Generic / Mfg',
                 sortable: true,
                 render: (med) => {
-                    const summary = `${med.generic_name || med.dosage_form}${med.manufacturer ? ` · ${med.manufacturer}` : ''
-                        }`;
+                    const summary = `${med.generic_name || med.dosage_form}${
+                        med.manufacturer ? ` · ${med.manufacturer}` : ''
+                    }`;
                     return (
                         <span
-                            className="block max-w-[210px] truncate text-[12px] text-slate-500 dark:text-slate-400"
+                            className="block max-w-[220px] truncate text-[11.5px] font-bold text-slate-900 dark:text-slate-200"
                             title={summary}
                         >
                             {summary}
@@ -647,7 +649,7 @@ export default function InventoryIndex({
                 label: 'Category',
                 sortable: true,
                 render: (med) => (
-                    <span className="text-[12px] text-slate-600 dark:text-slate-300">
+                    <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
                         {med.category_name}
                     </span>
                 ),
@@ -661,25 +663,26 @@ export default function InventoryIndex({
                     <div className="inline-flex flex-col items-end whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
                             <span
-                                className={`font-semibold tabular-nums ${med.is_low_stock
+                                className={`text-[11.5px] font-bold tabular-nums ${
+                                    med.is_low_stock
                                         ? 'text-rose-600 dark:text-rose-400'
-                                        : 'text-slate-900 dark:text-slate-100'
-                                    }`}
+                                        : 'text-slate-900 dark:text-slate-200'
+                                }`}
                             >
                                 {med.available_stock} {med.unit}
                             </span>
                             {med.is_low_stock ? (
-                                <span className="text-[11px] font-medium text-rose-500 dark:text-rose-400">
+                                <span className="text-[9.5px] font-semibold text-rose-600 dark:text-rose-400">
                                     (Min {med.reorder_level})
                                 </span>
                             ) : (
-                                <span className="text-[11px] text-slate-400">
+                                <span className="text-[9.5px] font-medium text-slate-500 dark:text-slate-400">
                                     · {med.batch_count}b
                                 </span>
                             )}
                         </div>
                         {Boolean(med.expired_stock && med.expired_stock > 0) && (
-                            <span className="text-[10.5px] font-semibold text-rose-500">
+                            <span className="text-[9.5px] font-bold text-rose-600">
                                 +{med.expired_stock} expired
                             </span>
                         )}
@@ -693,7 +696,7 @@ export default function InventoryIndex({
                 render: (med) =>
                     med.nearest_expiry ? (
                         <div className="inline-flex items-center gap-2 whitespace-nowrap">
-                            <span className="font-mono text-[11.5px] text-slate-700 dark:text-slate-300">
+                            <span className="font-mono text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
                                 {med.nearest_expiry}
                             </span>
                             {med.days_to_expiry !== null &&
@@ -705,7 +708,7 @@ export default function InventoryIndex({
                                                 ? 'rose'
                                                 : 'amber'
                                         }
-                                        className="text-[11px]"
+                                        className="text-[9.5px] font-semibold"
                                     >
                                         {med.days_to_expiry < 0
                                             ? 'Expired'
@@ -714,7 +717,7 @@ export default function InventoryIndex({
                                 )}
                         </div>
                     ) : (
-                        <span className="text-slate-400 text-[11.5px]">—</span>
+                        <span className="text-slate-400 text-[11.5px] font-medium">—</span>
                     ),
             },
             {
@@ -731,11 +734,11 @@ export default function InventoryIndex({
                                 : undefined
                         }
                     >
-                        <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                        <span className="text-[11.5px] font-bold tabular-nums text-slate-900 dark:text-slate-200">
                             {formatCurrency(med.default_selling_price, currency)}
                         </span>
                         {med.units_per_box > 1 && med.box_selling_price ? (
-                            <span className="text-[11px] text-slate-400 tabular-nums">
+                            <span className="text-[9.5px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
                                 / {formatCurrency(med.box_selling_price, currency)}
                             </span>
                         ) : null}

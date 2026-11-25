@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\BatchStatus;
 use App\Enums\StockMovementType;
+use App\Enums\TenantRole;
 use App\Events\SalesOrderCompleted;
 use App\Models\AuditLog;
 use App\Models\Branch;
@@ -52,6 +53,41 @@ class SalesOrderService
     }
 
     /**
+     * Determine maximum permitted discount percentage for user in tenant.
+     */
+    public function getPermittedDiscountLimit(Tenant $tenant, User $user): float
+    {
+        if ($user->isSubscriberAdmin() || (int) $tenant->owner_id === (int) $user->id || (bool) $user->is_owner) {
+            return 100.0;
+        }
+
+        $roles = $user->rolesForTenant($tenant);
+
+        if (in_array(TenantRole::ADMIN->value, $roles, true)) {
+            return 100.0;
+        }
+
+        $settings = $tenant->settings ?? [];
+        $limits = $settings['discount_limits'] ?? [
+            'salesman' => 2.0,
+            'senior_salesman' => 5.0,
+            'manager' => 15.0,
+            'admin' => 100.0,
+            'owner' => 100.0,
+        ];
+
+        if (in_array(TenantRole::MANAGER->value, $roles, true)) {
+            return (float) ($limits['manager'] ?? 15.0);
+        }
+
+        if (in_array('senior_salesman', $roles, true)) {
+            return (float) ($limits['senior_salesman'] ?? 5.0);
+        }
+
+        return (float) ($limits['salesman'] ?? 2.0);
+    }
+
+    /**
      * Create a new sales order from salesman.
      */
     public function createSalesOrder(
@@ -63,15 +99,24 @@ class SalesOrderService
         bool $isDraft = false
     ): Sale {
         return DB::transaction(function () use ($tenant, $branch, $salesman, $validated, $prescriptionFile, $isDraft): Sale {
-            $orderNumber = $this->generateOrderNumber($tenant->id);
+            // Check if resuming or updating an existing draft
+            $existingDraft = null;
+            if (! empty($validated['draft_id'])) {
+                $existingDraft = Sale::query()
+                    ->where('id', $validated['draft_id'])
+                    ->where('tenant_id', $tenant->id)
+                    ->where('order_status', 'draft')
+                    ->lockForUpdate()
+                    ->first();
+            }
 
             // Handle prescription upload
-            $prescriptionPath = null;
+            $prescriptionPath = $existingDraft?->prescription_file;
             if ($prescriptionFile) {
                 $prescriptionPath = $prescriptionFile->store("prescriptions/{$tenant->id}", 'public');
             }
 
-            // Calculate Subtotal & Line items
+            // Calculate Subtotal & Line items with FEFO batch selection & stock validation
             $subtotal = 0;
             $orderItems = [];
 
@@ -91,13 +136,36 @@ class SalesOrderService
                 $packSize = $medicine->packMultiplierFor($saleUnit);
                 $totalUnits = $packQty * $packSize;
 
+                // Validate specific batch or pick FEFO batch
+                $batch = null;
+                if (! empty($itemInput['medicine_batch_id'])) {
+                    $batch = MedicineBatch::query()
+                        ->where('id', $itemInput['medicine_batch_id'])
+                        ->where('medicine_id', $medicine->id)
+                        ->where('branch_id', $branch->id)
+                        ->first();
+
+                    if (! $batch || $batch->isExpired() || ($batch->status !== BatchStatus::ACTIVE->value && $batch->status !== 'active')) {
+                        throw ValidationException::withMessages([
+                            'batch' => ["Selected batch for {$medicine->name} is expired, blocked, or invalid."],
+                        ]);
+                    }
+                } else {
+                    // FEFO (First Expiry, First Out)
+                    $batch = MedicineBatch::query()
+                        ->sellable($branch->id)
+                        ->where('medicine_id', $medicine->id)
+                        ->orderBy('expiry_date')
+                        ->first();
+                }
+
                 // Check stock availability
                 $availableStock = (int) MedicineBatch::query()
                     ->sellable($branch->id)
                     ->where('medicine_id', $medicine->id)
                     ->sum('quantity_available');
 
-                if ($availableStock < $totalUnits) {
+                if (! $isDraft && $availableStock < $totalUnits) {
                     throw ValidationException::withMessages([
                         'stock' => ["Insufficient stock for {$medicine->name}. Requested: {$totalUnits} {$medicine->unit}, Available: {$availableStock} {$medicine->unit}."],
                     ]);
@@ -110,7 +178,7 @@ class SalesOrderService
                     $lineTotal = $expectedLineTotal;
                     $unitPrice = round($lineTotal / $totalUnits, 2);
                 } else {
-                    $unitPrice = (float) ($medicine->default_selling_price);
+                    $unitPrice = (float) ($batch?->selling_price ?: $medicine->default_selling_price);
                     $lineTotal = round($unitPrice * $totalUnits, 2);
                 }
 
@@ -119,7 +187,7 @@ class SalesOrderService
                 $orderItems[] = [
                     'tenant_id' => $tenant->id,
                     'medicine_id' => $medicine->id,
-                    'medicine_batch_id' => $itemInput['medicine_batch_id'] ?? null,
+                    'medicine_batch_id' => $batch?->id ?? null,
                     'sale_unit' => $saleUnit,
                     'pack_size' => $packSize,
                     'pack_quantity' => $packQty,
@@ -130,7 +198,7 @@ class SalesOrderService
                 ];
             }
 
-            // Discounts & Grand Total
+            // Controlled Discount Validation (Permission Based)
             $discountType = (string) ($validated['discount_type'] ?? 'fixed');
             $rawDiscount = max(0, (float) ($validated['discount'] ?? 0));
             $discountAmount = $discountType === 'percent'
@@ -138,22 +206,56 @@ class SalesOrderService
                 : $rawDiscount;
             $discountAmount = min($subtotal, max(0, round($discountAmount, 2)));
 
-            $taxAmount = round(max(0, (float) ($validated['tax_amount'] ?? 0)), 2);
-            $grandTotal = max(0, round($subtotal - $discountAmount + $taxAmount, 2));
+            $effectivePercentage = $subtotal > 0 ? round(($discountAmount / $subtotal) * 100, 2) : 0.0;
+            $discountLimit = $this->getPermittedDiscountLimit($tenant, $salesman);
+
+            $discountStatus = 'none';
+            $discountApprovedBy = null;
+            $discountApprovedAt = null;
+            $discountRequestedBy = null;
+
+            if ($discountAmount > 0) {
+                $discountRequestedBy = $salesman->id;
+                $roles = $salesman->rolesForTenant($tenant);
+                $isManagerOrAdmin = $salesman->isSubscriberAdmin()
+                    || (int) $tenant->owner_id === (int) $salesman->id
+                    || (bool) $salesman->is_owner
+                    || in_array(TenantRole::ADMIN->value, $roles, true)
+                    || in_array(TenantRole::MANAGER->value, $roles, true);
+
+                if ($effectivePercentage <= ($discountLimit + 0.01) || $isManagerOrAdmin) {
+                    $discountStatus = 'approved';
+                    $discountApprovedBy = $salesman->id;
+                    $discountApprovedAt = now();
+                } else {
+                    $discountStatus = 'pending_approval';
+                }
+            }
+
+            // Automatic VAT / Tax calculation based on pharmacy configured settings
+            $taxRate = (float) ($tenant->settings['tax_percentage'] ?? 0.0);
+            $taxable = max(0, $subtotal - $discountAmount);
+            $taxAmount = $taxRate > 0
+                ? round($taxable * ($taxRate / 100), 2)
+                : round(max(0, (float) ($validated['tax_amount'] ?? 0)), 2);
+            $grandTotal = max(0, round($taxable + $taxAmount, 2));
 
             $initialStatus = $isDraft ? 'draft' : 'submitted';
 
-            $sale = Sale::query()->create([
+            $saleData = [
                 'tenant_id' => $tenant->id,
                 'branch_id' => $branch->id,
                 'customer_id' => $validated['customer_id'] ?? null,
                 'user_id' => $salesman->id,
                 'salesman_id' => $salesman->id,
-                'order_number' => $orderNumber,
-                'invoice_number' => $orderNumber, // temporary invoice until finalized
                 'order_status' => $initialStatus,
                 'subtotal' => $subtotal,
                 'discount_amount' => $discountAmount,
+                'discount_percentage' => $effectivePercentage,
+                'discount_status' => $discountStatus,
+                'discount_requested_by' => $discountRequestedBy,
+                'discount_approved_by' => $discountApprovedBy,
+                'discount_approved_at' => $discountApprovedAt,
                 'tax_amount' => $taxAmount,
                 'total_amount' => $grandTotal,
                 'paid_amount' => 0,
@@ -163,12 +265,25 @@ class SalesOrderService
                 'payment_status' => 'pending',
                 'doctor_name' => $validated['doctor_name'] ?? null,
                 'prescription_notes' => $validated['prescription_notes'] ?? null,
+                'prescription_reference' => $validated['prescription_reference'] ?? null,
                 'prescription_file' => $prescriptionPath,
                 'requires_verification' => (bool) ($validated['requires_verification'] ?? false),
                 'verification_status' => ! empty($validated['requires_verification']) ? 'pending' : 'not_required',
                 'notes' => $validated['notes'] ?? null,
+                'internal_notes' => $validated['internal_notes'] ?? null,
                 'sold_at' => now(),
-            ]);
+            ];
+
+            if ($existingDraft) {
+                $existingDraft->update($saleData);
+                $sale = $existingDraft;
+                SaleItem::query()->where('sale_id', $sale->id)->delete();
+            } else {
+                $orderNumber = $this->generateOrderNumber($tenant->id);
+                $saleData['order_number'] = $orderNumber;
+                $saleData['invoice_number'] = $orderNumber; // temporary invoice until finalized
+                $sale = Sale::query()->create($saleData);
+            }
 
             foreach ($orderItems as $item) {
                 $item['sale_id'] = $sale->id;
@@ -182,13 +297,16 @@ class SalesOrderService
             );
 
             AuditLog::record(
-                action: 'sales_order.created',
-                description: "Salesman {$salesman->name} created order #{$sale->order_number} (Total: {$grandTotal}).",
+                action: $isDraft ? 'sales_order.draft_saved' : 'sales_order.created',
+                description: "Salesman {$salesman->name} " . ($isDraft ? 'saved draft' : 'created order') . " #{$sale->order_number} (Total: {$grandTotal}).",
                 subject: $sale,
                 metadata: [
                     'order_number' => $sale->order_number,
                     'total_amount' => $grandTotal,
                     'status' => $initialStatus,
+                    'discount_status' => $discountStatus,
+                    'discount_amount' => $discountAmount,
+                    'discount_percentage' => $effectivePercentage,
                 ],
                 userId: $salesman->id
             );
@@ -399,13 +517,15 @@ class SalesOrderService
                 $session->increment('total_sales_amount', $totalAmount);
                 $session->increment('total_transactions', 1);
 
-                // Add cash portion to expected cash
+                // Add net cash portion (cash received minus change given) to expected cash
                 $cashPortion = array_sum(array_map(
                     fn ($p) => $p['method'] === 'cash' ? $p['amount'] : 0,
                     $paymentLines
                 ));
-                if ($cashPortion > 0) {
-                    $session->increment('system_expected_cash', $cashPortion);
+                $netCash = max(0, round($cashPortion - $changeAmount, 2));
+                if ($netCash > 0) {
+                    $session->increment('system_expected_cash', $netCash);
+                    $session->increment('cash_sales_total', $netCash);
                 }
             }
 
@@ -482,6 +602,92 @@ class SalesOrderService
             );
 
             return $lockedSale;
+        });
+    }
+
+    /**
+     * Delete an unassigned draft order.
+     */
+    public function deleteDraft(Sale $sale, User $user): void
+    {
+        DB::transaction(function () use ($sale, $user): void {
+            $lockedSale = Sale::query()
+                ->where('id', $sale->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedSale->order_status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'order' => ["Order #{$lockedSale->order_number} is not a draft and cannot be deleted."],
+                ]);
+            }
+
+            AuditLog::record(
+                action: 'sales_order.draft_deleted',
+                description: "User {$user->name} deleted draft order #{$lockedSale->order_number}.",
+                subject: $lockedSale,
+                metadata: ['order_number' => $lockedSale->order_number],
+                userId: $user->id
+            );
+
+            SaleItem::query()->where('sale_id', $lockedSale->id)->delete();
+            $lockedSale->delete();
+        });
+    }
+
+    /**
+     * Manager approves a sales order discount exceeding standard salesman limit.
+     */
+    public function approveDiscount(Sale $sale, User $manager): Sale
+    {
+        return DB::transaction(function () use ($sale, $manager): Sale {
+            $lockedSale = Sale::query()
+                ->where('id', $sale->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedSale->discount_status = 'approved';
+            $lockedSale->discount_approved_by = $manager->id;
+            $lockedSale->discount_approved_at = now();
+            $lockedSale->discount_rejection_reason = null;
+            $lockedSale->save();
+
+            AuditLog::record(
+                action: 'sales_order.discount_approved',
+                description: "Manager {$manager->name} approved discount of {$lockedSale->discount_amount} on order #{$lockedSale->order_number}.",
+                subject: $lockedSale,
+                userId: $manager->id
+            );
+
+            return $lockedSale->fresh(['items.medicine', 'customer', 'counter']);
+        });
+    }
+
+    /**
+     * Manager rejects an over-limit discount on a sales order.
+     */
+    public function rejectDiscount(Sale $sale, User $manager, string $reason): Sale
+    {
+        return DB::transaction(function () use ($sale, $manager, $reason): Sale {
+            $lockedSale = Sale::query()
+                ->where('id', $sale->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedSale->discount_status = 'rejected';
+            $lockedSale->discount_approved_by = $manager->id;
+            $lockedSale->discount_approved_at = now();
+            $lockedSale->discount_rejection_reason = $reason;
+            $lockedSale->save();
+
+            AuditLog::record(
+                action: 'sales_order.discount_rejected',
+                description: "Manager {$manager->name} rejected discount on order #{$lockedSale->order_number}. Reason: {$reason}",
+                subject: $lockedSale,
+                userId: $manager->id
+            );
+
+            return $lockedSale->fresh(['items.medicine', 'customer', 'counter']);
         });
     }
 }
