@@ -496,11 +496,7 @@ export default function CountersIndex({
                             return (
                                 <div
                                     key={counter.id}
-                                    className={`rounded-[5px] border bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none ${
-                                        isActive
-                                            ? 'border-[#FF4A1F] ring-1 ring-[#FF4A1F]/15'
-                                            : 'border-slate-200 dark:border-slate-800'
-                                    }`}
+                                    className="rounded-[5px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none"
                                 >
                                     {/* Card Header */}
                                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-[#151921]/50">

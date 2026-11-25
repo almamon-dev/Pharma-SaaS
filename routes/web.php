@@ -137,6 +137,13 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->whereNumber('session')
         ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.reconcile,admin,manager,pharmacist,cashier'])
         ->name('counters.sessions.z-report');
+    Route::post('/counters/{counter}/cash-movement', [CounterController::class, 'recordCashMovement'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.cash_in,cash_register.cash_out,admin,manager,pharmacist,cashier'])
+        ->name('counters.cash-movement');
+    Route::get('/counters/sessions/{session}/z-report', [CounterController::class, 'zReport'])
+        ->whereNumber('session')
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.reconcile,admin,manager,pharmacist,cashier'])
+        ->name('counters.sessions.z-report');
     Route::post('/counters/{counter}/assign-cashier', [CounterController::class, 'assignCashier'])
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.assign-cashier');
