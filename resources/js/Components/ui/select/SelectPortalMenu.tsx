@@ -1,7 +1,8 @@
+import { Input } from '@/Components/ui/Input';
+import { cn } from '@/lib/cn';
+import { Check, Plus, Search, SearchX } from 'lucide-react';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Search, SearchX, Check, Plus } from 'lucide-react';
-import { cn } from '@/lib/cn';
 import { SelectOption } from './selectTypes';
 
 interface SelectPortalMenuProps {
@@ -56,25 +57,20 @@ export const SelectPortalMenu: React.FC<SelectPortalMenuProps> = ({
                     width: `${dropdownPos.width}px`,
                     ...(dropdownPos.maxHeight ? { maxHeight: `${dropdownPos.maxHeight}px` } : {}),
                 }}
-                className="custom-select-portal-menu z-[999999] overflow-hidden rounded-md bg-white dark:bg-[#1a1f26] text-[12px] shadow-xl border border-slate-200/90 dark:border-slate-700/80 focus:outline-none flex flex-col font-sans"
+                className="custom-select-portal-menu z-[999999] overflow-hidden rounded-[2px] bg-white dark:bg-[#1a1f26] text-[12px] shadow-xl border border-slate-200/90 dark:border-slate-700/80 focus:outline-none flex flex-col font-sans"
             >
                 {shouldShowSearch && (
-                    <div className="p-2 bg-slate-50/80 dark:bg-[#151920] border-b border-slate-100 dark:border-slate-800 shrink-0">
-                        <div className="relative flex items-center">
-                            <Search
-                                size={13}
-                                className="absolute left-2.5 text-slate-400 pointer-events-none z-10"
-                            />
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                placeholder="Type to search..."
-                                value={searchQuery}
-                                onChange={(e) => onSearchChange(e.target.value)}
-                                className="w-full h-7 pl-8 pr-2.5 text-xs bg-white dark:bg-[#10141a] border border-slate-200 dark:border-slate-700/80 rounded-[4px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-500 shadow-2xs font-normal transition-all"
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </div>
+                    <div className="p-1.5 bg-slate-50/80 dark:bg-[#151920] border-b border-slate-100 dark:border-slate-800 shrink-0">
+                        <Input
+                            ref={searchInputRef}
+                            type="text"
+                            placeholder="Type to search..."
+                            value={searchQuery}
+                            onChange={(e) => onSearchChange(e.target.value)}
+                            icon={<Search size={13} className="text-slate-400" />}
+                            className="h-[26px] pr-2.5 text-xs bg-white dark:bg-[#10141a] border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-100 shadow-2xs transition-all"
+                            onClick={(e) => e.stopPropagation()}
+                        />
                     </div>
                 )}
 
@@ -100,7 +96,7 @@ export const SelectPortalMenu: React.FC<SelectPortalMenuProps> = ({
                                         <div
                                             key={idx}
                                             onClick={() => onSelectOption(option)}
-                                            className="cursor-pointer select-none py-1.5 px-3 text-[11.5px] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-200 border-b border-slate-100/70 dark:border-slate-800/70 transition-colors"
+                                            className="cursor-pointer select-none py-1 px-2.5 text-[11.5px] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-200 border-b border-slate-100/70 dark:border-slate-800/70 transition-colors"
                                         >
                                             {option.name || option.label}
                                         </div>
@@ -118,15 +114,15 @@ export const SelectPortalMenu: React.FC<SelectPortalMenuProps> = ({
                                         className={cn(
                                             'select-none border-b border-slate-100/60 dark:border-slate-800/40 last:border-0 flex items-center justify-between transition-colors',
                                             option.subtitle
-                                                ? 'py-2 px-3'
+                                                ? 'py-1.5 px-2.5'
                                                 : size === 'sm'
-                                                  ? 'py-1.5 px-2.5 text-xs'
-                                                  : 'py-2 px-3 text-[12.5px]',
+                                                    ? 'py-1 px-2.5 text-xs'
+                                                    : 'py-1.5 px-2.5 text-[12px]',
                                             isDisabled
                                                 ? 'opacity-50 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/30'
                                                 : active
-                                                  ? 'cursor-pointer bg-orange-50/70 dark:bg-[#ff4a1f]/15'
-                                                  : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                                                    ? 'cursor-pointer bg-orange-50/70 dark:bg-[#ff4a1f]/15'
+                                                    : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70'
                                         )}
                                     >
                                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -185,17 +181,17 @@ export const SelectPortalMenu: React.FC<SelectPortalMenuProps> = ({
                                                                     option.badgeColor === 'fleet'
                                                                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/60'
                                                                     : option.badgeColor ===
-                                                                            'info' ||
+                                                                        'info' ||
                                                                         option.badgeColor ===
-                                                                            'subcontractor'
-                                                                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50'
-                                                                      : option.badgeColor ===
-                                                                          'warning'
-                                                                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/50'
+                                                                        'subcontractor'
+                                                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50'
                                                                         : option.badgeColor ===
-                                                                            'danger'
-                                                                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/50'
-                                                                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60'
+                                                                            'warning'
+                                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/50'
+                                                                            : option.badgeColor ===
+                                                                                'danger'
+                                                                                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/50'
+                                                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60'
                                                             )}
                                                         >
                                                             {option.badge}
@@ -242,4 +238,3 @@ export const SelectPortalMenu: React.FC<SelectPortalMenuProps> = ({
         document.body
     );
 };
-

@@ -16,6 +16,7 @@ import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -358,19 +359,19 @@ export default function TenantsIndex({
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreate} className="p-5 space-y-3">
-                            <Input
-                                label="Business Name"
-                                required
-                                placeholder="CityMed Express Pharmacy"
-                                value={createForm.data.name}
-                                onChange={(e) =>
-                                    createForm.setData('name', e.target.value)
-                                }
-                                error={createForm.errors.name}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[150px]">
+                            <form onSubmit={handleCreate} className="p-5 space-y-3">
+                                <Input
+                                    label="Business Name"
+                                    required
+                                    placeholder="CityMed Express Pharmacy"
+                                    value={createForm.data.name}
+                                    onChange={(e) =>
+                                        createForm.setData('name', e.target.value)
+                                    }
+                                    error={createForm.errors.name}
+                                />
 
-                            <div>
                                 <Input
                                     label="Subdomain"
                                     placeholder="citymed-express"
@@ -384,16 +385,22 @@ export default function TenantsIndex({
                                     error={createForm.errors.domain}
                                     icon={<Globe className="h-3.5 w-3.5" />}
                                 />
-                                <p className="mt-1 text-[11px] text-slate-400">
-                                    Optional. Auto-generates under{' '}
-                                    <span className="font-mono">
-                                        .{baseDomain}
-                                    </span>{' '}
-                                    or accepts a custom domain.
-                                </p>
-                            </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Input
+                                    label="Workspace URL"
+                                    readOnly
+                                    value={
+                                        createForm.data.domain.trim()
+                                            ? createForm.data.domain.includes('.')
+                                                ? createForm.data.domain.trim()
+                                                : `${createForm.data.domain.trim()}.${baseDomain}`
+                                            : `${(createForm.data.name || 'workspace')
+                                                  .toLowerCase()
+                                                  .replace(/[^a-z0-9]+/g, '-')
+                                                  .replace(/^-|-$/g, '') || 'workspace'}.${baseDomain}`
+                                    }
+                                />
+
                                 <Input
                                     label="Head Office Branch"
                                     required
@@ -420,9 +427,6 @@ export default function TenantsIndex({
                                     }
                                     error={createForm.errors.branch_code}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="License Number"
                                     placeholder="DGDA-2026-009"
@@ -446,9 +450,6 @@ export default function TenantsIndex({
                                         )
                                     }
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Phone"
                                     placeholder="+880 1711-000000"
@@ -473,26 +474,25 @@ export default function TenantsIndex({
                                     }
                                     error={createForm.errors.city}
                                 />
-                            </div>
 
-                            <Textarea
-                                label="Street Address"
-                                rows={2}
-                                value={createForm.data.address}
-                                onChange={(e) =>
-                                    createForm.setData(
-                                        'address',
-                                        e.target.value
-                                    )
-                                }
-                                error={createForm.errors.address}
-                            />
+                                <Textarea
+                                    label="Street Address"
+                                    rows={2}
+                                    value={createForm.data.address}
+                                    onChange={(e) =>
+                                        createForm.setData(
+                                            'address',
+                                            e.target.value
+                                        )
+                                    }
+                                    error={createForm.errors.address}
+                                />
 
-                            <div className="flex justify-end gap-2 pt-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setShowCreateModal(false)}
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setShowCreateModal(false)}
                                 >
                                     Cancel
                                 </Button>
@@ -505,6 +505,7 @@ export default function TenantsIndex({
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -525,18 +526,24 @@ export default function TenantsIndex({
                             </button>
                         </div>
 
-                        <form onSubmit={handleUpdate} className="p-5 space-y-3">
-                            <Input
-                                label="Business Name"
-                                required
-                                value={editForm.data.name}
-                                onChange={(e) =>
-                                    editForm.setData('name', e.target.value)
-                                }
-                                error={editForm.errors.name}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[140px]">
+                            <form onSubmit={handleUpdate} className="p-5 space-y-3">
+                                <Input
+                                    label="Tenant Slug"
+                                    readOnly
+                                    value={editingTenant.slug}
+                                />
 
-                            <div>
+                                <Input
+                                    label="Business Name"
+                                    required
+                                    value={editForm.data.name}
+                                    onChange={(e) =>
+                                        editForm.setData('name', e.target.value)
+                                    }
+                                    error={editForm.errors.name}
+                                />
+
                                 <Input
                                     label="Subdomain"
                                     placeholder={`citymed.${baseDomain}`}
@@ -550,12 +557,7 @@ export default function TenantsIndex({
                                     error={editForm.errors.domain}
                                     icon={<Globe className="h-3.5 w-3.5" />}
                                 />
-                                <p className="mt-1 text-[11px] text-slate-400">
-                                    Enter a subdomain or custom domain.
-                                </p>
-                            </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="License Number"
                                     value={editForm.data.license_number}
@@ -589,9 +591,6 @@ export default function TenantsIndex({
                                         )
                                     }
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Phone"
                                     value={editForm.data.phone}
@@ -611,33 +610,32 @@ export default function TenantsIndex({
                                     }
                                     error={editForm.errors.city}
                                 />
-                            </div>
 
-                            <Select
-                                label="Currency"
-                                value={editForm.data.currency_code}
-                                options={currencyOptions}
-                                onChange={(e) =>
-                                    editForm.setData(
-                                        'currency_code',
-                                        String(e.target.value)
-                                    )
-                                }
-                            />
+                                <Select
+                                    label="Currency"
+                                    value={editForm.data.currency_code}
+                                    options={currencyOptions}
+                                    onChange={(e) =>
+                                        editForm.setData(
+                                            'currency_code',
+                                            String(e.target.value)
+                                        )
+                                    }
+                                />
 
-                            <Textarea
-                                label="Street Address"
-                                rows={2}
-                                value={editForm.data.address}
-                                onChange={(e) =>
-                                    editForm.setData('address', e.target.value)
-                                }
-                                error={editForm.errors.address}
-                            />
+                                <Textarea
+                                    label="Street Address"
+                                    rows={2}
+                                    value={editForm.data.address}
+                                    onChange={(e) =>
+                                        editForm.setData('address', e.target.value)
+                                    }
+                                    error={editForm.errors.address}
+                                />
 
-                            <div className="flex justify-end gap-2 pt-2">
-                                <Button
-                                    type="button"
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <Button
+                                        type="button"
                                     variant="outline"
                                     onClick={() => setEditingTenant(null)}
                                 >
@@ -652,6 +650,7 @@ export default function TenantsIndex({
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

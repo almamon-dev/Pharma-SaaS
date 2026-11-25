@@ -13,6 +13,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Textarea } from '@/Components/ui/Textarea';
 import {
@@ -274,33 +275,40 @@ export default function CustomersIndex({
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={
-                                editingCustomer ? handleUpdate : handleCreate
-                            }
-                            className="p-5 space-y-3"
-                        >
-                            <Input
-                                label="Full Name"
-                                required
-                                value={
-                                    editingCustomer
-                                        ? editForm.data.name
-                                        : createForm.data.name
+                        <FormLayoutProvider labelWidth="sm:w-[140px]">
+                            <form
+                                onSubmit={
+                                    editingCustomer ? handleUpdate : handleCreate
                                 }
-                                onChange={(e) =>
-                                    editingCustomer
-                                        ? editForm.setData(
-                                            'name',
-                                            e.target.value
-                                        )
-                                        : createForm.setData(
-                                            'name',
-                                            e.target.value
-                                        )
-                                }
-                            />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                className="p-5 space-y-3"
+                            >
+                                {editingCustomer && (
+                                    <Input
+                                        label="Customer ID"
+                                        readOnly
+                                        value={`CUST-${String(editingCustomer.id).padStart(4, '0')}`}
+                                    />
+                                )}
+                                <Input
+                                    label="Full Name"
+                                    required
+                                    value={
+                                        editingCustomer
+                                            ? editForm.data.name
+                                            : createForm.data.name
+                                    }
+                                    onChange={(e) =>
+                                        editingCustomer
+                                            ? editForm.setData(
+                                                  'name',
+                                                  e.target.value
+                                              )
+                                            : createForm.setData(
+                                                  'name',
+                                                  e.target.value
+                                              )
+                                    }
+                                />
                                 <Input
                                     label="Phone Number"
                                     value={
@@ -311,13 +319,13 @@ export default function CustomersIndex({
                                     onChange={(e) =>
                                         editingCustomer
                                             ? editForm.setData(
-                                                'phone',
-                                                e.target.value
-                                            )
+                                                  'phone',
+                                                  e.target.value
+                                              )
                                             : createForm.setData(
-                                                'phone',
-                                                e.target.value
-                                            )
+                                                  'phone',
+                                                  e.target.value
+                                              )
                                     }
                                 />
                                 <Input
@@ -332,103 +340,103 @@ export default function CustomersIndex({
                                     onChange={(e) =>
                                         editingCustomer
                                             ? editForm.setData(
-                                                'loyalty_points',
-                                                e.target.value
-                                            )
+                                                  'loyalty_points',
+                                                  e.target.value
+                                              )
                                             : createForm.setData(
-                                                'loyalty_points',
-                                                e.target.value
-                                            )
+                                                  'loyalty_points',
+                                                  e.target.value
+                                              )
                                     }
                                 />
-                            </div>
-                            <Input
-                                label="Email"
-                                type="email"
-                                value={
-                                    editingCustomer
-                                        ? editForm.data.email
-                                        : createForm.data.email
-                                }
-                                onChange={(e) =>
-                                    editingCustomer
-                                        ? editForm.setData(
-                                            'email',
-                                            e.target.value
-                                        )
-                                        : createForm.setData(
-                                            'email',
-                                            e.target.value
-                                        )
-                                }
-                            />
-                            <Input
-                                label="Allergy / Drug Sensitivity Warning"
-                                placeholder="e.g. Penicillin, Sulfa drugs"
-                                value={
-                                    editingCustomer
-                                        ? editForm.data.allergies
-                                        : createForm.data.allergies
-                                }
-                                onChange={(e) =>
-                                    editingCustomer
-                                        ? editForm.setData(
-                                            'allergies',
-                                            e.target.value
-                                        )
-                                        : createForm.setData(
-                                            'allergies',
-                                            e.target.value
-                                        )
-                                }
-                            />
-                            <Textarea
-                                label="Address"
-                                rows={2}
-                                value={
-                                    editingCustomer
-                                        ? editForm.data.address
-                                        : createForm.data.address
-                                }
-                                onChange={(e) =>
-                                    editingCustomer
-                                        ? editForm.setData(
-                                            'address',
-                                            e.target.value
-                                        )
-                                        : createForm.setData(
-                                            'address',
-                                            e.target.value
-                                        )
-                                }
-                            />
-
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => {
-                                        setShowCreateModal(false);
-                                        setEditingCustomer(null);
-                                    }}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={
+                                <Input
+                                    label="Email"
+                                    type="email"
+                                    value={
                                         editingCustomer
-                                            ? editForm.processing
-                                            : createForm.processing
+                                            ? editForm.data.email
+                                            : createForm.data.email
                                     }
-                                >
-                                    {editingCustomer
-                                        ? 'Save Customer'
-                                        : 'Create Customer'}
-                                </Button>
-                            </div>
-                        </form>
+                                    onChange={(e) =>
+                                        editingCustomer
+                                            ? editForm.setData(
+                                                  'email',
+                                                  e.target.value
+                                              )
+                                            : createForm.setData(
+                                                  'email',
+                                                  e.target.value
+                                              )
+                                    }
+                                />
+                                <Input
+                                    label="Allergy Warning"
+                                    placeholder="e.g. Penicillin, Sulfa drugs"
+                                    value={
+                                        editingCustomer
+                                            ? editForm.data.allergies
+                                            : createForm.data.allergies
+                                    }
+                                    onChange={(e) =>
+                                        editingCustomer
+                                            ? editForm.setData(
+                                                  'allergies',
+                                                  e.target.value
+                                              )
+                                            : createForm.setData(
+                                                  'allergies',
+                                                  e.target.value
+                                              )
+                                    }
+                                />
+                                <Textarea
+                                    label="Address"
+                                    rows={2}
+                                    value={
+                                        editingCustomer
+                                            ? editForm.data.address
+                                            : createForm.data.address
+                                    }
+                                    onChange={(e) =>
+                                        editingCustomer
+                                            ? editForm.setData(
+                                                  'address',
+                                                  e.target.value
+                                              )
+                                            : createForm.setData(
+                                                  'address',
+                                                  e.target.value
+                                              )
+                                    }
+                                />
+
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            setShowCreateModal(false);
+                                            setEditingCustomer(null);
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={
+                                            editingCustomer
+                                                ? editForm.processing
+                                                : createForm.processing
+                                        }
+                                    >
+                                        {editingCustomer
+                                            ? 'Save Customer'
+                                            : 'Create Customer'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

@@ -15,6 +15,7 @@ import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -358,8 +359,8 @@ export default function AdminFeatures({ features, plans }: AdminFeaturesProps) {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormLayoutProvider labelWidth="sm:w-[155px]">
+                            <form onSubmit={handleSubmit} className="p-5 space-y-3">
                                 <Input
                                     label="Feature Name"
                                     required
@@ -381,30 +382,40 @@ export default function AdminFeatures({ features, plans }: AdminFeaturesProps) {
                                         )
                                     }
                                 />
-                            </div>
 
-                            {!editingFeature && (
                                 <Input
-                                    label="Feature Key (Optional slug)"
+                                    label="Feature Key"
+                                    readOnly={Boolean(editingFeature)}
                                     placeholder="auto-generated if blank, e.g. expiry_alerts"
-                                    value={form.data.key}
-                                    onChange={(e) =>
-                                        form.setData('key', e.target.value)
+                                    value={
+                                        editingFeature
+                                            ? editingFeature.key
+                                            : form.data.key ||
+                                              (form.data.name
+                                                  ? form.data.name
+                                                        .toLowerCase()
+                                                        .replace(/[^a-z0-9]+/g, '_')
+                                                        .replace(/^_|_$/g, '')
+                                                  : '')
                                     }
+                                    onChange={(e) => {
+                                        if (!editingFeature) {
+                                            form.setData('key', e.target.value);
+                                        }
+                                    }}
                                     error={form.errors.key}
                                 />
-                            )}
 
-                            <Textarea
-                                label="Description"
-                                rows={2}
-                                placeholder="Describe what this feature unlocks for pharmacy owners..."
-                                value={form.data.description}
-                                onChange={(e) =>
-                                    form.setData('description', e.target.value)
-                                }
-                                error={form.errors.description}
-                            />
+                                <Textarea
+                                    label="Description"
+                                    rows={2}
+                                    placeholder="Describe what this feature unlocks for pharmacy owners..."
+                                    value={form.data.description}
+                                    onChange={(e) =>
+                                        form.setData('description', e.target.value)
+                                    }
+                                    error={form.errors.description}
+                                />
 
                             <label className="flex items-start gap-2.5 rounded-[4px] border border-slate-200 dark:border-slate-700 p-3 cursor-pointer">
                                 <input
@@ -495,6 +506,7 @@ export default function AdminFeatures({ features, plans }: AdminFeaturesProps) {
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

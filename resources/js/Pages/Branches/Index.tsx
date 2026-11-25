@@ -15,6 +15,7 @@ import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -381,24 +382,24 @@ export default function BranchesIndex({
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-                            {tenants.length > 0 && (
-                                <Select
-                                    label="Business Tenant"
-                                    required
-                                    value={data.tenant_id}
-                                    onChange={(e) =>
-                                        setData(
-                                            'tenant_id',
-                                            String(e.target.value)
-                                        )
-                                    }
-                                    options={tenantSelectOptions}
-                                    icon={Store}
-                                />
-                            )}
+                        <FormLayoutProvider labelWidth="sm:w-[135px]">
+                            <form onSubmit={handleSubmit} className="p-5 space-y-3">
+                                {tenants.length > 0 && (
+                                    <Select
+                                        label="Business Tenant"
+                                        required
+                                        value={data.tenant_id}
+                                        onChange={(e) =>
+                                            setData(
+                                                'tenant_id',
+                                                String(e.target.value)
+                                            )
+                                        }
+                                        options={tenantSelectOptions}
+                                        icon={Store}
+                                    />
+                                )}
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Branch Name"
                                     required
@@ -419,9 +420,6 @@ export default function BranchesIndex({
                                     }
                                     error={errors.code}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Phone"
                                     placeholder="+880 1711-..."
@@ -440,35 +438,34 @@ export default function BranchesIndex({
                                     }
                                     error={errors.city}
                                 />
-                            </div>
+                                <Textarea
+                                    label="Street Address"
+                                    rows={2}
+                                    placeholder="Plot 12, Sector 7 Main Road..."
+                                    value={data.address}
+                                    onChange={(e) =>
+                                        setData('address', e.target.value)
+                                    }
+                                />
 
-                            <Textarea
-                                label="Street Address"
-                                rows={2}
-                                placeholder="Plot 12, Sector 7 Main Road..."
-                                value={data.address}
-                                onChange={(e) =>
-                                    setData('address', e.target.value)
-                                }
-                            />
-
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setShowModal(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={processing}
-                                >
-                                    Create Branch
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={() => setShowModal(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={processing}
+                                    >
+                                        Create Branch
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

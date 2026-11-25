@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, Building2, Check, Stethoscope, User, UserCheck, UserPlus, X } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider, HorizontalFormRow } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { CustomerItem } from '../CreateOrder';
 
@@ -146,120 +147,119 @@ export default function SalesCustomerModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 space-y-3.5">
-                    {error && (
-                        <div className="p-2.5 rounded-[3px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 flex items-center gap-2 text-xs text-rose-700 dark:text-rose-300">
-                            <AlertCircle className="h-4 w-4 shrink-0" />
-                            <span>{error}</span>
-                        </div>
-                    )}
+                <FormLayoutProvider labelWidth="sm:w-[135px]">
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        {error && (
+                            <div className="p-2.5 rounded-[3px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 flex items-center gap-2 text-xs text-rose-700 dark:text-rose-300">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                <span>{error}</span>
+                            </div>
+                        )}
 
-                    {infoMessage && (
-                        <div className="p-2.5 rounded-[3px] bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
-                            <Check className="h-4 w-4 shrink-0" />
-                            <span>{infoMessage}</span>
-                        </div>
-                    )}
+                        {infoMessage && (
+                            <div className="p-2.5 rounded-[3px] bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                <Check className="h-4 w-4 shrink-0" />
+                                <span>{infoMessage}</span>
+                            </div>
+                        )}
 
-                    {/* Customer Type Selector (4 Pills) */}
-                    <div>
-                        <label className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                            Customer Type (গ্রাহকের ধরন) *
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {CUSTOMER_TYPES.map((t) => {
-                                const Icon = t.icon;
-                                const isSelected = customerType === t.type;
-                                return (
-                                    <button
-                                        key={t.type}
-                                        type="button"
-                                        onClick={() => setCustomerType(t.type)}
-                                        className={`p-2 rounded-[3px] border text-left transition-all cursor-pointer flex items-start gap-2 ${
-                                            isSelected
-                                                ? 'border-[#FF4A1F] bg-[#FF4A1F]/5 dark:bg-[#FF4A1F]/10 ring-1 ring-[#FF4A1F]'
-                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#181d26] hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                                        }`}
-                                    >
-                                        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${isSelected ? 'text-[#FF4A1F]' : 'text-slate-400'}`} />
-                                        <div className="min-w-0">
-                                            <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-[#FF4A1F]' : 'text-slate-800 dark:text-slate-200'}`}>
-                                                {t.label}
+                        {/* Customer Type Selector (4 Pills) */}
+                        <HorizontalFormRow label="Customer Type" required>
+                            <div className="grid grid-cols-2 gap-2">
+                                {CUSTOMER_TYPES.map((t) => {
+                                    const Icon = t.icon;
+                                    const isSelected = customerType === t.type;
+                                    return (
+                                        <button
+                                            key={t.type}
+                                            type="button"
+                                            onClick={() => setCustomerType(t.type)}
+                                            className={`p-2 rounded-[3px] border text-left transition-all cursor-pointer flex items-start gap-2 ${
+                                                isSelected
+                                                    ? 'border-[#FF4A1F] bg-[#FF4A1F]/5 dark:bg-[#FF4A1F]/10 ring-1 ring-[#FF4A1F]'
+                                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#181d26] hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                            }`}
+                                        >
+                                            <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${isSelected ? 'text-[#FF4A1F]' : 'text-slate-400'}`} />
+                                            <div className="min-w-0">
+                                                <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-[#FF4A1F]' : 'text-slate-800 dark:text-slate-200'}`}>
+                                                    {t.label}
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
+                                                    {t.sublabel}
+                                                </div>
                                             </div>
-                                            <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
-                                                {t.sublabel}
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </HorizontalFormRow>
 
-                    {/* Name */}
-                    <Input
-                        label="Full Name (পূর্ণ নাম) *"
-                        placeholder="e.g. Dr. Rafiqul Islam / Rahim Mia"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="h-8 text-xs"
-                        autoFocus
-                    />
-
-                    {/* Phone & Duplicate Warning Notice */}
-                    <div>
+                        {/* Name */}
                         <Input
-                            label={`Phone Number (মোবাইল নম্বর) ${customerType === 'walk_in' ? '(ঐচ্ছিক)' : '*'}`}
-                            placeholder="017XXXXXXXX or +8801..."
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
+                            label="Full Name *"
+                            placeholder="e.g. Dr. Rafiqul Islam / Rahim Mia"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="h-8 text-xs"
+                            autoFocus
+                        />
+
+                        {/* Phone & Duplicate Warning Notice */}
+                        <div>
+                            <Input
+                                label={`Phone Number ${customerType === 'walk_in' ? '(ঐচ্ছিক)' : '*'}`}
+                                placeholder="017XXXXXXXX or +8801..."
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                className="h-8 text-xs"
+                            />
+                            <p className="mt-1 sm:pl-[145px] text-[10px] text-slate-400 dark:text-slate-500">
+                                Duplicate prevention: If this phone already exists, the existing profile will be automatically linked.
+                            </p>
+                        </div>
+
+                        {/* Allergies / Medical Note */}
+                        <Input
+                            label="Allergies / Notes"
+                            placeholder="e.g. Penicillin allergy, Diabetic, Asthma"
+                            value={allergies}
+                            onChange={(e) => setAllergies(e.target.value)}
                             className="h-8 text-xs"
                         />
-                        <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-                            Duplicate prevention: If this phone already exists, the existing profile will be automatically linked without creating a duplicate.
-                        </p>
-                    </div>
 
-                    {/* Allergies / Medical Note */}
-                    <Input
-                        label="Medical Notes / Allergies (অ্যালার্জি বা বিশেষ নির্দেশনা)"
-                        placeholder="e.g. Penicillin allergy, Diabetic, Asthma"
-                        value={allergies}
-                        onChange={(e) => setAllergies(e.target.value)}
-                        className="h-8 text-xs"
-                    />
+                        {/* Address (Optional) */}
+                        <Input
+                            label="Address / Org"
+                            placeholder="e.g. House 42, Road 11, Banani, Dhaka"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            className="h-8 text-xs"
+                        />
 
-                    {/* Address (Optional) */}
-                    <Input
-                        label="Address / Organization (ঠিকানা বা প্রতিষ্ঠান - ঐচ্ছিক)"
-                        placeholder="e.g. House 42, Road 11, Banani, Dhaka"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        className="h-8 text-xs"
-                    />
-
-                    {/* Footer Actions */}
-                    <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onClose}
-                            className="rounded-[3px] text-xs"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="sm"
-                            isLoading={loading}
-                            className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px] text-xs font-bold"
-                        >
-                            Save & Select Customer
-                        </Button>
-                    </div>
-                </form>
+                        {/* Footer Actions */}
+                        <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={onClose}
+                                className="rounded-[3px] text-xs"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                isLoading={loading}
+                                className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px] text-xs font-bold"
+                            >
+                                Save & Select Customer
+                            </Button>
+                        </div>
+                    </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );

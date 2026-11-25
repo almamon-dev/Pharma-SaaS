@@ -21,11 +21,16 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Badge } from '@/Components/ui/Badge';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { DataTable, Column, EmptyState, TableActionMenu } from '@/Components/tables';
 import { BarcodeSvg } from '@/Components/BarcodeSvg';
+import {
+    generateEan13Preview,
+    generateProductSku,
+} from '@/Components/inventory/inventoryTypes';
 import { formatCurrency } from '@/lib/format';
 import { SharedPageProps } from '@/types';
 
@@ -714,17 +719,100 @@ export default function CatalogIndex({
         </div>
     );
 
-    // Live unit conversion preview: e.g. "1 box = 10 strips = 100 pcs"
-    const unitConversionSummary = useMemo(() => {
-        const sorted = [...prodForm.units].sort((a, b) => b.conversion_to_base - a.conversion_to_base);
-        if (sorted.length <= 1) {
-            return `Base: 1 ${prodForm.base_unit}`;
-        }
-        return sorted.map((u) => `${u.conversion_to_base} ${prodForm.base_unit} / ${u.unit_name}`).join(' · ');
-    }, [prodForm.units, prodForm.base_unit]);
+    // Helper to keep a named conversion unit (strip / box / custom) synced in prodForm.units
+    const setPackUnitConversion = (unitName: string, qtyRaw: string) => {
+        const normalizedTarget = unitName.toLowerCase();
+        const qty = parseInt(qtyRaw, 10);
 
-    // Generate EAN-13 barcode
-    const handleGenerateBarcode = async () => {
+        setProdForm((prev) => {
+            const withoutTarget = prev.units.filter(
+                (u) => u.unit_name.toLowerCase() !== normalizedTarget
+            );
+
+            if (!qtyRaw || Number.isNaN(qty) || qty <= 1 || prev.base_unit.toLowerCase() === normalizedTarget) {
+                const hasDefault = withoutTarget.some((u) => u.is_default_sale);
+                return {
+                    ...prev,
+                    units: hasDefault
+                        ? withoutTarget
+                        : withoutTarget.map((u, idx) => ({ ...u, is_default_sale: idx === 0 })),
+                };
+            }
+
+            const existing = prev.units.find((u) => u.unit_name.toLowerCase() === normalizedTarget);
+            const nextUnits = [
+                ...withoutTarget,
+                {
+                    unit_name: normalizedTarget,
+                    conversion_to_base: qty,
+                    is_sale_unit: true,
+                    is_purchase_unit: true,
+                    is_default_sale: existing?.is_default_sale ?? false,
+                },
+            ];
+            return { ...prev, units: nextUnits };
+        });
+    };
+
+    const handleBaseUnitChange = (nextBase: string) => {
+        const normalizedBase = nextBase.trim().toLowerCase() || 'pcs';
+        setProdForm((prev) => {
+            const otherUnits = prev.units.filter(
+                (u) => u.conversion_to_base > 1 && u.unit_name.toLowerCase() !== normalizedBase
+            );
+            const oldBaseWasDefault = prev.units.find((u) => u.conversion_to_base === 1)?.is_default_sale ?? true;
+            const nextUnits: UnitRow[] = [
+                {
+                    unit_name: normalizedBase,
+                    conversion_to_base: 1,
+                    is_sale_unit: true,
+                    is_purchase_unit: true,
+                    is_default_sale: oldBaseWasDefault || !otherUnits.some((u) => u.is_default_sale),
+                },
+                ...otherUnits,
+            ];
+            return {
+                ...prev,
+                base_unit: normalizedBase,
+                units: nextUnits,
+            };
+        });
+    };
+
+    const handleDefaultSaleUnitChange = (selectedUnitName: string) => {
+        const target = selectedUnitName.toLowerCase();
+        setProdForm((prev) => ({
+            ...prev,
+            units: prev.units.map((u) => ({
+                ...u,
+                is_default_sale: u.unit_name.toLowerCase() === target,
+            })),
+        }));
+    };
+
+    const stripUnit = prodForm.units.find((u) => u.unit_name.toLowerCase() === 'strip' && u.conversion_to_base > 1);
+    const boxUnit = prodForm.units.find((u) => u.unit_name.toLowerCase() === 'box' && u.conversion_to_base > 1);
+    const customUnits = prodForm.units.filter(
+        (u) => u.conversion_to_base > 1 && !['strip', 'box'].includes(u.unit_name.toLowerCase())
+    );
+    const defaultSaleUnitName =
+        prodForm.units.find((u) => u.is_default_sale)?.unit_name || prodForm.base_unit || 'pcs';
+
+    const [generatingBarcode, setGeneratingBarcode] = useState(false);
+    const [skuManual, setSkuManual] = useState(false);
+    const existingCatalogSkus = useMemo(
+        () =>
+            products
+                .filter((p) => !editingProduct || p.id !== editingProduct.id)
+                .map((p) => p.sku || '')
+                .filter(Boolean),
+        [products, editingProduct]
+    );
+
+    // Generate EAN-13 barcode (backend sequential generator with client-side fallback)
+    const handleGenerateBarcode = async (onlyIfEmpty = false) => {
+        if (generatingBarcode) return;
+        setGeneratingBarcode(true);
         try {
             const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
             const res = await fetch('/api/catalog/products/generate-barcode', {
@@ -735,19 +823,36 @@ export default function CatalogIndex({
                     Accept: 'application/json',
                 },
             });
-            const data = await res.json();
-            if (data.barcode) {
-                setProdForm((prev) => ({
+            const data = res.ok ? await res.json() : null;
+            const nextCode = data?.barcode || generateEan13Preview();
+            setProdForm((prev) => {
+                if (onlyIfEmpty && prev.barcodes.some((b) => b.barcode.trim() !== '')) {
+                    return prev;
+                }
+                const remaining = prev.barcodes.filter((_, idx) => idx !== 0);
+                return {
                     ...prev,
-                    barcodes: [...prev.barcodes, { barcode: data.barcode, is_primary: prev.barcodes.length === 0 }],
-                }));
-            }
-        } catch (e) {
-            alert('Failed to generate internal barcode');
+                    barcodes: [{ barcode: nextCode, is_primary: true }, ...remaining],
+                };
+            });
+        } catch {
+            const fallback = generateEan13Preview();
+            setProdForm((prev) => {
+                if (onlyIfEmpty && prev.barcodes.some((b) => b.barcode.trim() !== '')) {
+                    return prev;
+                }
+                const remaining = prev.barcodes.filter((_, idx) => idx !== 0);
+                return {
+                    ...prev,
+                    barcodes: [{ barcode: fallback, is_primary: true }, ...remaining],
+                };
+            });
+        } finally {
+            setGeneratingBarcode(false);
         }
     };
 
-    // Add unit row
+    // Add custom unit row
     const addUnitRow = () => {
         setProdForm((prev) => ({
             ...prev,
@@ -767,13 +872,18 @@ export default function CatalogIndex({
     // Remove unit row
     const removeUnitRow = (index: number) => {
         if (prodForm.units[index].conversion_to_base === 1) {
-            alert('Base unit (conversion=1) cannot be removed.');
             return;
         }
-        setProdForm((prev) => ({
-            ...prev,
-            units: prev.units.filter((_, i) => i !== index),
-        }));
+        setProdForm((prev) => {
+            const filtered = prev.units.filter((_, i) => i !== index);
+            const hasDefault = filtered.some((u) => u.is_default_sale);
+            return {
+                ...prev,
+                units: hasDefault
+                    ? filtered
+                    : filtered.map((u, idx) => ({ ...u, is_default_sale: idx === 0 })),
+            };
+        });
     };
 
     // Save product
@@ -791,6 +901,8 @@ export default function CatalogIndex({
                           : 0,
                 purchase_price: prodForm.purchase_price !== '' ? Number(prodForm.purchase_price) : 0,
                 default_discount_type: prodForm.default_discount_type === 'none' ? null : prodForm.default_discount_type,
+                barcodes: prodForm.barcodes.filter((b) => b.barcode.trim() !== ''),
+                units: prodForm.units.filter((u) => u.unit_name.trim() !== ''),
             };
 
             const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
@@ -1008,6 +1120,7 @@ export default function CatalogIndex({
             alert('You have reached the maximum product limit for your plan. Please upgrade.');
             return;
         }
+        setSkuManual(false);
         setEditingProduct(null);
         setProdForm({
             type: 'medicine',
@@ -1040,6 +1153,7 @@ export default function CatalogIndex({
             })),
         });
         setProductDrawerOpen(true);
+        void handleGenerateBarcode(true);
     };
 
     return (
@@ -1187,6 +1301,7 @@ export default function CatalogIndex({
                                             label: isBn ? "এডিট করুন" : "Edit Product",
                                             icon: <Edit2 className="h-3.5 w-3.5" />,
                                             onClick: () => {
+                                                setSkuManual(true);
                                                 setEditingProduct(p);
                                                 setProdForm({
                                                     type: p.type,
@@ -1552,7 +1667,7 @@ export default function CatalogIndex({
                 {/* PRODUCT DRAWER / MODAL */}
                 {productDrawerOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-                        <div className="bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 rounded-[3px] w-full max-w-3xl shadow-2xl overflow-hidden my-8">
+                        <div className="bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 rounded-[3px] w-full max-w-4xl shadow-2xl overflow-hidden my-8">
                             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-[#12161c]">
                                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                                     <Package className="h-4 w-4 text-[#FF4A1F]" />
@@ -1574,44 +1689,41 @@ export default function CatalogIndex({
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSaveProduct} className="p-6 space-y-6">
-                                {/* Basic Info */}
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                                        <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">1</span>
-                                        <span>{isBn ? 'সাধারণ তথ্য (ওষুধের নাম, ধরন ও কোম্পানি)' : 'General Information'}</span>
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'পণ্যের নাম (ইংরেজি) *' : 'Product Name (English) *'}
-                                            </label>
+                            <FormLayoutProvider labelWidth="sm:w-[140px]">
+                                <form onSubmit={handleSaveProduct} className="p-6 space-y-6">
+                                    {/* Basic Info */}
+                                    <div>
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">1</span>
+                                            <span>{isBn ? 'সাধারণ তথ্য (ওষুধের নাম, ধরন ও কোম্পানি)' : 'General Information'}</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                                             <Input
+                                                label={isBn ? 'পণ্যের নাম (ইংরেজি)' : 'Product Name (English)'}
                                                 required
                                                 value={prodForm.name}
-                                                onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
+                                                onChange={(e) => {
+                                                    const nextName = e.target.value;
+                                                    setProdForm((prev) => ({
+                                                        ...prev,
+                                                        name: nextName,
+                                                        ...(!editingProduct && !skuManual
+                                                            ? { sku: generateProductSku(nextName, prev.strength, existingCatalogSkus) }
+                                                            : {}),
+                                                    }));
+                                                }}
                                                 placeholder="e.g. Napa Extra"
                                                 className="text-xs"
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name (Optional)'}
-                                            </label>
                                             <Input
+                                                label={isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name (Optional)'}
                                                 value={prodForm.name_bn}
                                                 onChange={(e) => setProdForm({ ...prodForm, name_bn: e.target.value })}
                                                 placeholder="উদাঃ নাপা এক্সট্রা"
                                                 className="text-xs font-bengali"
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'পণ্য ধরন' : 'Type'}
-                                            </label>
                                             <Select
+                                                label={isBn ? 'পণ্য ধরন' : 'Type'}
                                                 value={prodForm.type}
                                                 onChange={(e) =>
                                                     setProdForm({ ...prodForm, type: e.target.value as any })
@@ -1621,25 +1733,19 @@ export default function CatalogIndex({
                                                 <option value="medicine">{isBn ? 'ওষুধ (Medicine)' : 'Medicine'}</option>
                                                 <option value="non_medicine">{isBn ? 'অন্যান্য পণ্য' : 'Non-Medicine'}</option>
                                             </Select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                SKU ({isBn ? 'ঐচ্ছিক' : 'Optional'})
-                                            </label>
                                             <Input
+                                                label="SKU"
                                                 value={prodForm.sku}
-                                                onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value })}
-                                                placeholder="e.g. NAPA-EXT-500"
-                                                className="text-xs"
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setSkuManual(val.trim() !== '');
+                                                    setProdForm({ ...prodForm, sku: val });
+                                                }}
+                                                placeholder={isBn ? 'নাম লিখলে অটো হবে (যেমন: NAPA-500MG)' : 'Auto from Name + Strength'}
+                                                className="font-mono text-xs"
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'ক্যাটাগরি' : 'Category'}
-                                            </label>
                                             <Select
+                                                label={isBn ? 'ক্যাটাগরি' : 'Category'}
                                                 value={prodForm.category_id}
                                                 onChange={(e) => setProdForm({ ...prodForm, category_id: String(e.target.value) })}
                                                 className="text-xs"
@@ -1651,13 +1757,8 @@ export default function CatalogIndex({
                                                     </option>
                                                 ))}
                                             </Select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'কোম্পানি' : 'Company'}
-                                            </label>
                                             <Select
+                                                label={isBn ? 'কোম্পানি' : 'Company'}
                                                 value={prodForm.company_id}
                                                 onChange={(e) => setProdForm({ ...prodForm, company_id: String(e.target.value) })}
                                                 className="text-xs"
@@ -1669,15 +1770,11 @@ export default function CatalogIndex({
                                                     </option>
                                                 ))}
                                             </Select>
-                                        </div>
 
-                                        {prodForm.type === 'medicine' && (
-                                            <>
-                                                <div>
-                                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                        {isBn ? 'জেনেরিক নাম' : 'Generic'}
-                                                    </label>
+                                                    {prodForm.type === 'medicine' && (
+                                                <>
                                                     <Select
+                                                        label={isBn ? 'জেনেরিক নাম' : 'Generic'}
                                                         value={prodForm.generic_id}
                                                         onChange={(e) =>
                                                             setProdForm({ ...prodForm, generic_id: String(e.target.value) })
@@ -1691,42 +1788,99 @@ export default function CatalogIndex({
                                                             </option>
                                                         ))}
                                                     </Select>
-                                                </div>
-
-                                                <div>
-                                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                        {isBn ? 'স্ট্রেন্থ' : 'Strength'}
-                                                    </label>
                                                     <Input
+                                                        label={isBn ? 'স্ট্রেন্থ' : 'Strength'}
                                                         value={prodForm.strength}
-                                                        onChange={(e) =>
-                                                            setProdForm({ ...prodForm, strength: e.target.value })
-                                                        }
+                                                        onChange={(e) => {
+                                                            const nextStrength = e.target.value;
+                                                            setProdForm((prev) => ({
+                                                                ...prev,
+                                                                strength: nextStrength,
+                                                                ...(!editingProduct && !skuManual
+                                                                    ? { sku: generateProductSku(prev.name, nextStrength, existingCatalogSkus) }
+                                                                    : {}),
+                                                            }));
+                                                        }}
                                                         placeholder="e.g. 500mg, 10ml"
                                                         className="text-xs"
                                                     />
-                                                </div>
-                                            </>
+                                                    <Select
+                                                        label={isBn ? 'ডোজের ধরন' : 'Dosage Form'}
+                                                        value={prodForm.dosage_form}
+                                                        onChange={(e) =>
+                                                            setProdForm({ ...prodForm, dosage_form: String(e.target.value) })
+                                                        }
+                                                        className="text-xs"
+                                                    >
+                                                        {['tablet', 'capsule', 'syrup', 'dry syrup', 'injection', 'cream', 'drops', 'inhaler', 'other'].map((df) => (
+                                                            <option key={df} value={df}>
+                                                                {df.charAt(0).toUpperCase() + df.slice(1)}
+                                                            </option>
+                                                        ))}
+                                                    </Select>
+                                                </>
+                                            )}
+
+                                            <Input
+                                                label={isBn ? 'বারকোড (ঐচ্ছিক)' : 'Barcode (Optional)'}
+                                                value={prodForm.barcodes[0]?.barcode || ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setProdForm((prev) => {
+                                                        const rest = prev.barcodes.filter((_, idx) => idx !== 0);
+                                                        if (val.trim() === '' && rest.length === 0) {
+                                                            return { ...prev, barcodes: [] };
+                                                        }
+                                                        return {
+                                                            ...prev,
+                                                            barcodes: [{ barcode: val, is_primary: true }, ...rest],
+                                                        };
+                                                    });
+                                                }}
+                                                placeholder={isBn ? 'অটো তৈরি হবে বা স্ক্যান করুন' : 'Auto-generated or scan'}
+                                                className="font-mono text-xs"
+                                            />
+                                        </div>
+                                        {prodForm.barcodes.length > 1 && (
+                                            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                                <span className="text-slate-500">{isBn ? 'অতিরিক্ত বারকোড:' : 'Extra barcodes:'}</span>
+                                                {prodForm.barcodes.slice(1).map((b, extraIdx) => (
+                                                    <span
+                                                        key={extraIdx}
+                                                        className="inline-flex items-center gap-1 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#12161c] px-2 py-0.5 font-mono text-slate-700 dark:text-slate-300"
+                                                    >
+                                                        {b.barcode}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setProdForm((prev) => ({
+                                                                    ...prev,
+                                                                    barcodes: prev.barcodes.filter((_, idx) => idx !== extraIdx + 1),
+                                                                }))
+                                                            }
+                                                            className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
-                                </div>
 
-                                {/* Pricing Section: MRP, Local Selling Price & Purchase Price */}
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                                        <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">2</span>
-                                        <span>
-                                            {isBn
-                                                ? `মূল্য নির্ধারণ (প্রতি ${prodForm.base_unit || 'পিস'})`
-                                                : `Pricing (Per ${prodForm.base_unit || 'pcs'})`}
-                                        </span>
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'MRP (সর্বাধিক খুচরা মূল্য)' : 'MRP (Max Retail Price)'}
-                                            </label>
+                                    {/* Pricing Section: MRP, Local Selling Price & Purchase Price */}
+                                    <div>
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">2</span>
+                                            <span>
+                                                {isBn
+                                                    ? `মূল্য নির্ধারণ (প্রতি ${prodForm.base_unit || 'পিস'})`
+                                                    : `Pricing (Per ${prodForm.base_unit || 'pcs'})`}
+                                            </span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                                             <Input
+                                                label={isBn ? 'MRP (সর্বাধিক খুচরা মূল্য)' : 'MRP (Max Retail Price)'}
                                                 type="number"
                                                 step="0.01"
                                                 min="0"
@@ -1745,13 +1899,8 @@ export default function CatalogIndex({
                                                 placeholder="0.00"
                                                 className="text-xs"
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'লোকাল বিক্রয় মূল্য (Sale Price)' : 'Local Selling Price'}
-                                            </label>
                                             <Input
+                                                label={isBn ? 'লোকাল বিক্রয় মূল্য' : 'Local Selling Price'}
                                                 type="number"
                                                 step="0.01"
                                                 min="0"
@@ -1762,13 +1911,8 @@ export default function CatalogIndex({
                                                 placeholder="0.00"
                                                 className="text-xs"
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                {isBn ? 'ক্রয় মূল্য / TP (ঐচ্ছিক)' : 'Purchase / TP (Optional)'}
-                                            </label>
                                             <Input
+                                                label={isBn ? 'ক্রয় মূল্য / TP (ঐচ্ছিক)' : 'Purchase / TP (Optional)'}
                                                 type="number"
                                                 step="0.01"
                                                 min="0"
@@ -1780,7 +1924,6 @@ export default function CatalogIndex({
                                                 className="text-xs"
                                             />
                                         </div>
-                                    </div>
 
                                     {(() => {
                                         const mrpVal = parseFloat(prodForm.mrp) || 0;
@@ -1831,164 +1974,300 @@ export default function CatalogIndex({
                                     })()}
                                 </div>
 
-                                {/* Units Table */}
+                                {/* Simple Packaging & Units */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
                                             <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">3</span>
-                                            <span>{isBn ? 'প্যাকিং ও ইউনিট অনুপাত (পিস / পাতা / বক্স)' : 'Packaging & Units (Pcs / Strip / Box)'}</span>
+                                            <span>{isBn ? 'প্যাকিং ও ইউনিট হিসাব' : 'Packaging & Pack Size'}</span>
                                         </h4>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={addUnitRow}
-                                            className="h-7 text-xs"
-                                        >
-                                            <Plus className="h-3 w-3 mr-1" />
-                                            {isBn ? 'নতুন ইউনিট' : 'Add Unit'}
-                                        </Button>
-                                    </div>
-
-                                    {/* Live Conversion Preview */}
-                                    <div className="p-2.5 rounded-[3px] bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800/40 text-xs text-orange-800 dark:text-orange-300 font-mono mb-3">
-                                        <span className="text-slate-500 dark:text-slate-400 font-sans mr-2">{isBn ? 'হিসাব:' : 'Formula:'}</span>
-                                        {unitConversionSummary}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        {prodForm.units.map((u, i) => (
-                                            <div
-                                                key={i}
-                                                className="grid grid-cols-12 gap-2 items-center bg-slate-50 dark:bg-[#12161c] p-2.5 rounded-[3px] border border-slate-200 dark:border-slate-800 text-xs"
-                                            >
-                                                <div className="col-span-4">
-                                                    <Input
-                                                        value={u.unit_name}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const updated = [...prodForm.units];
-                                                            updated[i].unit_name = val;
-                                                            if (u.conversion_to_base === 1) {
-                                                                setProdForm({ ...prodForm, base_unit: val, units: updated });
-                                                            } else {
-                                                                setProdForm({ ...prodForm, units: updated });
-                                                            }
-                                                        }}
-                                                        placeholder="e.g. pcs, strip, box"
-                                                        className="h-8 text-xs"
-                                                    />
-                                                </div>
-
-                                                <div className="col-span-3 flex items-center gap-1.5">
-                                                    <span className="text-slate-500">=</span>
-                                                    <Input
-                                                        type="number"
-                                                        disabled={u.conversion_to_base === 1}
-                                                        value={u.conversion_to_base}
-                                                        onChange={(e) => {
-                                                            const val = parseInt(e.target.value) || 1;
-                                                            const updated = [...prodForm.units];
-                                                            updated[i].conversion_to_base = Math.max(1, val);
-                                                            setProdForm({ ...prodForm, units: updated });
-                                                        }}
-                                                        className="h-8 text-xs"
-                                                    />
-                                                    <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px]">
-                                                        {prodForm.base_unit}
-                                                    </span>
-                                                </div>
-
-                                                <div className="col-span-4 flex items-center gap-3">
-                                                    <label className="flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 cursor-pointer">
-                                                        <input
-                                                            type="radio"
-                                                            name="default_sale_radio"
-                                                            checked={u.is_default_sale}
-                                                            onChange={() => {
-                                                                const updated = prodForm.units.map((item, idx) => ({
-                                                                    ...item,
-                                                                    is_default_sale: idx === i,
-                                                                }));
-                                                                setProdForm({ ...prodForm, units: updated });
-                                                            }}
-                                                        />
-                                                        <span>{isBn ? 'খুচরা বিক্রির মূল ইউনিট' : 'Retail Sale Unit'}</span>
-                                                    </label>
-                                                </div>
-
-                                                <div className="col-span-1 text-right">
-                                                    {u.conversion_to_base > 1 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeUnitRow(i)}
-                                                            className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Barcodes Table */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                            <span className="h-5 w-5 rounded-full bg-[#FF4A1F]/10 text-[#FF4A1F] flex items-center justify-center text-[11px] font-bold">4</span>
-                                            <span>{isBn ? 'বারকোড ও স্ক্যান কোড' : 'Barcodes & Scan Codes'}</span>
-                                        </h4>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            onClick={handleGenerateBarcode}
-                                            className="h-7 text-xs bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
-                                        >
-                                            <Barcode className="h-3.5 w-3.5 mr-1" />
-                                            {isBn ? 'বারকোড তৈরি করুন' : 'Generate Barcode'}
-                                        </Button>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        {prodForm.barcodes.length === 0 ? (
-                                            <p className="text-xs text-slate-500 py-2">
-                                                {isBn
-                                                    ? 'কোনো বারকোড যোগ করা হয়নি। ম্যানুয়ালি যোগ করুন বা স্বয়ংক্রিয় তৈরি করুন।'
-                                                    : 'No barcodes assigned yet. Click generate or enter one.'}
-                                            </p>
-                                        ) : (
-                                            prodForm.barcodes.map((b, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="flex items-center justify-between bg-slate-50 dark:bg-[#12161c] p-2.5 rounded-[3px] border border-slate-200 dark:border-slate-800 text-xs"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <Barcode className="h-4 w-4 text-[#FF4A1F]" />
-                                                        <span className="font-mono text-slate-900 dark:text-slate-100 font-bold tracking-wider">
-                                                            {b.barcode}
-                                                        </span>
-                                                        {b.is_primary && (
-                                                            <Badge variant="success">Primary</Badge>
-                                                        )}
-                                                    </div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            {[
+                                                {
+                                                    key: 'single',
+                                                    label: isBn ? 'শুধু ১ পিস' : 'Single (1)',
+                                                    base: 'pcs',
+                                                    strip: 0,
+                                                    box: 0,
+                                                },
+                                                {
+                                                    key: 'tab10x100',
+                                                    label: isBn ? '১০/পাতা · ১০০/বক্স' : '10/Strip · 100/Box',
+                                                    base: 'pcs',
+                                                    strip: 10,
+                                                    box: 100,
+                                                },
+                                                {
+                                                    key: 'tab10x50',
+                                                    label: isBn ? '১০/পাতা · ৫০/বক্স' : '10/Strip · 50/Box',
+                                                    base: 'pcs',
+                                                    strip: 10,
+                                                    box: 50,
+                                                },
+                                                {
+                                                    key: 'bottle',
+                                                    label: isBn ? 'বোতল (১)' : 'Bottle (1)',
+                                                    base: 'bottle',
+                                                    strip: 0,
+                                                    box: 0,
+                                                },
+                                            ].map((preset) => {
+                                                const active =
+                                                    prodForm.base_unit === preset.base &&
+                                                    (stripUnit?.conversion_to_base || 0) === preset.strip &&
+                                                    (boxUnit?.conversion_to_base || 0) === preset.box &&
+                                                    customUnits.length === 0;
+                                                return (
                                                     <button
+                                                        key={preset.key}
                                                         type="button"
                                                         onClick={() => {
-                                                            setProdForm({
-                                                                ...prodForm,
-                                                                barcodes: prodForm.barcodes.filter((_, idx) => idx !== i),
-                                                            });
+                                                            const units: UnitRow[] = [
+                                                                {
+                                                                    unit_name: preset.base,
+                                                                    conversion_to_base: 1,
+                                                                    is_sale_unit: true,
+                                                                    is_purchase_unit: true,
+                                                                    is_default_sale: true,
+                                                                },
+                                                            ];
+                                                            if (preset.strip > 1) {
+                                                                units.push({
+                                                                    unit_name: 'strip',
+                                                                    conversion_to_base: preset.strip,
+                                                                    is_sale_unit: true,
+                                                                    is_purchase_unit: true,
+                                                                    is_default_sale: false,
+                                                                });
+                                                            }
+                                                            if (preset.box > 1) {
+                                                                units.push({
+                                                                    unit_name: 'box',
+                                                                    conversion_to_base: preset.box,
+                                                                    is_sale_unit: true,
+                                                                    is_purchase_unit: true,
+                                                                    is_default_sale: false,
+                                                                });
+                                                            }
+                                                            setProdForm((prev) => ({
+                                                                ...prev,
+                                                                base_unit: preset.base,
+                                                                units,
+                                                            }));
                                                         }}
-                                                        className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                                                        className={`px-2 py-1 rounded-[2px] border text-[10.5px] font-semibold transition-colors cursor-pointer ${
+                                                            active
+                                                                ? 'border-[#FF4A1F] bg-orange-50 text-[#FF4A1F] dark:bg-[#FF4A1F]/15'
+                                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12161c] text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                                                        }`}
                                                     >
-                                                        <X className="h-4 w-4" />
+                                                        {preset.label}
                                                     </button>
-                                                </div>
-                                            ))
+                                                );
+                                            })}
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={addUnitRow}
+                                                className="h-6 px-2 text-[10.5px]"
+                                            >
+                                                <Plus className="h-3 w-3 mr-0.5" />
+                                                {isBn ? 'অন্য প্যাক' : 'Custom'}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                                        <Select
+                                            label={isBn ? 'একক ধরন (Single)' : 'Single Unit'}
+                                            value={prodForm.base_unit}
+                                            onChange={(e) => handleBaseUnitChange(String(e.target.value))}
+                                            className="text-xs"
+                                        >
+                                            {Array.from(
+                                                new Set([
+                                                    prodForm.base_unit || 'pcs',
+                                                    'pcs',
+                                                    'tablet',
+                                                    'capsule',
+                                                    'bottle',
+                                                    'tube',
+                                                    'vial',
+                                                    'sachet',
+                                                    'strip',
+                                                    'box',
+                                                ])
+                                            ).map((uName) => {
+                                                const friendly: Record<string, string> = {
+                                                    pcs: isBn ? 'পিস (pcs)' : 'Piece (pcs)',
+                                                    tablet: isBn ? 'ট্যাবলেট (tablet)' : 'Tablet',
+                                                    capsule: isBn ? 'ক্যাপসুল (capsule)' : 'Capsule',
+                                                    bottle: isBn ? 'বোতল (bottle)' : 'Bottle',
+                                                    tube: isBn ? 'টিউব (tube)' : 'Tube',
+                                                    vial: isBn ? 'ভায়াল (vial)' : 'Vial',
+                                                    sachet: isBn ? 'স্যাশে (sachet)' : 'Sachet',
+                                                    strip: isBn ? 'পাতা (strip)' : 'Strip',
+                                                    box: isBn ? 'বক্স (box)' : 'Box',
+                                                };
+                                                return (
+                                                    <option key={uName} value={uName}>
+                                                        {friendly[uName] || uName}
+                                                    </option>
+                                                );
+                                            })}
+                                        </Select>
+
+                                        {prodForm.units.length > 1 ? (
+                                            <Select
+                                                label={isBn ? 'POS-এ ডিফল্ট' : 'POS Default Unit'}
+                                                value={defaultSaleUnitName}
+                                                onChange={(e) => handleDefaultSaleUnitChange(String(e.target.value))}
+                                                className="text-xs"
+                                            >
+                                                {prodForm.units
+                                                    .filter((u) => u.unit_name.trim() !== '')
+                                                    .map((u) => (
+                                                        <option key={u.unit_name} value={u.unit_name}>
+                                                            {u.conversion_to_base > 1
+                                                                ? `${u.unit_name} (${u.conversion_to_base} ${prodForm.base_unit})`
+                                                                : `${u.unit_name} (1)`}
+                                                        </option>
+                                                    ))}
+                                            </Select>
+                                        ) : (
+                                            <Input
+                                                label={isBn ? 'POS-এ বিক্রি' : 'Sold At POS'}
+                                                value={isBn ? `১ ${prodForm.base_unit} (শুধু খুচরা)` : `1 ${prodForm.base_unit} (single unit)`}
+                                                readOnly
+                                                className="text-xs"
+                                            />
+                                        )}
+
+                                        {prodForm.base_unit.toLowerCase() !== 'strip' && (
+                                            <Input
+                                                label={isBn ? '১ পাতায় কত পিস' : 'Qty in 1 Strip'}
+                                                type="number"
+                                                min="2"
+                                                value={stripUnit ? String(stripUnit.conversion_to_base) : ''}
+                                                onChange={(e) => setPackUnitConversion('strip', e.target.value)}
+                                                placeholder={isBn ? 'না থাকলে খালি রাখুন' : 'Leave blank if no strip'}
+                                                className="pr-14 text-xs"
+                                                rightIcon={
+                                                    <span className="text-[11px] font-medium text-slate-400">
+                                                        {prodForm.base_unit}
+                                                    </span>
+                                                }
+                                            />
+                                        )}
+
+                                        {prodForm.base_unit.toLowerCase() !== 'box' && (
+                                            <Input
+                                                label={isBn ? '১ বক্সে মোট কত পিস' : 'Qty in 1 Box'}
+                                                type="number"
+                                                min="2"
+                                                value={boxUnit ? String(boxUnit.conversion_to_base) : ''}
+                                                onChange={(e) => setPackUnitConversion('box', e.target.value)}
+                                                placeholder={isBn ? 'না থাকলে খালি রাখুন' : 'Leave blank if no box'}
+                                                className="pr-14 text-xs"
+                                                rightIcon={
+                                                    <span className="text-[11px] font-medium text-slate-400">
+                                                        {prodForm.base_unit}
+                                                    </span>
+                                                }
+                                            />
                                         )}
                                     </div>
+
+                                    {(() => {
+                                        const unitPrice = parseFloat(prodForm.selling_price) || parseFloat(prodForm.mrp) || 0;
+                                        const extra = prodForm.units
+                                            .filter((u) => u.conversion_to_base > 1 && u.unit_name.trim() !== '')
+                                            .sort((a, b) => a.conversion_to_base - b.conversion_to_base);
+
+                                        if (extra.length === 0) {
+                                            return (
+                                                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                                    {isBn
+                                                        ? `এই পণ্যটি শুধু ১ ${prodForm.base_unit} হিসেবে স্টক ও বিক্রি হবে। পাতা বা বক্স হিসেবে বিক্রি হলে উপরের বাটনে ক্লিক করুন বা সংখ্যা লিখুন।`
+                                                        : `Tracked & sold by single ${prodForm.base_unit}. Use a preset above or enter Strip/Box qty only if sold in packs.`}
+                                                </p>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px]">
+                                                <span className="px-2 py-0.5 rounded-[2px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium">
+                                                    1 {prodForm.base_unit}
+                                                    {unitPrice > 0 ? ` = ${formatCurrency(unitPrice, currency)}` : ''}
+                                                </span>
+                                                {extra.map((u) => (
+                                                    <span
+                                                        key={u.unit_name}
+                                                        className="px-2 py-0.5 rounded-[2px] bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 text-orange-800 dark:text-orange-300 font-semibold"
+                                                    >
+                                                        1 {u.unit_name} = {u.conversion_to_base} {prodForm.base_unit}
+                                                        {unitPrice > 0
+                                                            ? ` (${formatCurrency(unitPrice * u.conversion_to_base, currency)})`
+                                                            : ''}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {customUnits.length > 0 && (
+                                        <div className="mt-3 space-y-2">
+                                            {prodForm.units.map((u, i) => {
+                                                const isBaseOrStd =
+                                                    u.conversion_to_base === 1 ||
+                                                    ['strip', 'box'].includes(u.unit_name.toLowerCase());
+                                                if (isBaseOrStd) return null;
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 items-center rounded-[2px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#12161c] p-2.5"
+                                                    >
+                                                        <Input
+                                                            label={isBn ? 'কাস্টম ইউনিট' : 'Custom Unit'}
+                                                            value={u.unit_name}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                const updated = [...prodForm.units];
+                                                                updated[i].unit_name = val;
+                                                                setProdForm({ ...prodForm, units: updated });
+                                                            }}
+                                                            placeholder="e.g. pack, carton"
+                                                            className="text-xs"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                label={`= ${prodForm.base_unit}`}
+                                                                type="number"
+                                                                min="2"
+                                                                value={u.conversion_to_base}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value, 10) || 2;
+                                                                    const updated = [...prodForm.units];
+                                                                    updated[i].conversion_to_base = Math.max(2, val);
+                                                                    setProdForm({ ...prodForm, units: updated });
+                                                                }}
+                                                                className="text-xs"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeUnitRow(i)}
+                                                                className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer shrink-0 p-1"
+                                                                title={isBn ? 'মুছে ফেলুন' : 'Remove unit'}
+                                                            >
+                                                                <X className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Submit buttons */}
@@ -2016,7 +2295,8 @@ export default function CatalogIndex({
                                                 : 'Save Medicine'}
                                     </Button>
                                 </div>
-                            </form>
+                                </form>
+                            </FormLayoutProvider>
                         </div>
                     </div>
                 )}
@@ -2123,35 +2403,25 @@ export default function CatalogIndex({
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <form onSubmit={handleSaveCategory} className="p-5 space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'ক্যাটাগরির নাম (ইংরেজি) *' : 'Category Name (English) *'}
-                                    </label>
+                            <FormLayoutProvider labelWidth="sm:w-[155px]">
+                                <form onSubmit={handleSaveCategory} className="p-5 space-y-3">
                                     <Input
+                                        label={isBn ? 'ক্যাটাগরির নাম (ইংরেজি)' : 'Category Name'}
                                         required
                                         value={catForm.name}
                                         onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
                                         placeholder="e.g. Antibiotics, Syrups"
                                         className="text-xs"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name (Optional)'}
-                                    </label>
                                     <Input
+                                        label={isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name'}
                                         value={catForm.name_bn}
                                         onChange={(e) => setCatForm({ ...catForm, name_bn: e.target.value })}
                                         placeholder="উদাঃ এন্টিবায়োটিক, সিরাপ"
                                         className="text-xs font-bengali"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'মূল ক্যাটাগরি (ঐচ্ছিক)' : 'Parent Category (Optional)'}
-                                    </label>
                                     <Select
+                                        label={isBn ? 'মূল ক্যাটাগরি (ঐচ্ছিক)' : 'Parent Category'}
                                         value={catForm.parent_id}
                                         onChange={(e) => setCatForm({ ...catForm, parent_id: String(e.target.value) })}
                                         className="text-xs"
@@ -2163,27 +2433,27 @@ export default function CatalogIndex({
                                             </option>
                                         ))}
                                     </Select>
-                                </div>
-                                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCategoryModalOpen(false)}
-                                    >
-                                        {isBn ? 'বাতিল' : 'Cancel'}
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        size="sm"
-                                        disabled={submittingMaster}
-                                        className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
-                                    >
-                                        <Check className="h-4 w-4 mr-1.5" />
-                                        {isBn ? 'ক্যাটাগরি সংরক্ষণ' : 'Save Category'}
-                                    </Button>
-                                </div>
-                            </form>
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCategoryModalOpen(false)}
+                                        >
+                                            {isBn ? 'বাতিল' : 'Cancel'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            size="sm"
+                                            disabled={submittingMaster}
+                                            className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
+                                        >
+                                            <Check className="h-4 w-4 mr-1.5" />
+                                            {isBn ? 'ক্যাটাগরি সংরক্ষণ' : 'Save Category'}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </FormLayoutProvider>
                         </div>
                     </div>
                 )}
@@ -2204,50 +2474,44 @@ export default function CatalogIndex({
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <form onSubmit={handleSaveCompany} className="p-5 space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'কোম্পানির নাম (ইংরেজি) *' : 'Company Name (English) *'}
-                                    </label>
+                            <FormLayoutProvider labelWidth="sm:w-[155px]">
+                                <form onSubmit={handleSaveCompany} className="p-5 space-y-3">
                                     <Input
+                                        label={isBn ? 'কোম্পানির নাম (ইংরেজি)' : 'Company Name'}
                                         required
                                         value={compForm.name}
                                         onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
                                         placeholder="e.g. Square Pharmaceuticals, Beximco"
                                         className="text-xs"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name (Optional)'}
-                                    </label>
                                     <Input
+                                        label={isBn ? 'বাংলা নাম (ঐচ্ছিক)' : 'Bengali Name'}
                                         value={compForm.name_bn}
                                         onChange={(e) => setCompForm({ ...compForm, name_bn: e.target.value })}
                                         placeholder="উদাঃ স্কয়ার ফার্মাসিউটিক্যালস"
                                         className="text-xs font-bengali"
                                     />
-                                </div>
-                                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCompanyModalOpen(false)}
-                                    >
-                                        {isBn ? 'বাতিল' : 'Cancel'}
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        size="sm"
-                                        disabled={submittingMaster}
-                                        className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
-                                    >
-                                        <Check className="h-4 w-4 mr-1.5" />
-                                        {isBn ? 'কোম্পানি সংরক্ষণ' : 'Save Company'}
-                                    </Button>
-                                </div>
-                            </form>
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCompanyModalOpen(false)}
+                                        >
+                                            {isBn ? 'বাতিল' : 'Cancel'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            size="sm"
+                                            disabled={submittingMaster}
+                                            className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
+                                        >
+                                            <Check className="h-4 w-4 mr-1.5" />
+                                            {isBn ? 'কোম্পানি সংরক্ষণ' : 'Save Company'}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </FormLayoutProvider>
                         </div>
                     </div>
                 )}
@@ -2268,39 +2532,37 @@ export default function CatalogIndex({
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <form onSubmit={handleSaveGeneric} className="p-5 space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'জেনেরিক নাম *' : 'Generic Name *'}
-                                    </label>
+                            <FormLayoutProvider labelWidth="sm:w-[130px]">
+                                <form onSubmit={handleSaveGeneric} className="p-5 space-y-3">
                                     <Input
+                                        label={isBn ? 'জেনেরিক নাম' : 'Generic Name'}
                                         required
                                         value={genForm.name}
                                         onChange={(e) => setGenForm({ ...genForm, name: e.target.value })}
                                         placeholder="e.g. Paracetamol, Azithromycin"
                                         className="text-xs"
                                     />
-                                </div>
-                                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setGenericModalOpen(false)}
-                                    >
-                                        {isBn ? 'বাতিল' : 'Cancel'}
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        size="sm"
-                                        disabled={submittingMaster}
-                                        className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
-                                    >
-                                        <Check className="h-4 w-4 mr-1.5" />
-                                        {isBn ? 'জেনেরিক সংরক্ষণ' : 'Save Generic'}
-                                    </Button>
-                                </div>
-                            </form>
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setGenericModalOpen(false)}
+                                        >
+                                            {isBn ? 'বাতিল' : 'Cancel'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            size="sm"
+                                            disabled={submittingMaster}
+                                            className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
+                                        >
+                                            <Check className="h-4 w-4 mr-1.5" />
+                                            {isBn ? 'জেনেরিক সংরক্ষণ' : 'Save Generic'}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </FormLayoutProvider>
                         </div>
                     </div>
                 )}
@@ -2321,12 +2583,10 @@ export default function CatalogIndex({
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <form onSubmit={handleSaveRule} className="p-5 space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'ডিসকাউন্টের আওতা (Scope)' : 'Discount Scope'}
-                                    </label>
+                            <FormLayoutProvider labelWidth="sm:w-[145px]">
+                                <form onSubmit={handleSaveRule} className="p-5 space-y-3">
                                     <Select
+                                        label={isBn ? 'ডিসকাউন্টের আওতা' : 'Discount Scope'}
                                         value={ruleForm.scope}
                                         onChange={(e) => setRuleForm({ ...ruleForm, scope: e.target.value as any, scope_id: '' })}
                                         className="text-xs"
@@ -2334,13 +2594,9 @@ export default function CatalogIndex({
                                         <option value="category">{isBn ? 'নির্দিষ্ট ক্যাটাগরির জন্য' : 'Apply to Category'}</option>
                                         <option value="company">{isBn ? 'নির্দিষ্ট কোম্পানির জন্য' : 'Apply to Company'}</option>
                                     </Select>
-                                </div>
-                                {ruleForm.scope === 'category' ? (
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            {isBn ? 'ক্যাটাগরি সিলেক্ট করুন *' : 'Select Category *'}
-                                        </label>
+                                    {ruleForm.scope === 'category' ? (
                                         <Select
+                                            label={isBn ? 'ক্যাটাগরি' : 'Select Category'}
                                             required
                                             value={ruleForm.scope_id}
                                             onChange={(e) => setRuleForm({ ...ruleForm, scope_id: String(e.target.value) })}
@@ -2353,13 +2609,9 @@ export default function CatalogIndex({
                                                 </option>
                                             ))}
                                         </Select>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            {isBn ? 'কোম্পানি সিলেক্ট করুন *' : 'Select Company *'}
-                                        </label>
+                                    ) : (
                                         <Select
+                                            label={isBn ? 'কোম্পানি' : 'Select Company'}
                                             required
                                             value={ruleForm.scope_id}
                                             onChange={(e) => setRuleForm({ ...ruleForm, scope_id: String(e.target.value) })}
@@ -2372,67 +2624,53 @@ export default function CatalogIndex({
                                                 </option>
                                             ))}
                                         </Select>
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            {isBn ? 'ছাড়ের ধরন' : 'Type'}
-                                        </label>
-                                        <Select
-                                            value={ruleForm.type}
-                                            onChange={(e) => setRuleForm({ ...ruleForm, type: e.target.value as any })}
-                                            className="text-xs"
-                                        >
-                                            <option value="percent">{isBn ? 'শতকরা (%)' : 'Percentage (%)'}</option>
-                                            <option value="fixed">{isBn ? 'নির্দিষ্ট টাকা (BDT)' : 'Fixed Amount (BDT)'}</option>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            {isBn ? 'পরিমাণ (Value) *' : 'Value *'}
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            required
-                                            value={ruleForm.value}
-                                            onChange={(e) => setRuleForm({ ...ruleForm, value: parseFloat(e.target.value) || 0 })}
-                                            className="text-xs"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {isBn ? 'বিবরণ / নোট (ঐচ্ছিক)' : 'Note / Description (Optional)'}
-                                    </label>
+                                    )}
+                                    <Select
+                                        label={isBn ? 'ছাড়ের ধরন' : 'Type'}
+                                        value={ruleForm.type}
+                                        onChange={(e) => setRuleForm({ ...ruleForm, type: e.target.value as any })}
+                                        className="text-xs"
+                                    >
+                                        <option value="percent">{isBn ? 'শতকরা (%)' : 'Percentage (%)'}</option>
+                                        <option value="fixed">{isBn ? 'নির্দিষ্ট টাকা (BDT)' : 'Fixed Amount (BDT)'}</option>
+                                    </Select>
                                     <Input
+                                        label={isBn ? 'পরিমাণ (Value)' : 'Value'}
+                                        type="number"
+                                        min={0}
+                                        required
+                                        value={ruleForm.value}
+                                        onChange={(e) => setRuleForm({ ...ruleForm, value: parseFloat(e.target.value) || 0 })}
+                                        className="text-xs"
+                                    />
+                                    <Input
+                                        label={isBn ? 'বিবরণ / নোট' : 'Note (Optional)'}
                                         value={ruleForm.note}
                                         onChange={(e) => setRuleForm({ ...ruleForm, note: e.target.value })}
                                         placeholder="e.g. Ramadan Offer 2026"
                                         className="text-xs"
                                     />
-                                </div>
-                                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setRuleModalOpen(false)}
-                                    >
-                                        {isBn ? 'বাতিল' : 'Cancel'}
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        size="sm"
-                                        disabled={submittingMaster}
-                                        className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
-                                    >
-                                        <Check className="h-4 w-4 mr-1.5" />
-                                        {isBn ? 'অফার সংরক্ষণ' : 'Save Offer'}
-                                    </Button>
-                                </div>
-                            </form>
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setRuleModalOpen(false)}
+                                        >
+                                            {isBn ? 'বাতিল' : 'Cancel'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            size="sm"
+                                            disabled={submittingMaster}
+                                            className="bg-[#FF4A1F] hover:bg-[#ea3e15] text-white"
+                                        >
+                                            <Check className="h-4 w-4 mr-1.5" />
+                                            {isBn ? 'অফার সংরক্ষণ' : 'Save Offer'}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </FormLayoutProvider>
                         </div>
                     </div>
                 )}

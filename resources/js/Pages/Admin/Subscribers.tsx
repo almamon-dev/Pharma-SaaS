@@ -4,6 +4,8 @@ import { Edit, ShieldCheck, Users, X } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
+import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import {
     DataTable,
@@ -258,17 +260,22 @@ export default function AdminSubscribers({
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
-                            <Select
-                                label="Assigned Plan"
-                                value={form.data.plan_key}
-                                onChange={(e) =>
-                                    handlePlanChange(String(e.target.value))
-                                }
-                                options={planOptions}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[145px]">
+                            <form onSubmit={handleSubmit} className="p-5 space-y-3">
+                                <Input
+                                    label="Subscriber"
+                                    readOnly
+                                    value={`${editing.name} (${editing.email})`}
+                                />
+                                <Select
+                                    label="Assigned Plan"
+                                    value={form.data.plan_key}
+                                    onChange={(e) =>
+                                        handlePlanChange(String(e.target.value))
+                                    }
+                                    options={planOptions}
+                                />
 
-                            <div className="grid grid-cols-2 gap-3">
                                 <Select
                                     label="Subscription Status"
                                     value={form.data.status}
@@ -323,7 +330,6 @@ export default function AdminSubscribers({
                                         },
                                     ]}
                                 />
-                            </div>
 
                             {/* Direct Module & Feature Access Control */}
                             <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -406,6 +412,7 @@ export default function AdminSubscribers({
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

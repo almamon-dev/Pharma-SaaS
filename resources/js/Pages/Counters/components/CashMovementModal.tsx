@@ -9,6 +9,9 @@ import {
     X,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
+import { Input } from '@/Components/ui/Input';
+import { Textarea } from '@/Components/ui/Textarea';
 import { formatCurrency } from '@/lib/format';
 import { PosCounterData } from '@/Pages/Pos/components/PosShiftModals';
 
@@ -144,106 +147,92 @@ export default function CashMovementModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 space-y-4">
-                    {/* Movement Type Selector */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {MOVEMENT_OPTIONS.map((opt) => {
-                            const Icon = opt.icon;
-                            const active = type === opt.id;
-                            return (
-                                <button
-                                    key={opt.id}
-                                    type="button"
-                                    onClick={() => setType(opt.id)}
-                                    className={`flex flex-col items-start p-2.5 rounded-[4px] border text-left transition-all cursor-pointer ${
-                                        active
-                                            ? 'border-[#FF4A1F] bg-[#FF4A1F]/5 ring-1 ring-[#FF4A1F]/30'
-                                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12161c] hover:border-slate-300'
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-1.5 mb-0.5">
-                                        <Icon
-                                            className={`h-3.5 w-3.5 ${
-                                                active ? 'text-[#FF4A1F]' : 'text-slate-400'
-                                            }`}
-                                        />
-                                        <span className="text-xs font-bold text-slate-900 dark:text-white">
-                                            {opt.label}
+                <FormLayoutProvider labelWidth="sm:w-[155px]">
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        {/* Movement Type Selector */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {MOVEMENT_OPTIONS.map((opt) => {
+                                const Icon = opt.icon;
+                                const active = type === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => setType(opt.id)}
+                                        className={`flex flex-col items-start p-2.5 rounded-[4px] border text-left transition-all cursor-pointer ${
+                                            active
+                                                ? 'border-[#FF4A1F] bg-[#FF4A1F]/5 ring-1 ring-[#FF4A1F]/30'
+                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12161c] hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                            <Icon
+                                                className={`h-3.5 w-3.5 ${
+                                                    active ? 'text-[#FF4A1F]' : 'text-slate-400'
+                                                }`}
+                                            />
+                                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                {opt.label}
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                                            {opt.subtitle}
                                         </span>
-                                    </div>
-                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                        {opt.subtitle}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Amount & Reference */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Amount ({currency}) <span className="text-rose-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">
-                                    ৳
-                                </span>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    placeholder="0.00"
-                                    required
-                                    autoFocus
-                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] pl-7 pr-3 py-2 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                />
-                            </div>
+                                    </button>
+                                );
+                            })}
                         </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Reference / Receipt # (ঐচ্ছিক)
-                            </label>
-                            <input
-                                type="text"
-                                value={referenceNumber}
-                                onChange={(e) => setReferenceNumber(e.target.value)}
-                                placeholder="e.g. INV-00042 / Voucher #12"
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                        </div>
-                    </div>
 
-                    {/* Reason (Required for Audit) */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Reason (কারণ — অডিটের জন্য বাধ্যতামূলক) <span className="text-rose-500">*</span>
-                        </label>
-                        <input
+                        <Input
+                            label="Counter"
+                            readOnly
+                            value={`${counter.code} — ${counter.name}`}
+                            className="h-[34px] text-xs font-semibold"
+                        />
+
+                        {/* Amount & Reference */}
+                        <Input
+                            label={`Amount (${currency}) *`}
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            placeholder="0.00"
+                            required
+                            autoFocus
+                            icon={<span className="text-xs font-bold text-slate-400">৳</span>}
+                            className="text-sm font-bold focus:border-[#FF4A1F]"
+                        />
+                        <Input
+                            label="Reference / Receipt #"
+                            type="text"
+                            value={referenceNumber}
+                            onChange={(e) => setReferenceNumber(e.target.value)}
+                            placeholder="e.g. INV-00042 / Voucher #12"
+                            className="text-xs focus:border-[#FF4A1F]"
+                        />
+
+                        {/* Reason (Required for Audit) */}
+                        <Input
+                            label="Reason (অডিটের জন্য) *"
                             type="text"
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             placeholder={selectedOption.placeholder}
                             required
-                            className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="text-xs focus:border-[#FF4A1F]"
                         />
-                    </div>
 
-                    {/* Optional Notes */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Additional Notes (ঐচ্ছিক)
-                        </label>
-                        <textarea
+                        {/* Optional Notes */}
+                        <Textarea
+                            label="Additional Notes"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             rows={2}
                             placeholder="Optional remarks..."
-                            className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="text-xs focus:border-[#FF4A1F]"
                         />
-                    </div>
 
                     {/* Live Drawer Balance Preview */}
                     <div className="rounded-[4px] bg-slate-50 dark:bg-[#12161c] border border-slate-200 dark:border-slate-800 p-3 space-y-1.5 text-xs">
@@ -285,6 +274,7 @@ export default function CashMovementModal({
                         </Button>
                     </div>
                 </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );

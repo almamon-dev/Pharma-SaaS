@@ -183,38 +183,40 @@ function CartQtyInput({
     };
 
     return (
-        <input
-            type="number"
-            min={1}
-            max={max}
-            value={draft}
-            aria-label={`${name} quantity`}
-            onChange={(e) => {
-                const raw = e.target.value;
-                setDraft(raw);
-                const parsed = parseInt(raw, 10);
-                if (!Number.isNaN(parsed) && parsed >= 1) {
-                    onChangeQty(Math.min(max, parsed));
-                }
-            }}
-            onBlur={commitDraft}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitDraft();
-                    (e.currentTarget as HTMLInputElement).blur();
-                }
-            }}
-            onFocus={(e) => e.currentTarget.select()}
-            className="h-6 w-11 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] px-1 text-center text-[11.5px] font-bold tabular-nums text-slate-900 dark:text-slate-100 focus:border-[#FF4A1F] focus:outline-none"
-        />
+        <div className="w-11">
+            <Input
+                type="number"
+                min={1}
+                max={max}
+                value={draft}
+                aria-label={`${name} quantity`}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setDraft(raw);
+                    const parsed = parseInt(raw, 10);
+                    if (!Number.isNaN(parsed) && parsed >= 1) {
+                        onChangeQty(Math.min(max, parsed));
+                    }
+                }}
+                onBlur={commitDraft}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitDraft();
+                        (e.currentTarget as HTMLInputElement).blur();
+                    }
+                }}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-6 px-1 text-center text-[11.5px] font-bold tabular-nums focus:border-[#FF4A1F]"
+            />
+        </div>
     );
 }
 
 export default function CreateOrder({
     medicines = [],
     customers = [],
-    customerTypes = [],
+    customerTypes: _customerTypes = [],
     draftOrder = null,
     permittedDiscountLimit = 2.0,
     taxPercentage = 0.0,
@@ -1485,13 +1487,13 @@ export default function CreateOrder({
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
+                                        <div className="flex h-[30px] items-center rounded-[1px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
                                             {discountType === 'fixed' && (
                                                 <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
                                                     {currencySymbol}
                                                 </span>
                                             )}
-                                            <input
+                                            <Input
                                                 id="sales-discount-input"
                                                 type="number"
                                                 min="0"
@@ -1511,7 +1513,7 @@ export default function CreateOrder({
                                                     }
                                                 }}
                                                 placeholder={discountType === 'percent' ? '0' : '0.00'}
-                                                className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                                className="h-[28px] border-0 bg-transparent px-2.5 text-xs font-medium tabular-nums"
                                             />
                                             {discountType === 'percent' && (
                                                 <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
@@ -1540,7 +1542,7 @@ export default function CreateOrder({
                                                     </span>
                                                 )}
                                             </div>
-                                            <input
+                                            <Input
                                                 type="number"
                                                 min="0"
                                                 step="0.01"
@@ -1548,29 +1550,27 @@ export default function CreateOrder({
                                                 disabled={taxRate > 0}
                                                 value={taxRate > 0 ? computedTaxAmount : taxAmount}
                                                 onChange={(e) => setTaxAmount(e.target.value)}
-                                                className={`h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] px-2.5 text-xs font-medium tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F] ${
-                                                    taxRate > 0 ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-white dark:bg-[#1e2329]'
-                                                }`}
+                                                className="h-[30px] px-2.5 text-xs font-medium tabular-nums focus:border-[#FF4A1F]"
                                             />
                                         </div>
 
                                         <div>
-                                            <input
+                                            <Input
                                                 type="text"
                                                 placeholder="Salesman internal remark (ম্যানেজার ও ক্যাশিয়ারের জন্য)..."
                                                 value={internalNotes}
                                                 onChange={(e) => setInternalNotes(e.target.value)}
-                                                className="h-[30px] w-full rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#FF4A1F]"
+                                                className="h-[30px] px-2.5 text-xs focus:border-[#FF4A1F]"
                                             />
                                         </div>
 
                                         <div>
-                                            <input
+                                            <Input
                                                 type="text"
                                                 placeholder="Customer invoice note (রশিদে প্রিন্ট হবে - ঐচ্ছিক)..."
                                                 value={orderNotes}
                                                 onChange={(e) => setOrderNotes(e.target.value)}
-                                                className="h-[30px] w-full rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] px-2.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-[#FF4A1F]"
+                                                className="h-[30px] px-2.5 text-xs focus:border-[#FF4A1F]"
                                             />
                                         </div>
                                     </div>
@@ -1660,18 +1660,19 @@ export default function CreateOrder({
                                             {/* Batch Selector if multiple batches available */}
                                             {item.medicine.batches && item.medicine.batches.length > 1 && (
                                                 <div className="mt-1">
-                                                    <select
+                                                    <Select
+                                                        size="sm"
                                                         value={item.medicine_batch_id || ''}
                                                         onChange={(e) => changeBatch(idx, e.target.value ? Number(e.target.value) : null)}
-                                                        className="h-5 text-[10px] rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#181d26] px-1 text-slate-700 dark:text-slate-300"
-                                                    >
-                                                        <option value="">Auto Batch (FEFO)</option>
-                                                        {item.medicine.batches.map((b) => (
-                                                            <option key={b.id} value={b.id}>
-                                                                {b.batch_number} {b.expiry_date ? `(Exp: ${b.expiry_date})` : ''} - Stock: {b.quantity_available}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                        options={[
+                                                            { value: '', label: 'Auto Batch (FEFO)' },
+                                                            ...item.medicine.batches.map((b) => ({
+                                                                value: b.id,
+                                                                label: `${b.batch_number}${b.expiry_date ? ` (Exp: ${b.expiry_date})` : ''} - Stock: ${b.quantity_available}`,
+                                                            })),
+                                                        ]}
+                                                        triggerClassName="h-6 text-[10.5px] bg-white dark:bg-[#181d26] px-2"
+                                                    />
                                                 </div>
                                             )}
                                         </div>

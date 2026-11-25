@@ -10,6 +10,7 @@ import {
     Utensils,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { Input } from '@/Components/ui/Input';
 import { PosCounterData } from './PosShiftModals';
 
 interface PosBreakLockOverlayProps {
@@ -117,18 +118,16 @@ export function PosBreakLockOverlay({ counter, onUnlocked }: PosBreakLockOverlay
                 {/* Unlock Form */}
                 <form onSubmit={handleUnlock} className="space-y-3">
                     <div>
-                        <div className="relative">
-                            <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                            <input
-                                type="password"
-                                maxLength={20}
-                                value={pin}
-                                onChange={(e) => setPin(e.target.value)}
-                                placeholder="Enter Cashier PIN or Password"
-                                autoFocus
-                                className="w-full rounded-[4px] border border-slate-700 bg-[#12161c] pl-10 pr-3 py-2 text-sm text-center font-bold tracking-widest text-white placeholder:text-slate-500 placeholder:tracking-normal focus:outline-none focus:border-[#FF4A1F]"
-                            />
-                        </div>
+                        <Input
+                            type="password"
+                            maxLength={20}
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            placeholder="Enter Cashier PIN or Password"
+                            autoFocus
+                            icon={<KeyRound className="h-4 w-4 text-slate-400" />}
+                            className="h-[38px] border-slate-700 bg-[#12161c] text-sm text-center font-bold tracking-widest text-white placeholder:text-slate-500 placeholder:tracking-normal focus:border-[#FF4A1F]"
+                        />
                         {error && (
                             <p className="text-xs text-rose-400 font-medium mt-1.5">{error}</p>
                         )}

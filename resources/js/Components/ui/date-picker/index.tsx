@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Calendar as CalendarIcon } from 'lucide-react';
+import { FieldWrapper, FormLayoutMode } from '@/Components/ui/FormLayout';
 import { cn } from '@/lib/cn';
 import { useDatePickerState } from './useDatePickerState';
 import { DatePickerCalendar } from './DatePickerCalendar';
@@ -20,6 +21,8 @@ export interface DatePickerProps {
     error?: string;
     label?: string;
     align?: 'start' | 'center' | 'end';
+    layout?: FormLayoutMode;
+    labelWidth?: string;
 }
 
 const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
@@ -40,6 +43,8 @@ const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
             error,
             label,
             align = 'end',
+            layout,
+            labelWidth,
             ...props
         },
         ref
@@ -123,34 +128,15 @@ const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
             return () => window.removeEventListener('keydown', handleKeyDown);
         }, [isOpen]);
 
-        const renderLabel = (labelStr: string) => {
-            if (labelStr.endsWith('*')) {
-                const baseText = labelStr.slice(0, -1).trim();
-                return (
-                    <>
-                        {baseText} <span className="text-red-500 font-bold ml-0.5">*</span>
-                    </>
-                );
-            }
-            return (
-                <>
-                    {labelStr}
-                    {required && <span className="text-red-500 font-bold ml-0.5">*</span>}
-                </>
-            );
-        };
-
         return (
-            <div className="flex flex-col gap-1 w-full font-sans antialiased">
-                {label && (
-                    <label
-                        htmlFor={inputId}
-                        className="text-[13px] font-semibold text-slate-700 dark:text-slate-300"
-                    >
-                        {renderLabel(label)}
-                    </label>
-                )}
-
+            <FieldWrapper
+                label={label}
+                htmlFor={inputId}
+                required={required}
+                error={error}
+                layout={layout}
+                labelWidth={labelWidth}
+            >
                 <div ref={containerRef} className="relative flex items-center w-full">
                     <input
                         ref={ref}
@@ -165,7 +151,7 @@ const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
                         readOnly={readOnly}
                         required={required}
                         className={cn(
-                            'block h-[36px] w-full rounded-sm border bg-white dark:bg-[#12161c] px-3 pr-9 py-1 text-[13px] font-normal text-[#202223] dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800/60 disabled:text-slate-500 shadow-none font-sans cursor-pointer',
+                            'block h-[30px] w-full rounded-[1px] border bg-white dark:bg-[#12161c] px-2.5 pr-8 py-0.5 text-[12.5px] font-normal text-[#202223] dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800/60 disabled:text-slate-500 read-only:bg-slate-100 dark:read-only:bg-slate-800/70 read-only:text-slate-600 dark:read-only:text-slate-300 read-only:border-slate-200 dark:read-only:border-slate-700/70 read-only:cursor-default shadow-none font-sans cursor-pointer',
                             error
                                 ? 'border-[#d82c0d] focus:border-[#d82c0d]'
                                 : 'border-slate-300 dark:border-slate-700/80 focus:border-slate-400 dark:focus:border-slate-500',
@@ -180,9 +166,9 @@ const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
                         disabled={disabled || readOnly}
                         tabIndex={-1}
                         onClick={() => (isOpen ? setIsOpen(false) : openPicker())}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none"
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none"
                     >
-                        <CalendarIcon size={15} />
+                        <CalendarIcon size={14} />
                     </button>
                 </div>
 
@@ -207,9 +193,7 @@ const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
                     handleToday={handleToday}
                     isTodayDisabled={isTodayDisabled}
                 />
-
-                {error && <span className="text-[12px] text-[#d82c0d] mt-0.5 font-sans">{error}</span>}
-            </div>
+            </FieldWrapper>
         );
     }
 );

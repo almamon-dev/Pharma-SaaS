@@ -19,6 +19,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider, HorizontalFormRow } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { DataTable, Column, EmptyState } from '@/Components/tables';
@@ -813,39 +814,32 @@ export default function TeamIndex({
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleAddUser} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Full Name *</label>
+                        <FormLayoutProvider labelWidth="sm:w-[160px]">
+                            <form onSubmit={handleAddUser} className="space-y-3 text-xs">
                                 <Input
+                                    label="Full Name"
                                     value={addForm.data.name}
                                     onChange={(e) => addForm.setData('name', e.target.value)}
                                     placeholder="e.g. Tareq Hasan"
                                     required
                                 />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Email *</label>
-                                    <Input
-                                        type="email"
-                                        value={addForm.data.email}
-                                        onChange={(e) => addForm.setData('email', e.target.value)}
-                                        placeholder="tareq@pharma.com"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Phone</label>
-                                    <Input
-                                        value={addForm.data.phone}
-                                        onChange={(e) => addForm.setData('phone', e.target.value)}
-                                        placeholder="017XXXXXXXX"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Assign Role *</label>
+                                <Input
+                                    label="Email"
+                                    type="email"
+                                    value={addForm.data.email}
+                                    onChange={(e) => addForm.setData('email', e.target.value)}
+                                    placeholder="tareq@pharma.com"
+                                    required
+                                />
+                                <Input
+                                    label="Phone"
+                                    value={addForm.data.phone}
+                                    onChange={(e) => addForm.setData('phone', e.target.value)}
+                                    placeholder="017XXXXXXXX"
+                                />
                                 <Select
+                                    label="Assign Role"
+                                    required
                                     value={String(addForm.data.role_id)}
                                     onChange={(e) => addForm.setData('role_id', Number(e.target.value))}
                                 >
@@ -855,12 +849,9 @@ export default function TeamIndex({
                                         </option>
                                     ))}
                                 </Select>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
-                                    Primary Assigned Branch *
-                                </label>
                                 <Select
+                                    label="Primary Branch"
+                                    required
                                     value={String(addForm.data.branch_id)}
                                     onChange={(e) => {
                                         const newId = Number(e.target.value);
@@ -872,7 +863,6 @@ export default function TeamIndex({
                                                 : [...prev.branch_ids, newId],
                                         }));
                                     }}
-                                    required
                                 >
                                     <option value="" disabled>Select Primary Branch</option>
                                     {branches.map((b) => (
@@ -881,94 +871,82 @@ export default function TeamIndex({
                                         </option>
                                     ))}
                                 </Select>
-                                <p className="text-[11px] text-slate-400 mt-1">
-                                    The employee will primarily report to and operate at this branch.
-                                </p>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
-                                    Additional Branch Access (Optional)
-                                </label>
-                                <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[4px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
-                                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={addForm.data.access_all_branches}
-                                            onChange={(e) =>
-                                                addForm.setData('access_all_branches', e.target.checked)
-                                            }
-                                        />
-                                        Grant Roaming Access to ALL Current and Future Branches
-                                    </label>
-                                    {!addForm.data.access_all_branches &&
-                                        branches.map((b) => {
-                                            const isPrimary = Number(addForm.data.branch_id) === b.id;
-                                            return (
-                                                <label
-                                                    key={b.id}
-                                                    className={`flex items-center justify-between text-xs cursor-pointer ${
-                                                        isPrimary
-                                                            ? 'opacity-75 font-medium'
-                                                            : 'text-slate-700 dark:text-slate-300'
-                                                    }`}
-                                                >
-                                                    <span className="flex items-center gap-2">
-                                                        <input
-                                                            type="checkbox"
-                                                            disabled={isPrimary}
-                                                            checked={isPrimary || addForm.data.branch_ids.includes(b.id)}
-                                                            onChange={(e) => {
-                                                                const cur = addForm.data.branch_ids;
-                                                                addForm.setData(
-                                                                    'branch_ids',
-                                                                    e.target.checked
-                                                                        ? [...cur, b.id]
-                                                                        : cur.filter((id) => id !== b.id)
-                                                                );
-                                                            }}
-                                                        />
-                                                        <span>{b.name} ({b.code})</span>
-                                                    </span>
-                                                    {isPrimary && (
-                                                        <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
-                                                            Primary Branch
+                                <HorizontalFormRow label="Additional Branches">
+                                    <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[2px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={addForm.data.access_all_branches}
+                                                onChange={(e) =>
+                                                    addForm.setData('access_all_branches', e.target.checked)
+                                                }
+                                            />
+                                            Grant Roaming Access to ALL Current and Future Branches
+                                        </label>
+                                        {!addForm.data.access_all_branches &&
+                                            branches.map((b) => {
+                                                const isPrimary = Number(addForm.data.branch_id) === b.id;
+                                                return (
+                                                    <label
+                                                        key={b.id}
+                                                        className={`flex items-center justify-between text-xs cursor-pointer ${
+                                                            isPrimary
+                                                                ? 'opacity-75 font-medium'
+                                                                : 'text-slate-700 dark:text-slate-300'
+                                                        }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                disabled={isPrimary}
+                                                                checked={isPrimary || addForm.data.branch_ids.includes(b.id)}
+                                                                onChange={(e) => {
+                                                                    const cur = addForm.data.branch_ids;
+                                                                    addForm.setData(
+                                                                        'branch_ids',
+                                                                        e.target.checked
+                                                                            ? [...cur, b.id]
+                                                                            : cur.filter((id) => id !== b.id)
+                                                                    );
+                                                                }}
+                                                            />
+                                                            <span>{b.name} ({b.code})</span>
                                                         </span>
-                                                    )}
-                                                </label>
-                                            );
-                                        })}
+                                                        {isPrimary && (
+                                                            <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
+                                                                Primary Branch
+                                                            </span>
+                                                        )}
+                                                    </label>
+                                                );
+                                            })}
+                                    </div>
+                                </HorizontalFormRow>
+                                <Input
+                                    label="Manager PIN (4 digits)"
+                                    type="password"
+                                    maxLength={4}
+                                    value={addForm.data.manager_pin}
+                                    onChange={(e) => addForm.setData('manager_pin', e.target.value)}
+                                    placeholder="Optional 4-digit PIN"
+                                />
+                                <Input
+                                    label="Initial Password"
+                                    type="password"
+                                    value={addForm.data.password}
+                                    onChange={(e) => addForm.setData('password', e.target.value)}
+                                    placeholder="Default: PharmaStaff@2026"
+                                />
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={addForm.processing} className="bg-[#FF4A1F] text-white">
+                                        {addForm.processing ? 'Saving...' : 'Onboard Employee'}
+                                    </Button>
                                 </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Manager PIN (4 digits)</label>
-                                    <Input
-                                        type="password"
-                                        maxLength={4}
-                                        value={addForm.data.manager_pin}
-                                        onChange={(e) => addForm.setData('manager_pin', e.target.value)}
-                                        placeholder="Optional 4-digit PIN"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Initial Password</label>
-                                    <Input
-                                        type="password"
-                                        value={addForm.data.password}
-                                        onChange={(e) => addForm.setData('password', e.target.value)}
-                                        placeholder="Default: PharmaStaff@2026"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={addForm.processing} className="bg-[#FF4A1F] text-white">
-                                    {addForm.processing ? 'Saving...' : 'Onboard Employee'}
-                                </Button>
-                            </div>
-                        </form>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -990,10 +968,21 @@ export default function TeamIndex({
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleUpdateMember} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Assigned System Role *</label>
+                        <FormLayoutProvider labelWidth="sm:w-[160px]">
+                            <form onSubmit={handleUpdateMember} className="space-y-3 text-xs">
+                                <Input
+                                    label="Employee Name"
+                                    readOnly
+                                    value={editingMember.name}
+                                />
+                                <Input
+                                    label="Email"
+                                    readOnly
+                                    value={editingMember.email}
+                                />
                                 <Select
+                                    label="Assigned System Role"
+                                    required
                                     value={String(editForm.data.role_id)}
                                     onChange={(e) => editForm.setData('role_id', Number(e.target.value))}
                                 >
@@ -1003,12 +992,9 @@ export default function TeamIndex({
                                         </option>
                                     ))}
                                 </Select>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
-                                    Primary Assigned Branch *
-                                </label>
                                 <Select
+                                    label="Primary Branch"
+                                    required
                                     value={String(editForm.data.branch_id)}
                                     onChange={(e) => {
                                         const newId = Number(e.target.value);
@@ -1020,7 +1006,6 @@ export default function TeamIndex({
                                                 : [...prev.branch_ids, newId],
                                         }));
                                     }}
-                                    required
                                 >
                                     <option value="" disabled>Select Primary Branch</option>
                                     {branches.map((b) => (
@@ -1029,93 +1014,83 @@ export default function TeamIndex({
                                         </option>
                                     ))}
                                 </Select>
-                                <p className="text-[11px] text-slate-400 mt-1">
-                                    Main operational branch where this employee's shifts and transactions default.
-                                </p>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">
-                                    Additional Branch Access (Optional)
-                                </label>
-                                <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[4px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
-                                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={editForm.data.access_all_branches}
-                                            onChange={(e) =>
-                                                editForm.setData('access_all_branches', e.target.checked)
-                                            }
-                                        />
-                                        Grant Roaming Access to ALL Branches
-                                    </label>
-                                    {!editForm.data.access_all_branches &&
-                                        branches.map((b) => {
-                                            const isPrimary = Number(editForm.data.branch_id) === b.id;
-                                            return (
-                                                <label
-                                                    key={b.id}
-                                                    className={`flex items-center justify-between text-xs cursor-pointer ${
-                                                        isPrimary
-                                                            ? 'opacity-75 font-medium'
-                                                            : 'text-slate-700 dark:text-slate-300'
-                                                    }`}
-                                                >
-                                                    <span className="flex items-center gap-2">
-                                                        <input
-                                                            type="checkbox"
-                                                            disabled={isPrimary}
-                                                            checked={isPrimary || editForm.data.branch_ids.includes(b.id)}
-                                                            onChange={(e) => {
-                                                                const cur = editForm.data.branch_ids;
-                                                                editForm.setData(
-                                                                    'branch_ids',
-                                                                    e.target.checked
-                                                                        ? [...cur, b.id]
-                                                                        : cur.filter((id) => id !== b.id)
-                                                                );
-                                                            }}
-                                                        />
-                                                        <span>{b.name} ({b.code})</span>
-                                                    </span>
-                                                    {isPrimary && (
-                                                        <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
-                                                            Primary Branch
+                                <HorizontalFormRow label="Additional Branches">
+                                    <div className="space-y-1.5 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[2px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={editForm.data.access_all_branches}
+                                                onChange={(e) =>
+                                                    editForm.setData('access_all_branches', e.target.checked)
+                                                }
+                                            />
+                                            Grant Roaming Access to ALL Branches
+                                        </label>
+                                        {!editForm.data.access_all_branches &&
+                                            branches.map((b) => {
+                                                const isPrimary = Number(editForm.data.branch_id) === b.id;
+                                                return (
+                                                    <label
+                                                        key={b.id}
+                                                        className={`flex items-center justify-between text-xs cursor-pointer ${
+                                                            isPrimary
+                                                                ? 'opacity-75 font-medium'
+                                                                : 'text-slate-700 dark:text-slate-300'
+                                                        }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                disabled={isPrimary}
+                                                                checked={isPrimary || editForm.data.branch_ids.includes(b.id)}
+                                                                onChange={(e) => {
+                                                                    const cur = editForm.data.branch_ids;
+                                                                    editForm.setData(
+                                                                        'branch_ids',
+                                                                        e.target.checked
+                                                                            ? [...cur, b.id]
+                                                                            : cur.filter((id) => id !== b.id)
+                                                                    );
+                                                                }}
+                                                            />
+                                                            <span>{b.name} ({b.code})</span>
                                                         </span>
-                                                    )}
-                                                </label>
-                                            );
-                                        })}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Account Status</label>
+                                                        {isPrimary && (
+                                                            <span className="text-[10px] text-[#FF4A1F] font-semibold px-1.5 py-0.2 rounded bg-orange-500/10">
+                                                                Primary Branch
+                                                            </span>
+                                                        )}
+                                                    </label>
+                                                );
+                                            })}
+                                    </div>
+                                </HorizontalFormRow>
                                 <Select
+                                    label="Account Status"
                                     value={editForm.data.is_active ? '1' : '0'}
                                     onChange={(e) => editForm.setData('is_active', e.target.value === '1')}
                                 >
                                     <option value="1">Active</option>
                                     <option value="0">Suspended / Deactivated</option>
                                 </Select>
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Manager PIN (Leave blank to keep existing)</label>
                                 <Input
+                                    label="Manager PIN"
                                     type="password"
                                     maxLength={4}
                                     value={editForm.data.manager_pin}
                                     onChange={(e) => editForm.setData('manager_pin', e.target.value)}
-                                    placeholder="New 4-digit PIN"
+                                    placeholder="Leave blank to keep existing"
                                 />
-                            </div>
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button type="button" variant="secondary" onClick={() => setEditingMember(null)}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={editForm.processing} className="bg-[#FF4A1F] text-white">
-                                    {editForm.processing ? 'Updating...' : 'Save Changes'}
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button type="button" variant="secondary" onClick={() => setEditingMember(null)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={editForm.processing} className="bg-[#FF4A1F] text-white">
+                                        {editForm.processing ? 'Updating...' : 'Save Changes'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -1137,10 +1112,15 @@ export default function TeamIndex({
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleSetPin} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Enter 4-Digit Security PIN</label>
+                        <FormLayoutProvider labelWidth="sm:w-[130px]">
+                            <form onSubmit={handleSetPin} className="space-y-3 text-xs">
                                 <Input
+                                    label="Staff Member"
+                                    readOnly
+                                    value={pinModalUser.name}
+                                />
+                                <Input
+                                    label="4-Digit PIN"
                                     type="password"
                                     maxLength={4}
                                     value={pinForm.data.pin}
@@ -1148,19 +1128,19 @@ export default function TeamIndex({
                                     placeholder="4 digits"
                                     required
                                 />
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                     Used for inline cashier approvals (discounts over cap, below cost, void).
                                 </p>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button type="button" variant="secondary" onClick={() => setPinModalUser(null)}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={pinForm.processing} className="bg-[#FF4A1F] text-white">
-                                    Save PIN
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button type="button" variant="secondary" onClick={() => setPinModalUser(null)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={pinForm.processing} className="bg-[#FF4A1F] text-white">
+                                        Save PIN
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -1279,57 +1259,54 @@ export default function TeamIndex({
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateRole} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Role Name *</label>
+                        <FormLayoutProvider labelWidth="sm:w-[140px]">
+                            <form onSubmit={handleCreateRole} className="space-y-3 text-xs">
                                 <Input
+                                    label="Role Name"
                                     value={newRoleForm.data.name}
                                     onChange={(e) => newRoleForm.setData('name', e.target.value)}
                                     placeholder="e.g. Shift Supervisor"
                                     required
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Description</label>
                                 <Input
+                                    label="Description"
                                     value={newRoleForm.data.description}
                                     onChange={(e) => newRoleForm.setData('description', e.target.value)}
                                     placeholder="Describe responsibilities"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Select Base Permissions</label>
-                                <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[4px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
-                                    {Object.values(permissionsCatalog).flat().map((p) => (
-                                        <label key={p.key} className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                                            <input
-                                                type="checkbox"
-                                                checked={newRoleForm.data.permissions.includes(p.key)}
-                                                onChange={(e) => {
-                                                    const cur = newRoleForm.data.permissions;
-                                                    newRoleForm.setData(
-                                                        'permissions',
-                                                        e.target.checked
-                                                            ? [...cur, p.key]
-                                                            : cur.filter((k) => k !== p.key)
-                                                    );
-                                                }}
-                                            />
-                                            <span className="font-mono text-slate-800 dark:text-slate-200">{p.key}</span>
-                                            <span className="text-[10px] text-slate-500">({p.module})</span>
-                                        </label>
-                                    ))}
+                                <HorizontalFormRow label="Base Permissions">
+                                    <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-[2px] p-2.5 bg-slate-50/50 dark:bg-slate-900/30">
+                                        {Object.values(permissionsCatalog).flat().map((p) => (
+                                            <label key={p.key} className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newRoleForm.data.permissions.includes(p.key)}
+                                                    onChange={(e) => {
+                                                        const cur = newRoleForm.data.permissions;
+                                                        newRoleForm.setData(
+                                                            'permissions',
+                                                            e.target.checked
+                                                                ? [...cur, p.key]
+                                                                : cur.filter((k) => k !== p.key)
+                                                        );
+                                                    }}
+                                                />
+                                                <span className="font-mono text-slate-800 dark:text-slate-200">{p.key}</span>
+                                                <span className="text-[10px] text-slate-500">({p.module})</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </HorizontalFormRow>
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button type="button" variant="secondary" onClick={() => setShowNewRoleModal(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={newRoleForm.processing} className="bg-[#FF4A1F] text-white">
+                                        Create Role
+                                    </Button>
                                 </div>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button type="button" variant="secondary" onClick={() => setShowNewRoleModal(false)}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={newRoleForm.processing} className="bg-[#FF4A1F] text-white">
-                                    Create Role
-                                </Button>
-                            </div>
-                        </form>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

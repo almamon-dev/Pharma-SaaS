@@ -1,5 +1,4 @@
-import React from 'react';
-import { FileText, Save, ShoppingCart, X } from 'lucide-react';
+import { Save, ShoppingCart, X } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
 import { formatCurrency } from '@/lib/format';
 import { CartItem, CustomerItem, DiscountType } from '../CreateOrder';

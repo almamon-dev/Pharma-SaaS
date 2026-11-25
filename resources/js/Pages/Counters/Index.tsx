@@ -25,7 +25,9 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider, HorizontalFormRow } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
+import { Select } from '@/Components/ui/Select';
 import { TableActionMenu, TableActionItem, TablePagination } from '@/Components/tables';
 import { formatCurrency } from '@/lib/format';
 import { SharedPageProps } from '@/types';
@@ -359,7 +361,7 @@ export default function CountersIndex({
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 icon={<Search className="h-3.5 w-3.5 text-slate-400" />}
-                                className="h-8 text-xs rounded-[3px]"
+                                className="h-8 text-xs"
                             />
                         </div>
                     </div>
@@ -1027,13 +1029,13 @@ export default function CountersIndex({
                                 Counter is on break ({resumeCounter.current_break_reason}). Enter Cashier 4-digit PIN to unlock.
                             </p>
 
-                            <input
+                            <Input
                                 type="password"
                                 placeholder="Enter Cashier PIN"
                                 autoFocus
                                 value={resumePin}
                                 onChange={(e) => setResumePin(e.target.value)}
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-center text-sm font-bold tracking-widest text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                className="h-[38px] text-center text-sm font-bold tracking-widest focus:border-[#FF4A1F]"
                             />
 
                             {resumeError && (
@@ -1126,154 +1128,128 @@ function CounterFormModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-3">
-                    <div className="grid grid-cols-3 gap-2">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Counter Code
-                            </label>
-                            <input
-                                type="text"
-                                value={code}
-                                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                placeholder="Auto (e.g. C-01)"
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                            <span className="text-[10px] text-slate-400">Leave blank to auto-generate</span>
-                        </div>
-                        <div className="col-span-2">
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Counter Name <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="e.g. OPD Dispensing Counter"
-                                required
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Counter Type <span className="text-rose-500">*</span>
-                            </label>
-                            <select
-                                value={type}
-                                onChange={(e) => setType(e.target.value)}
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            >
-                                <option value="opd">OPD Dispensing</option>
-                                <option value="ipd">IPD / Inpatient</option>
-                                <option value="express">Express Counter</option>
-                                <option value="general">General Retail</option>
-                                <option value="billing">Billing Only</option>
-                                <option value="emergency">Emergency 24/7</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Counter Location
-                            </label>
-                            <input
-                                type="text"
-                                value={location}
-                                onChange={(e) => setLocation(e.target.value)}
-                                placeholder="e.g. Ground Floor Main Hall"
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Zone / Area
-                            </label>
-                            <input
-                                type="text"
-                                value={zone}
-                                onChange={(e) => setZone(e.target.value)}
-                                placeholder="e.g. Zone A"
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Max Queue Capacity <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                                type="number"
-                                min={1}
-                                max={100}
-                                value={maxQueueCapacity}
-                                onChange={(e) => setMaxQueueCapacity(Number(e.target.value))}
-                                required
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Auto Assignment Toggle */}
-                    <div className="p-2.5 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#181d26]/60 flex items-center justify-between">
-                        <div>
-                            <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                                Enable Dynamic Automatic Assignment
-                            </span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                Include this counter in automatic Round-Robin order distribution when cashier shift is active.
-                            </span>
-                        </div>
-                        <input
-                            type="checkbox"
-                            checked={autoAssignmentEnabled}
-                            onChange={(e) => setAutoAssignmentEnabled(e.target.checked)}
-                            className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600 cursor-pointer"
+                <FormLayoutProvider labelWidth="sm:w-[155px]">
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <Input
+                            label="Counter Code"
+                            type="text"
+                            readOnly={isEdit}
+                            value={code}
+                            onChange={(e) => setCode(e.target.value.toUpperCase())}
+                            placeholder="Auto (e.g. C-01)"
+                            className="h-[34px] text-xs font-bold focus:border-[#FF4A1F]"
                         />
-                    </div>
+                        <Input
+                            label="Counter Name *"
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. OPD Dispensing Counter"
+                            required
+                            className="h-[34px] text-xs focus:border-[#FF4A1F]"
+                        />
+                        <Select
+                            label="Counter Type *"
+                            size="sm"
+                            value={type}
+                            onChange={(e) => setType(String(e.target.value))}
+                            options={[
+                                { value: 'opd', label: 'OPD Dispensing' },
+                                { value: 'ipd', label: 'IPD / Inpatient' },
+                                { value: 'express', label: 'Express Counter' },
+                                { value: 'general', label: 'General Retail' },
+                                { value: 'billing', label: 'Billing Only' },
+                                { value: 'emergency', label: 'Emergency 24/7' },
+                            ]}
+                            triggerClassName="h-[34px] bg-white dark:bg-[#12161c] text-xs"
+                        />
+                        <Input
+                            label="Counter Location"
+                            type="text"
+                            value={location}
+                            onChange={(e) => setLocation(e.target.value)}
+                            placeholder="e.g. Ground Floor Main Hall"
+                            className="h-[34px] text-xs focus:border-[#FF4A1F]"
+                        />
+                        <Input
+                            label="Zone / Area"
+                            type="text"
+                            value={zone}
+                            onChange={(e) => setZone(e.target.value)}
+                            placeholder="e.g. Zone A"
+                            className="h-[34px] text-xs focus:border-[#FF4A1F]"
+                        />
+                        <Input
+                            label="Max Queue Capacity *"
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={maxQueueCapacity}
+                            onChange={(e) => setMaxQueueCapacity(Number(e.target.value))}
+                            required
+                            className="h-[34px] text-xs font-mono focus:border-[#FF4A1F]"
+                        />
 
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                        {isEdit ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                    if (counter.status !== 'closed') {
-                                        alert(`Cannot delete Counter ${counter.code} while a shift is active. Please close the shift first.`);
-                                        return;
-                                    }
-                                    if (confirm(`Are you sure you want to delete Counter ${counter.code} (${counter.name})?`)) {
-                                        router.delete(route('counters.destroy', counter.id), {
-                                            onSuccess: () => onClose(),
-                                        });
-                                    }
-                                }}
-                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900 rounded-[3px]"
-                            >
-                                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                Delete Counter
-                            </Button>
-                        ) : <div />}
-                        <div className="flex items-center gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={onClose} className="rounded-[3px]">
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                size="sm"
-                                disabled={submitting}
-                                className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
-                            >
-                                {submitting ? 'Saving...' : (isEdit ? 'Update Counter' : 'Create Counter')}
-                            </Button>
+                        {/* Auto Assignment Toggle */}
+                        <HorizontalFormRow label="Auto Assignment">
+                            <div className="p-2.5 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#181d26]/60 flex items-center justify-between gap-2">
+                                <div>
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                                        Enable Dynamic Automatic Assignment
+                                    </span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        Include this counter in automatic Round-Robin order distribution when cashier shift is active.
+                                    </span>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={autoAssignmentEnabled}
+                                    onChange={(e) => setAutoAssignmentEnabled(e.target.checked)}
+                                    className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600 cursor-pointer"
+                                />
+                            </div>
+                        </HorizontalFormRow>
+
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                            {isEdit ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (counter.status !== 'closed') {
+                                            alert(`Cannot delete Counter ${counter.code} while a shift is active. Please close the shift first.`);
+                                            return;
+                                        }
+                                        if (confirm(`Are you sure you want to delete Counter ${counter.code} (${counter.name})?`)) {
+                                            router.delete(route('counters.destroy', counter.id), {
+                                                onSuccess: () => onClose(),
+                                            });
+                                        }
+                                    }}
+                                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900 rounded-[3px]"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                    Delete Counter
+                                </Button>
+                            ) : <div />}
+                            <div className="flex items-center gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={onClose} className="rounded-[3px]">
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={submitting}
+                                    className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
+                                >
+                                    {submitting ? 'Saving...' : (isEdit ? 'Update Counter' : 'Create Counter')}
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                </form>
+                    </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );
@@ -1349,60 +1325,56 @@ function AssignCashierModal({
                 </div>
 
                 {/* Form to add cashier */}
-                <form onSubmit={handleAssign} className="space-y-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Select Cashier <span className="text-rose-500">*</span>
-                            </label>
-                            <select
-                                value={selectedUserId}
-                                onChange={(e) => setSelectedUserId(Number(e.target.value))}
-                                required
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            >
-                                <option value="" disabled>Choose employee...</option>
-                                {eligibleCashiers.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.name} {c.email ? `(${c.email})` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Shift Schedule <span className="text-rose-500">*</span>
-                            </label>
-                            <select
-                                value={shift}
-                                onChange={(e) => setShift(e.target.value as any)}
-                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                            >
-                                <option value="morning">Morning Shift (08:00 AM - 04:00 PM)</option>
-                                <option value="evening">Evening Shift (04:00 PM - 12:00 AM)</option>
-                                <option value="night">Night Shift (12:00 AM - 08:00 AM)</option>
-                                <option value="any">Flexible / All Shifts</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
-                            <input
-                                type="checkbox"
-                                checked={isPrimary}
-                                onChange={(e) => setIsPrimary(e.target.checked)}
-                                className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600"
-                            />
-                            <span>Set as primary cashier for this counter</span>
-                        </label>
-
-                        <Button
-                            type="submit"
-                            variant="primary"
+                <FormLayoutProvider labelWidth="sm:w-[135px]">
+                    <form onSubmit={handleAssign} className="space-y-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <Input
+                            label="Target Counter"
+                            readOnly
+                            value={`${counter.code} — ${counter.name}`}
+                            className="h-[34px] text-xs font-semibold"
+                        />
+                        <Select
+                            label="Select Cashier *"
                             size="sm"
-                            disabled={submitting || !selectedUserId}
+                            value={selectedUserId || ''}
+                            placeholder="Choose employee..."
+                            onChange={(e) => setSelectedUserId(Number(e.target.value))}
+                            options={eligibleCashiers.map((c) => ({
+                                value: c.id,
+                                label: `${c.name}${c.email ? ` (${c.email})` : ''}`,
+                            }))}
+                            triggerClassName="h-[34px] bg-white dark:bg-[#12161c] text-xs"
+                        />
+                        <Select
+                            label="Shift Schedule *"
+                            size="sm"
+                            value={shift}
+                            onChange={(e) => setShift(String(e.target.value) as any)}
+                            options={[
+                                { value: 'morning', label: 'Morning Shift (08:00 AM - 04:00 PM)' },
+                                { value: 'evening', label: 'Evening Shift (04:00 PM - 12:00 AM)' },
+                                { value: 'night', label: 'Night Shift (12:00 AM - 08:00 AM)' },
+                                { value: 'any', label: 'Flexible / All Shifts' },
+                            ]}
+                            triggerClassName="h-[34px] bg-white dark:bg-[#12161c] text-xs"
+                        />
+
+                        <div className="flex items-center justify-between sm:pl-[145px]">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                                <input
+                                    type="checkbox"
+                                    checked={isPrimary}
+                                    onChange={(e) => setIsPrimary(e.target.checked)}
+                                    className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600"
+                                />
+                                <span>Set as primary cashier for this counter</span>
+                            </label>
+
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                disabled={submitting || !selectedUserId}
                             className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
                         >
                             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -1410,6 +1382,7 @@ function AssignCashierModal({
                         </Button>
                     </div>
                 </form>
+                </FormLayoutProvider>
 
                 {/* Assigned Cashiers List */}
                 <div className="mt-3">

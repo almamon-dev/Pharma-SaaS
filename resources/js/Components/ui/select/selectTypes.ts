@@ -1,5 +1,6 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
+import { FormLayoutMode } from '@/Components/ui/FormLayout';
 
 export interface SelectOption {
     id?: string | number;
@@ -53,5 +54,7 @@ export interface SelectProps {
     icon?: LucideIcon | React.ElementType;
     children?: React.ReactNode;
     error?: string | boolean;
+    layout?: FormLayoutMode;
+    labelWidth?: string;
 }
 

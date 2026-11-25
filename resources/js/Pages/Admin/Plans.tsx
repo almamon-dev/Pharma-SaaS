@@ -11,6 +11,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -376,7 +377,15 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                             </button>
                         </div>
 
+                        <FormLayoutProvider labelWidth="sm:w-[165px]">
                         <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
+                            {editingPlan && (
+                                <Input
+                                    label="Plan Key (Slug)"
+                                    readOnly
+                                    value={editingPlan.key}
+                                />
+                            )}
                             {/* Bilingual Plan Information Header/Tabs */}
                             <div className="rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-3 space-y-3">
                                 <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
@@ -459,7 +468,7 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-3">
                                 <Input
                                     label="Monthly Price ($)"
                                     type="number"
@@ -500,9 +509,6 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                                         )
                                     }
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                 <Input
                                     label="Max Tenants"
                                     type="number"
@@ -782,6 +788,7 @@ export default function AdminPlans({ plans, modules = [] }: AdminPlansProps) {
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

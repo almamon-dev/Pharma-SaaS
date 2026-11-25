@@ -245,6 +245,7 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
 
         Route::get('/products', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'index'])->name('products.index');
         Route::post('/products', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'store'])->name('products.store');
+        Route::post('/products/generate-barcode', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'generatePreviewBarcode'])->name('products.barcodes.preview-generate');
         Route::get('/products/{id}', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'show'])->name('products.show');
         Route::put('/products/{id}', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{id}', [\App\Modules\Catalog\Http\Controllers\ProductController::class, 'destroy'])->name('products.destroy');

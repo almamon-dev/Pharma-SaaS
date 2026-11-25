@@ -6,7 +6,6 @@ import {
     Clock,
     Coffee,
     Lock,
-    LogOut,
     Play,
     Shield,
     ShieldAlert,
@@ -14,6 +13,8 @@ import {
     X,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { Input } from '@/Components/ui/Input';
+import { Select } from '@/Components/ui/Select';
 import { formatCurrency } from '@/lib/format';
 import { SharedPageProps } from '@/types';
 
@@ -118,25 +119,19 @@ export function QuickStartShiftModal({ open, currency, onClose }: QuickStartShif
 
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Opening Cash Float (ড্রয়ারে থাকা শুরুর খুচরা টাকা) <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">
-                                {currency}
-                            </span>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={openingFloat}
-                                onChange={(e) => setOpeningFloat(e.target.value)}
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] pl-12 pr-3 py-2 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                placeholder="0.00"
-                                required
-                                autoFocus
-                            />
-                        </div>
+                        <Input
+                            label="Opening Cash Float (ড্রয়ারে থাকা শুরুর খুচরা টাকা) *"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={openingFloat}
+                            onChange={(e) => setOpeningFloat(e.target.value)}
+                            icon={<span className="text-xs font-bold text-slate-400">{currency}</span>}
+                            className="h-[38px] pl-12 text-sm font-bold focus:border-[#FF4A1F]"
+                            placeholder="0.00"
+                            required
+                            autoFocus
+                        />
                         <div className="flex flex-wrap gap-1.5 mt-2">
                             {['0', '500', '1000', '2000', '5000'].map((amt) => (
                                 <button
@@ -156,15 +151,13 @@ export function QuickStartShiftModal({ open, currency, onClose }: QuickStartShif
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Shift Note (ঐচ্ছিক)
-                        </label>
-                        <input
+                        <Input
+                            label="Shift Note (ঐচ্ছিক)"
                             type="text"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="e.g. Received ৳2,000 change float from manager"
-                            className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="h-[34px] text-xs focus:border-[#FF4A1F]"
                         />
                     </div>
 
@@ -216,7 +209,7 @@ export function OpenShiftModal({
     const [showAllNotes, setShowAllNotes] = useState(false);
     const [manualMode, setManualMode] = useState(false);
     const [manualFloat, setManualFloat] = useState<string>('0');
-    const [notes, setNotes] = useState<string>('');
+    const [notes] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
 
     const visibleNotes = showAllNotes ? ALL_BDT_NOTES : PRIMARY_BDT_NOTES;
@@ -333,22 +326,19 @@ export function OpenShiftModal({
                     {/* Counter selector only when opened without a pre-selected counter card */}
                     {!initialCounter && (
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Select Counter <span className="text-rose-500">*</span>
-                            </label>
-                            <select
-                                value={selectedCounterId}
+                            <Select
+                                label="Select Counter *"
+                                size="sm"
+                                value={selectedCounterId || ''}
+                                placeholder="-- Choose Counter --"
                                 onChange={(e) => setSelectedCounterId(Number(e.target.value))}
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                required
-                            >
-                                <option value="">-- Choose Counter --</option>
-                                {counters.map((c) => (
-                                    <option key={c.id} value={c.id} disabled={c.status === 'active' && !!c.current_user_id}>
-                                        {c.code} - {c.name} ({(c.type || 'POS').toUpperCase()}) {c.status !== 'closed' ? `[Occupied by ${c.current_user_name || 'Staff'}]` : '[Available]'}
-                                    </option>
-                                ))}
-                            </select>
+                                options={counters.map((c) => ({
+                                    value: c.id,
+                                    label: `${c.code} - ${c.name} (${(c.type || 'POS').toUpperCase()}) ${c.status !== 'closed' ? `[Occupied by ${c.current_user_name || 'Staff'}]` : '[Available]'}`,
+                                    disabled: c.status === 'active' && !!c.current_user_id,
+                                }))}
+                                triggerClassName="h-[34px] text-xs"
+                            />
                         </div>
                     )}
 
@@ -385,19 +375,17 @@ export function OpenShiftModal({
                         </div>
 
                         {manualMode ? (
-                            <div className="relative">
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">৳</span>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={manualFloat}
-                                    onChange={(e) => setManualFloat(e.target.value)}
-                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] pl-7 pr-3 py-2 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                    placeholder="0.00"
-                                    required
-                                />
-                            </div>
+                            <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={manualFloat}
+                                onChange={(e) => setManualFloat(e.target.value)}
+                                icon={<span className="text-xs font-bold text-slate-400">৳</span>}
+                                className="h-[38px] text-sm font-bold focus:border-[#FF4A1F]"
+                                placeholder="0.00"
+                                required
+                            />
                         ) : (
                             <div className="rounded-[5px] border border-slate-200 dark:border-slate-800 overflow-hidden">
                                 <table className="w-full text-xs border-collapse">
@@ -418,15 +406,17 @@ export function OpenShiftModal({
                                                         ৳ {note}
                                                     </td>
                                                     <td className="py-1.5 px-3 text-center">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            inputMode="numeric"
-                                                            value={noteCounts[note] ?? ''}
-                                                            onChange={(e) => handleCountChange(note, e.target.value)}
-                                                            placeholder="0"
-                                                            className="w-20 text-center rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#181d26] px-2 py-1 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                                        />
+                                                        <div className="w-20 mx-auto">
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                inputMode="numeric"
+                                                                value={noteCounts[note] ?? ''}
+                                                                onChange={(e) => handleCountChange(note, e.target.value)}
+                                                                placeholder="0"
+                                                                className="h-7 text-center bg-slate-50 dark:bg-[#181d26] px-2 text-xs font-mono font-bold focus:border-[#FF4A1F]"
+                                                            />
+                                                        </div>
                                                     </td>
                                                     <td className="py-2 px-3 text-right font-mono font-semibold text-slate-700 dark:text-slate-300">
                                                         {rowAmount.toLocaleString('en-US', {
@@ -573,15 +563,13 @@ export function TakeBreakModal({ open, counter, onClose }: TakeBreakModalProps) 
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Additional Note (ঐচ্ছিক নোট)
-                        </label>
-                        <input
+                        <Input
+                            label="Additional Note (ঐচ্ছিক নোট)"
                             type="text"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="e.g. Back in 15 minutes"
-                            className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="h-[34px] text-xs focus:border-[#FF4A1F]"
                         />
                     </div>
 
@@ -619,7 +607,7 @@ interface CloseShiftModalProps {
     onClose: () => void;
 }
 
-export function CloseShiftModal({ open, counter, currency, onClose }: CloseShiftModalProps) {
+export function CloseShiftModal({ open, counter, currency: _currency, onClose }: CloseShiftModalProps) {
     const session = counter.current_session;
     const expectedCash = session ? session.system_expected_cash : 0;
     const [closingCash, setClosingCash] = useState<string>(expectedCash.toFixed(2));
@@ -777,34 +765,30 @@ export function CloseShiftModal({ open, counter, currency, onClose }: CloseShift
                                 {BDT_NOTES.map((note) => (
                                     <div key={note} className="flex flex-col gap-0.5">
                                         <span className="text-[10px] font-bold text-slate-500 font-mono">৳{note} ×</span>
-                                        <input
+                                        <Input
                                             type="number"
                                             min="0"
                                             value={denominations[note] ?? ''}
                                             onChange={(e) => handleDenominationChange(note, e.target.value)}
                                             placeholder="0"
-                                            className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#151921] px-2 py-1 text-xs font-mono font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                            className="h-7 bg-white dark:bg-[#151921] px-2 text-xs font-mono font-semibold focus:border-[#FF4A1F]"
                                         />
                                     </div>
                                 ))}
                             </div>
                         )}
 
-                        <div className="relative">
-                            <span className="absolute left-3 top-2 text-sm font-bold text-slate-700 dark:text-slate-300">
-                                ৳
-                            </span>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={closingCash}
-                                onChange={(e) => setClosingCash(e.target.value)}
-                                className="w-full rounded-[5px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] pl-7 pr-3 py-2 text-sm font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
-                                placeholder="0.00"
-                                required
-                            />
-                        </div>
+                        <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={closingCash}
+                            onChange={(e) => setClosingCash(e.target.value)}
+                            icon={<span className="text-sm font-bold text-slate-700 dark:text-slate-300">৳</span>}
+                            className="h-[38px] text-sm font-mono font-bold focus:border-[#FF4A1F]"
+                            placeholder="0.00"
+                            required
+                        />
                     </div>
 
                     {/* Live Discrepancy Bar */}
@@ -836,16 +820,14 @@ export function CloseShiftModal({ open, counter, currency, onClose }: CloseShift
 
                     {/* Reason (required if not zero) */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                            Reason (required if not zero) {discrepancy !== 0 && <span className="text-rose-500">*</span>}
-                        </label>
-                        <input
+                        <Input
+                            label={discrepancy !== 0 ? 'Reason (required if not zero) *' : 'Reason (required if not zero)'}
                             type="text"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             required={discrepancy !== 0}
                             placeholder="[Write note]"
-                            className="w-full rounded-[5px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="text-xs focus:border-[#FF4A1F]"
                         />
                     </div>
 
@@ -957,16 +939,14 @@ export function ForceCloseShiftModal({ open, counter, currency, onClose }: Force
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Counted Cash in Drawer ({currency})
-                        </label>
-                        <input
+                        <Input
+                            label={`Counted Cash in Drawer (${currency})`}
                             type="number"
                             step="0.01"
                             min="0"
                             value={closingCash}
                             onChange={(e) => setClosingCash(e.target.value)}
-                            className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-sm font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            className="h-[38px] text-sm font-mono font-bold focus:border-[#FF4A1F]"
                             required
                         />
                     </div>

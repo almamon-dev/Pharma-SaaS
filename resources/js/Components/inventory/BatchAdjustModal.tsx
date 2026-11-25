@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
-import { Badge } from '@/Components/ui/Badge';
 import { formatCurrency } from '@/lib/format';
 import { BatchRow } from './inventoryTypes';
 
@@ -134,41 +134,36 @@ export const BatchAdjustModal: React.FC<BatchAdjustModalProps> = ({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                    <div className="grid grid-cols-3 gap-2 rounded-[4px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#151921] p-3 text-xs">
-                        <div>
-                            <div className="text-[10.5px] text-slate-500">Available</div>
-                            <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                                {batch.quantity_available} {batch.unit ?? 'Pcs'}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="text-[10.5px] text-slate-500">Expiry Date</div>
-                            <div className="flex items-center gap-1.5 font-mono font-semibold text-slate-800 dark:text-slate-200">
-                                {batch.expiry_date ?? '—'}
-                                {batch.is_expired && (
-                                    <Badge variant="rose">Expired</Badge>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="text-[10.5px] text-slate-500">Unit Cost</div>
-                            <div className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                                {formatCurrency(batch.purchase_price, currency)}
-                            </div>
-                        </div>
-                    </div>
+                <FormLayoutProvider labelWidth="sm:w-[155px]">
+                    <form onSubmit={handleSubmit} className="p-5 space-y-3">
+                        <Input
+                            label="Available Stock"
+                            readOnly
+                            value={`${batch.quantity_available} ${batch.unit ?? 'Pcs'}`}
+                            className="font-semibold tabular-nums"
+                        />
+                        <Input
+                            label="Expiry Date"
+                            readOnly
+                            value={`${batch.expiry_date ?? '—'}${batch.is_expired ? ' (Expired)' : ''}`}
+                            className="font-mono"
+                        />
+                        <Input
+                            label="Unit Cost"
+                            readOnly
+                            value={formatCurrency(batch.purchase_price, currency)}
+                            className="tabular-nums"
+                        />
 
-                    {batch.is_expired && (
-                        <div className="flex items-start gap-2 rounded-[4px] border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/25 px-3 py-2 text-[11.5px] text-rose-700 dark:text-rose-300">
-                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                            <span>
-                                This batch has passed its expiry date and is automatically blocked from POS checkout. Record disposal to write off remaining stock from active valuation.
-                            </span>
-                        </div>
-                    )}
+                        {batch.is_expired && (
+                            <div className="flex items-start gap-2 rounded-[4px] border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/25 px-3 py-2 text-[11.5px] text-rose-700 dark:text-rose-300">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>
+                                    This batch has passed its expiry date and is automatically blocked from POS checkout. Record disposal to write off remaining stock from active valuation.
+                                </span>
+                            </div>
+                        )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Select
                             label="Adjustment Action"
                             required
@@ -191,7 +186,7 @@ export const BatchAdjustModal: React.FC<BatchAdjustModalProps> = ({
                             type="number"
                             min={1}
                             max={isInbound ? undefined : batch.quantity_available}
-                            disabled={disposeEntireBatch && isDamageOrDisposal}
+                            readOnly={disposeEntireBatch && isDamageOrDisposal}
                             required={!disposeEntireBatch}
                             value={
                                 disposeEntireBatch && isDamageOrDisposal
@@ -201,48 +196,47 @@ export const BatchAdjustModal: React.FC<BatchAdjustModalProps> = ({
                             onChange={(e) => setQuantity(e.target.value)}
                             error={errors.quantity}
                         />
-                    </div>
 
-                    {isDamageOrDisposal && (
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={disposeEntireBatch}
-                                onChange={(e) =>
-                                    setDisposeEntireBatch(e.target.checked)
-                                }
-                                className="table-checkbox"
+                        {isDamageOrDisposal && (
+                            <label className="flex items-center gap-2 sm:pl-[165px] text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={disposeEntireBatch}
+                                    onChange={(e) =>
+                                        setDisposeEntireBatch(e.target.checked)
+                                    }
+                                    className="table-checkbox"
+                                />
+                                Dispose entire remaining batch ({batch.quantity_available} {batch.unit ?? 'Pcs'}) & close batch status
+                            </label>
+                        )}
+
+                        <div className="space-y-1.5">
+                            <Input
+                                label="Reason (Audit Trail)"
+                                required
+                                placeholder="Enter stock movement reason"
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                error={errors.reason}
                             />
-                            Dispose entire remaining batch ({batch.quantity_available} {batch.unit ?? 'Pcs'}) & close batch status
-                        </label>
-                    )}
-
-                    <div className="space-y-1.5">
-                        <Input
-                            label="Reason (Audit Trail)"
-                            required
-                            placeholder="Enter stock movement reason"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            error={errors.reason}
-                        />
-                        <div className="flex flex-wrap gap-1.5">
-                            {(reasonPresets[adjustmentType] ?? []).map((preset) => (
-                                <button
-                                    key={preset}
-                                    type="button"
-                                    onClick={() => setReason(preset)}
-                                    className="rounded-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10.5px] text-slate-600 dark:text-slate-300 hover:border-[#FF4A1F] hover:text-[#FF4A1F] cursor-pointer"
-                                >
-                                    {preset}
-                                </button>
-                            ))}
+                            <div className="flex flex-wrap gap-1.5 sm:pl-[165px]">
+                                {(reasonPresets[adjustmentType] ?? []).map((preset) => (
+                                    <button
+                                        key={preset}
+                                        type="button"
+                                        onClick={() => setReason(preset)}
+                                        className="rounded-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10.5px] text-slate-600 dark:text-slate-300 hover:border-[#FF4A1F] hover:text-[#FF4A1F] cursor-pointer"
+                                    >
+                                        {preset}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
 
-                    <Textarea
-                        label="Compliance / Supervisor Notes"
-                        placeholder="Optional disposal certificate reference or physical verification notes..."
+                        <Textarea
+                            label="Supervisor Notes"
+                            placeholder="Optional disposal certificate reference or physical verification notes..."
                         rows={2}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
@@ -282,6 +276,7 @@ export const BatchAdjustModal: React.FC<BatchAdjustModalProps> = ({
                         </Button>
                     </div>
                 </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );

@@ -13,6 +13,7 @@ import { AppLayout } from '@/Layouts/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/Card';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -113,8 +114,8 @@ export default function BusinessSettings({
                     </CardHeader>
 
                     <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormLayoutProvider labelWidth="sm:w-[175px]">
+                            <form onSubmit={handleSubmit} className="space-y-3">
                                 <Input
                                     label="Business Name"
                                     required
@@ -139,9 +140,6 @@ export default function BusinessSettings({
                                         <ShieldCheck className="h-3.5 w-3.5" />
                                     }
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <Input
                                     label="Tax / VAT ID"
                                     value={data.tax_id}
@@ -167,9 +165,6 @@ export default function BusinessSettings({
                                     }
                                     error={errors.phone}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <Input
                                     label="City"
                                     value={data.city}
@@ -204,46 +199,44 @@ export default function BusinessSettings({
                                     }
                                     error={errors.timezone}
                                 />
-                            </div>
+                                <Input
+                                    label="FEFO Alert Window (Days)"
+                                    type="number"
+                                    min={7}
+                                    max={180}
+                                    required
+                                    value={data.low_stock_alert_days}
+                                    onChange={(e) =>
+                                        setData(
+                                            'low_stock_alert_days',
+                                            e.target.value
+                                        )
+                                    }
+                                    error={errors.low_stock_alert_days}
+                                />
+                                <Textarea
+                                    label="Registered Address"
+                                    value={data.address}
+                                    onChange={(e) =>
+                                        setData('address', e.target.value)
+                                    }
+                                    error={errors.address}
+                                />
 
-                            <Input
-                                label="FEFO Expiry Alert Window (Days)"
-                                type="number"
-                                min={7}
-                                max={180}
-                                required
-                                value={data.low_stock_alert_days}
-                                onChange={(e) =>
-                                    setData(
-                                        'low_stock_alert_days',
-                                        e.target.value
-                                    )
-                                }
-                                error={errors.low_stock_alert_days}
-                            />
-
-                            <Textarea
-                                label="Registered Address"
-                                value={data.address}
-                                onChange={(e) =>
-                                    setData('address', e.target.value)
-                                }
-                                error={errors.address}
-                            />
-
-                            {tenant?.canManageOrganization && (
-                                <div className="flex justify-end pt-2">
-                                    <Button
-                                        type="submit"
-                                        variant="primary"
-                                        isLoading={processing}
-                                    >
-                                        <Save className="h-3.5 w-3.5" />
-                                        Save Business Settings
-                                    </Button>
-                                </div>
-                            )}
-                        </form>
+                                {tenant?.canManageOrganization && (
+                                    <div className="flex justify-end pt-2">
+                                        <Button
+                                            type="submit"
+                                            variant="primary"
+                                            isLoading={processing}
+                                        >
+                                            <Save className="h-3.5 w-3.5" />
+                                            Save Business Settings
+                                        </Button>
+                                    </div>
+                                )}
+                            </form>
+                        </FormLayoutProvider>
                     </CardContent>
                 </Card>
 

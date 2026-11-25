@@ -454,6 +454,22 @@ class ProductController extends Controller
     }
 
     /**
+     * Generate a unique internal EAN-13 barcode preview before saving a product.
+     */
+    public function generatePreviewBarcode(): JsonResponse
+    {
+        Gate::authorize('product.manage');
+
+        $tenant = $this->tenantContext->tenant();
+        $barcode = $this->barcodeGenerator->generateForTenant($tenant->id);
+
+        return response()->json([
+            'message' => "Generated internal barcode {$barcode}.",
+            'barcode' => $barcode,
+        ]);
+    }
+
+    /**
      * Generate unique internal EAN-13 barcode for a single product.
      */
     public function generateInternalBarcode(Request $request, string $id): JsonResponse

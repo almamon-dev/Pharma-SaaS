@@ -11,6 +11,7 @@ import {
     X,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { Select } from '@/Components/ui/Select';
 
 export interface BarcodeScanFeedback {
     ok: boolean;
@@ -442,23 +443,21 @@ export const BarcodeCameraModal: React.FC<BarcodeCameraModalProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                             {devices.length > 1 && (
-                                <select
-                                    value={selectedDeviceId}
-                                    onChange={(e) =>
-                                        setSelectedDeviceId(e.target.value)
-                                    }
-                                    aria-label="Select camera device"
-                                    className="h-8 max-w-[190px] truncate rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1e2329] px-2 text-[11.5px] text-slate-700 dark:text-slate-200 focus:outline-none"
-                                >
-                                    {devices.map((d, idx) => (
-                                        <option
-                                            key={d.deviceId || idx}
-                                            value={d.deviceId}
-                                        >
-                                            {d.label || `Camera ${idx + 1}`}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="max-w-[190px] w-full">
+                                    <Select
+                                        size="sm"
+                                        ariaLabel="Select camera device"
+                                        value={selectedDeviceId}
+                                        onChange={(e) =>
+                                            setSelectedDeviceId(String(e.target.value))
+                                        }
+                                        options={devices.map((d, idx) => ({
+                                            value: d.deviceId,
+                                            label: d.label || `Camera ${idx + 1}`,
+                                        }))}
+                                        triggerClassName="h-8 bg-white dark:bg-[#1e2329] px-2 text-[11.5px]"
+                                    />
+                                </div>
                             )}
 
                             <input

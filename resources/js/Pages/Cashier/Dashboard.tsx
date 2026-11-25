@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { Input } from '@/Components/ui/Input';
+import { Select } from '@/Components/ui/Select';
 import { DataTable, Column, EmptyState, TableActionMenu } from '@/Components/tables';
 import { PosReceiptData, SharedPageProps } from '@/types';
 import { formatCurrency } from '@/lib/format';
@@ -1286,24 +1288,22 @@ export default function CashierDashboard({
                                 <div className="space-y-2">
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                Tendered Cash Amount
-                                            </label>
-                                            <input
+                                            <Input
+                                                label="Tendered Cash Amount"
                                                 type="number"
                                                 min={tenderOrder.total_amount}
                                                 step="any"
                                                 value={tenderedCash}
                                                 onChange={(e) => setTenderedCash(e.target.value ? Number(e.target.value) : '')}
                                                 required
-                                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-sm font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                                className="h-[34px] text-sm font-mono font-bold focus:border-[#FF4A1F]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                            <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                                 Change Due
                                             </label>
-                                            <div className="w-full rounded-[4px] border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#181d26] px-3 py-1.5 text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">
+                                            <div className="w-full h-[34px] flex items-center rounded-[1px] border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#181d26] px-3 text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">
                                                 {formatCurrency(changeDue, currency)}
                                             </div>
                                         </div>
@@ -1335,15 +1335,13 @@ export default function CashierDashboard({
                             {/* Card / Mobile Reference Number */}
                             {(paymentMethod === 'card' || paymentMethod === 'bkash' || paymentMethod === 'nagad') && (
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                        Transaction / Reference ID
-                                    </label>
-                                    <input
+                                    <Input
+                                        label="Transaction / Reference ID"
                                         type="text"
                                         placeholder="e.g. TrxID / POS Slip Approval Code"
                                         value={referenceNumber}
                                         onChange={(e) => setReferenceNumber(e.target.value)}
-                                        className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                        className="h-[34px] text-xs focus:border-[#FF4A1F]"
                                     />
                                 </div>
                             )}
@@ -1357,23 +1355,25 @@ export default function CashierDashboard({
                                     {splitPayments.map((sp, idx) => (
                                         <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                                             <div className="col-span-4">
-                                                <select
+                                                <Select
+                                                    size="sm"
                                                     value={sp.method}
                                                     onChange={(e) => {
                                                         const updated = [...splitPayments];
-                                                        updated[idx].method = e.target.value as any;
+                                                        updated[idx].method = String(e.target.value) as any;
                                                         setSplitPayments(updated);
                                                     }}
-                                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-2 py-1 text-xs text-slate-900 dark:text-white"
-                                                >
-                                                    <option value="cash">Cash</option>
-                                                    <option value="card">Card</option>
-                                                    <option value="bkash">bKash</option>
-                                                    <option value="nagad">Nagad</option>
-                                                </select>
+                                                    options={[
+                                                        { value: 'cash', label: 'Cash' },
+                                                        { value: 'card', label: 'Card' },
+                                                        { value: 'bkash', label: 'bKash' },
+                                                        { value: 'nagad', label: 'Nagad' },
+                                                    ]}
+                                                    triggerClassName="h-[30px] bg-white dark:bg-[#12161c] px-2 text-xs"
+                                                />
                                             </div>
                                             <div className="col-span-4">
-                                                <input
+                                                <Input
                                                     type="number"
                                                     min={0}
                                                     step="any"
@@ -1384,11 +1384,11 @@ export default function CashierDashboard({
                                                         updated[idx].amount = Number(e.target.value);
                                                         setSplitPayments(updated);
                                                     }}
-                                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-2 py-1 text-xs font-mono text-slate-900 dark:text-white"
+                                                    className="h-[30px] px-2 text-xs font-mono"
                                                 />
                                             </div>
                                             <div className="col-span-4">
-                                                <input
+                                                <Input
                                                     type="text"
                                                     placeholder="Ref #"
                                                     value={sp.reference_number || ''}
@@ -1397,7 +1397,7 @@ export default function CashierDashboard({
                                                         updated[idx].reference_number = e.target.value;
                                                         setSplitPayments(updated);
                                                     }}
-                                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-2 py-1 text-xs text-slate-900 dark:text-white"
+                                                    className="h-[30px] px-2 text-xs"
                                                 />
                                             </div>
                                         </div>
@@ -1455,17 +1455,15 @@ export default function CashierDashboard({
                             </p>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                    Reason <span className="text-rose-500">*</span>
-                                </label>
-                                <input
+                                <Input
+                                    label="Reason *"
                                     type="text"
                                     value={reassignReason}
                                     onChange={(e) => setReassignReason(e.target.value)}
                                     placeholder="e.g. Express counter overload / Needs cold-chain packaging"
                                     required
                                     autoFocus
-                                    className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                    className="h-[34px] text-xs focus:border-[#FF4A1F]"
                                 />
                             </div>
 

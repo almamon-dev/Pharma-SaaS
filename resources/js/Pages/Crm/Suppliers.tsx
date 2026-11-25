@@ -12,6 +12,7 @@ import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Textarea } from '@/Components/ui/Textarea';
 import {
@@ -256,18 +257,18 @@ export default function SuppliersIndex({
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreate} className="p-5 space-y-3">
-                            <Input
-                                label="Company Name"
-                                required
-                                placeholder="e.g. Incepta Pharmaceuticals Dist."
-                                value={data.name}
-                                onChange={(e) =>
-                                    setData('name', e.target.value)
-                                }
-                                error={errors.name}
-                            />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormLayoutProvider labelWidth="sm:w-[140px]">
+                            <form onSubmit={handleCreate} className="p-5 space-y-3">
+                                <Input
+                                    label="Company Name"
+                                    required
+                                    placeholder="e.g. Incepta Pharmaceuticals Dist."
+                                    value={data.name}
+                                    onChange={(e) =>
+                                        setData('name', e.target.value)
+                                    }
+                                    error={errors.name}
+                                />
                                 <Input
                                     label="Contact Person"
                                     value={data.contact_person}
@@ -285,8 +286,6 @@ export default function SuppliersIndex({
                                         setData('phone', e.target.value)
                                     }
                                 />
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Email"
                                     type="email"
@@ -303,40 +302,40 @@ export default function SuppliersIndex({
                                         setData('payment_terms', e.target.value)
                                     }
                                 />
-                            </div>
-                            <Input
-                                label="Tax / VAT Reg No."
-                                value={data.tax_number}
-                                onChange={(e) =>
-                                    setData('tax_number', e.target.value)
-                                }
-                            />
-                            <Textarea
-                                label="Warehouse Address"
-                                rows={2}
-                                value={data.address}
-                                onChange={(e) =>
-                                    setData('address', e.target.value)
-                                }
-                            />
+                                <Input
+                                    label="Tax / VAT Reg No."
+                                    value={data.tax_number}
+                                    onChange={(e) =>
+                                        setData('tax_number', e.target.value)
+                                    }
+                                />
+                                <Textarea
+                                    label="Warehouse Address"
+                                    rows={2}
+                                    value={data.address}
+                                    onChange={(e) =>
+                                        setData('address', e.target.value)
+                                    }
+                                />
 
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setShowCreateModal(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={processing}
-                                >
-                                    Add Supplier
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={() => setShowCreateModal(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={processing}
+                                    >
+                                        Add Supplier
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

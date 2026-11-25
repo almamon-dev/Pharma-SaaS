@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, X } from 'lucide-react';
+import { Input } from '@/Components/ui/Input';
 import { Column } from './dataTableTypes';
 import TableFilter from '@/Components/tables/table-filter';
 import TableColumnToggle from '@/Components/tables/table-column-toggle';
@@ -105,12 +106,8 @@ export function DataTableGridToolbar<T = any>({
 
                     <div className="flex items-center gap-1.5 shrink-0 justify-end flex-wrap sm:flex-nowrap">
                         {isSearchOpen ? (
-                            <div className="relative flex items-center">
-                                <Search
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10"
-                                    size={13}
-                                />
-                                <input
+                            <div className="w-[150px] sm:w-[240px]">
+                                <Input
                                     type="text"
                                     autoFocus
                                     value={search}
@@ -120,19 +117,22 @@ export function DataTableGridToolbar<T = any>({
                                             setIsSearchOpen(false);
                                     }}
                                     placeholder={searchPlaceholder}
-                                    className="h-[32px] w-[150px] sm:w-[240px] pl-8 pr-7 border border-[#ff4a1f]/80 dark:border-[#ff4a1f]/80 rounded-[3px] text-[12px] font-medium bg-slate-50/50 dark:bg-[#1e2329] text-slate-900 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none shadow-none"
+                                    icon={<Search size={13} className="text-slate-400" />}
+                                    rightIcon={
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSearch('');
+                                                setIsSearchOpen(false);
+                                            }}
+                                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer flex items-center"
+                                            title="Close search"
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    }
+                                    className="h-[32px] pr-8 border-[#ff4a1f]/80 dark:border-[#ff4a1f]/80 text-[12px] font-medium bg-slate-50/50 dark:bg-[#1e2329] text-slate-900 dark:text-slate-200"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSearch('');
-                                        setIsSearchOpen(false);
-                                    }}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                                    title="Close search"
-                                >
-                                    <X size={13} />
-                                </button>
                             </div>
                         ) : (
                             <button

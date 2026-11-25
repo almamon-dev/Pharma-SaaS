@@ -104,6 +104,50 @@ export interface PaginatedData<T> {
     next_page_url: string | null;
 }
 
+export function generateSkuSuffix(): string {
+    return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+export function generateProductSku(
+    name = '',
+    strength = '',
+    existingSkus: string[] = []
+): string {
+    const words = name
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w.slice(0, 6));
+
+    if (words.length === 0) {
+        return '';
+    }
+
+    const cleanStrength = strength
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 8);
+
+    const base = [...words, cleanStrength].filter(Boolean).join('-');
+    if (existingSkus.length === 0) {
+        return base;
+    }
+
+    const taken = new Set(existingSkus.map((s) => s.trim().toUpperCase()).filter(Boolean));
+    if (!taken.has(base)) {
+        return base;
+    }
+
+    let counter = 2;
+    while (taken.has(`${base}-${counter}`)) {
+        counter += 1;
+    }
+    return `${base}-${counter}`;
+}
+
 export function generateEan13Preview(): string {
     const randomTen = Math.floor(Math.random() * 10_000_000_000)
         .toString()

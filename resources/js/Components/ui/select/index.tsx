@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { FieldWrapper } from '@/Components/ui/FormLayout';
 import { cn } from '@/lib/cn';
-import { SelectOption, SelectProps } from './selectTypes';
-import { useSelectOptions } from './useSelectOptions';
+import { ChevronDown } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SelectPortalMenu } from './SelectPortalMenu';
 import { getRawValue, renderSelectedDisplay } from './selectDisplayUtils';
+import { SelectOption, SelectProps } from './selectTypes';
+import { useSelectOptions } from './useSelectOptions';
 
 export type { SelectOption, SelectProps };
 
@@ -28,6 +29,8 @@ export default function Select({
     onCreate: onCreateProp,
     icon: Icon,
     error,
+    layout,
+    labelWidth,
     children,
 }: SelectProps) {
     const [isOpen, setIsOpen] = useState(false);
@@ -51,8 +54,8 @@ export default function Select({
         ? Array.isArray(rawValue)
             ? rawValue
             : rawValue
-              ? [rawValue]
-              : []
+                ? [rawValue]
+                : []
         : rawValue;
 
     const { finalOptions, filteredOptions } = useSelectOptions(
@@ -129,7 +132,7 @@ export default function Select({
 
             const count = finalOptions.length || 1;
             const hasSubtitles = finalOptions.some((o) => Boolean(o.subtitle));
-            const itemHeight = hasSubtitles ? 46 : size === 'sm' ? 32 : 36;
+            const itemHeight = hasSubtitles ? 42 : size === 'sm' ? 28 : 32;
             const searchHeight = shouldShowSearch ? 45 : 0;
             const estimatedHeight = Math.min(300, count * itemHeight + searchHeight + 10);
 
@@ -158,7 +161,13 @@ export default function Select({
                 maxHeight = Math.min(300, Math.max(100, spaceBelow - 16));
             }
 
-            const width = size === 'sm' ? Math.max(rect.width, 160) : Math.max(140, rect.width);
+            const width =
+                size === 'sm'
+                    ? Math.max(
+                        rect.width,
+                        finalOptions.length <= 4 && rect.width < 90 ? 84 : 150
+                    )
+                    : Math.max(140, rect.width);
             let left = rect.left;
             if (left + width > window.innerWidth - 12) {
                 left = Math.max(10, rect.right - width);
@@ -200,39 +209,20 @@ export default function Select({
         };
     }, [isOpen]);
 
-    const renderLabel = (labelStr: string) => {
-        if (labelStr.endsWith('*')) {
-            const baseText = labelStr.slice(0, -1).trim();
-            return (
-                <>
-                    {baseText} <span className="text-red-500 font-bold ml-0.5">*</span>
-                </>
-            );
-        }
-        return (
-            <>
-                {labelStr}
-                {required && <span className="text-red-500 font-bold ml-0.5">*</span>}
-            </>
-        );
-    };
-
     return (
-        <div
+        <FieldWrapper
+            label={label}
+            htmlFor={selectId}
+            required={required}
+            error={error}
+            layout={layout}
+            labelWidth={labelWidth}
             className={cn(
-                'w-full relative flex flex-col gap-1 font-sans antialiased',
+                'relative',
                 className,
                 disabled && 'opacity-60 cursor-not-allowed pointer-events-none'
             )}
         >
-            {label && (
-                <label
-                    htmlFor={selectId}
-                    className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 font-sans"
-                >
-                    {renderLabel(label)}
-                </label>
-            )}
             <button
                 ref={triggerRef}
                 id={selectId}
@@ -241,12 +231,12 @@ export default function Select({
                 onClick={handleToggle}
                 disabled={disabled}
                 className={cn(
-                    'relative w-full cursor-pointer rounded-[4px] border bg-white dark:bg-[#1e2329] text-left font-medium text-[#202223] dark:text-white outline-none focus:outline-none transition-all flex items-center shadow-none',
+                    'relative w-full cursor-pointer rounded-[2px] border bg-white dark:bg-[#1e2329] text-left font-medium text-[#202223] dark:text-white outline-none focus:outline-none transition-all flex items-center shadow-none',
                     size === 'sm'
-                        ? 'h-[30px] text-xs py-0.5 pr-7'
+                        ? 'h-[26px] text-xs py-0.5 pr-7'
                         : size === 'lg'
-                          ? 'h-[42px] text-sm py-2 pr-9'
-                          : 'h-[36px] text-[13px] py-1 pr-8',
+                            ? 'h-[36px] text-sm py-1 pr-9'
+                            : 'h-[30px] text-[12.5px] py-0.5 pr-8',
                     error
                         ? 'border-[#d82c0d] focus:border-[#d82c0d]'
                         : 'border-slate-300 dark:border-[#384150] focus:border-slate-400 dark:focus:border-slate-500',
@@ -308,17 +298,12 @@ export default function Select({
                 onCreate={
                     onCreateProp
                         ? (createdName) => {
-                              onCreateProp(createdName);
-                              setSearchQuery('');
-                          }
+                            onCreateProp(createdName);
+                            setSearchQuery('');
+                        }
                         : undefined
                 }
             />
-
-            {typeof error === 'string' && error && (
-                <span className="text-[12px] text-[#d82c0d] mt-0.5 font-sans">{error}</span>
-            )}
-        </div>
+        </FieldWrapper>
     );
 }
-

@@ -23,6 +23,7 @@ import { BarcodeSvg } from '@/Components/BarcodeSvg';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import { Badge } from '@/Components/ui/Badge';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -43,6 +44,8 @@ import {
     BranchFilterOption,
     MedicineRow,
     StockMovementRow,
+    generateEan13Preview,
+    generateProductSku,
 } from '@/Components/inventory/inventoryTypes';
 import { SharedPageProps } from '@/types';
 import { formatCurrency } from '@/lib/format';
@@ -192,6 +195,7 @@ export default function InventoryIndex({
     );
 
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createSkuManual, setCreateSkuManual] = useState(false);
     const [editingMedicine, setEditingMedicine] = useState<MedicineRow | null>(null);
     const [restockMedicine, setRestockMedicine] = useState<MedicineRow | null>(null);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -352,6 +356,16 @@ export default function InventoryIndex({
         } finally {
             setInspectorLoading(false);
         }
+    };
+
+    const openCreateModal = () => {
+        setCreateSkuManual(false);
+        createForm.setData({
+            ...EMPTY_CREATE_FORM,
+            sku: '',
+            barcode: generateEan13Preview(),
+        });
+        setShowCreateModal(true);
     };
 
     const handleCreateSubmit = (e: React.FormEvent) => {
@@ -882,7 +896,7 @@ export default function InventoryIndex({
                             <Button
                                 variant="primary"
                                 size="sm"
-                                onClick={() => setShowCreateModal(true)}
+                                onClick={openCreateModal}
                             >
                                 <Plus className="h-3.5 w-3.5" />
                                 Add Medicine
@@ -1003,7 +1017,7 @@ export default function InventoryIndex({
                             title="No medicines found"
                             description="No medicines match your current filter criteria. Adjust branch/category filters or add a new SKU to your catalog."
                             actionLabel={canEdit ? 'Add Medicine' : undefined}
-                            onAction={() => setShowCreateModal(true)}
+                            onAction={openCreateModal}
                         />
                     }
                 />
@@ -1011,7 +1025,7 @@ export default function InventoryIndex({
 
             {showCreateModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[1px] p-4">
-                    <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] shadow-2xl">
+                    <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-3.5">
                             <div>
                                 <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
@@ -1030,50 +1044,67 @@ export default function InventoryIndex({
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={handleCreateSubmit}
-                            className="p-5 space-y-4"
-                        >
-                            <MedicineFormFields
-                                data={createForm.data}
-                                errors={createForm.errors}
-                                categories={categories}
-                                onChangeField={(field, val) =>
-                                    createForm.setData((prev) => ({
-                                        ...prev,
-                                        [field]: val,
-                                    }))
-                                }
-                                onPiecePriceChange={(kind, val) =>
-                                    createForm.setData((prev) => ({
-                                        ...prev,
-                                        ...computeDualPricePatch(
-                                            prev,
-                                            kind,
-                                            'piece',
-                                            val
-                                        ),
-                                    }))
-                                }
-                                onBoxPriceChange={(kind, val) =>
-                                    createForm.setData((prev) => ({
-                                        ...prev,
-                                        ...computeDualPricePatch(
-                                            prev,
-                                            kind,
-                                            'box',
-                                            val
-                                        ),
-                                    }))
-                                }
-                                onOpenCamera={() => setCameraTarget('create')}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[125px]">
+                            <form
+                                onSubmit={handleCreateSubmit}
+                                className="p-5 space-y-4"
+                            >
+                                <MedicineFormFields
+                                    data={createForm.data}
+                                    errors={createForm.errors}
+                                    categories={categories}
+                                    onChangeField={(field, val) => {
+                                        if (field === 'sku') {
+                                            setCreateSkuManual(true);
+                                        }
+                                        createForm.setData((prev) => {
+                                            const next = {
+                                                ...prev,
+                                                [field]: val,
+                                            };
+                                            if (
+                                                !createSkuManual &&
+                                                (field === 'name' || field === 'strength')
+                                            ) {
+                                                next.sku = generateProductSku(
+                                                    String(next.name),
+                                                    String(next.strength),
+                                                    medicines.map((m) => m.sku)
+                                                );
+                                            }
+                                            return next;
+                                        });
+                                    }}
+                                    onPiecePriceChange={(kind, val) =>
+                                        createForm.setData((prev) => ({
+                                            ...prev,
+                                            ...computeDualPricePatch(
+                                                prev,
+                                                kind,
+                                                'piece',
+                                                val
+                                            ),
+                                        }))
+                                    }
+                                    onBoxPriceChange={(kind, val) =>
+                                        createForm.setData((prev) => ({
+                                            ...prev,
+                                            ...computeDualPricePatch(
+                                                prev,
+                                                kind,
+                                                'box',
+                                                val
+                                            ),
+                                        }))
+                                    }
+                                    onOpenCamera={() => setCameraTarget('create')}
+                                />
 
-                            <div className="rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#161a1e] p-3.5 space-y-3">
-                                <div className="text-[11px] font-bold text-slate-500">
-                                    Opening Stock Batch (Optional FEFO)
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                <div className="rounded-[4px] border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#161a1e] p-3.5 space-y-3">
+                                    <div className="text-[11px] font-bold text-slate-500">
+                                        Opening Stock Batch (Optional FEFO)
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                                     <Input
                                         label="Batch Number"
                                         placeholder="BATCH-2026-01"
@@ -1123,8 +1154,6 @@ export default function InventoryIndex({
                                         }
                                         error={createForm.errors.expiry_date}
                                     />
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <Select
                                         label="Supplier"
                                         value={createForm.data.supplier_id}
@@ -1138,7 +1167,7 @@ export default function InventoryIndex({
                                         error={createForm.errors.supplier_id}
                                     />
                                     <Input
-                                        label="Shelf / Rack Location"
+                                        label="Rack Location"
                                         placeholder="A-12"
                                         value={createForm.data.rack_location}
                                         onChange={(e) =>
@@ -1149,33 +1178,34 @@ export default function InventoryIndex({
                                         }
                                         error={createForm.errors.rack_location}
                                     />
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800 pt-4">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setShowCreateModal(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={createForm.processing}
-                                >
-                                    Save Medicine
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800 pt-4">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setShowCreateModal(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={createForm.processing}
+                                    >
+                                        Save Medicine
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
 
             {editingMedicine && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[1px] p-4">
-                    <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] shadow-2xl">
+                    <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[4px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-3.5">
                             <div>
                                 <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
@@ -1194,62 +1224,64 @@ export default function InventoryIndex({
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={handleEditSubmit}
-                            className="p-5 space-y-4"
-                        >
-                            <MedicineFormFields
-                                data={editForm.data}
-                                errors={editForm.errors}
-                                categories={categories}
-                                onChangeField={(field, val) =>
-                                    editForm.setData((prev) => ({
-                                        ...prev,
-                                        [field]: val,
-                                    }))
-                                }
-                                onPiecePriceChange={(kind, val) =>
-                                    editForm.setData((prev) => ({
-                                        ...prev,
-                                        ...computeDualPricePatch(
-                                            prev,
-                                            kind,
-                                            'piece',
-                                            val
-                                        ),
-                                    }))
-                                }
-                                onBoxPriceChange={(kind, val) =>
-                                    editForm.setData((prev) => ({
-                                        ...prev,
-                                        ...computeDualPricePatch(
-                                            prev,
-                                            kind,
-                                            'box',
-                                            val
-                                        ),
-                                    }))
-                                }
-                                onOpenCamera={() => setCameraTarget('edit')}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[125px]">
+                            <form
+                                onSubmit={handleEditSubmit}
+                                className="p-5 space-y-4"
+                            >
+                                <MedicineFormFields
+                                    data={editForm.data}
+                                    errors={editForm.errors}
+                                    categories={categories}
+                                    onChangeField={(field, val) =>
+                                        editForm.setData((prev) => ({
+                                            ...prev,
+                                            [field]: val,
+                                        }))
+                                    }
+                                    onPiecePriceChange={(kind, val) =>
+                                        editForm.setData((prev) => ({
+                                            ...prev,
+                                            ...computeDualPricePatch(
+                                                prev,
+                                                kind,
+                                                'piece',
+                                                val
+                                            ),
+                                        }))
+                                    }
+                                    onBoxPriceChange={(kind, val) =>
+                                        editForm.setData((prev) => ({
+                                            ...prev,
+                                            ...computeDualPricePatch(
+                                                prev,
+                                                kind,
+                                                'box',
+                                                val
+                                            ),
+                                        }))
+                                    }
+                                    onOpenCamera={() => setCameraTarget('edit')}
+                                />
 
-                            <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800 pt-4">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setEditingMedicine(null)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={editForm.processing}
-                                >
-                                    Update Medicine
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800 pt-4">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setEditingMedicine(null)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={editForm.processing}
+                                    >
+                                        Update Medicine
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -1275,11 +1307,21 @@ export default function InventoryIndex({
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={handleRestockSubmit}
-                            className="p-5 space-y-4"
-                        >
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormLayoutProvider labelWidth="sm:w-[155px]">
+                            <form
+                                onSubmit={handleRestockSubmit}
+                                className="p-5 space-y-3"
+                            >
+                                <Input
+                                    label="Medicine"
+                                    readOnly
+                                    value={`${restockMedicine.name} (${restockMedicine.sku})`}
+                                />
+                                <Input
+                                    label="Pack Ratio"
+                                    readOnly
+                                    value={`1 Box = ${restockMedicine.units_per_box} ${restockMedicine.unit}`}
+                                />
                                 <Select
                                     label="Destination Branch"
                                     required
@@ -1305,9 +1347,6 @@ export default function InventoryIndex({
                                     }
                                     error={restockForm.errors.supplier_id}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <Input
                                     label="Batch Number"
                                     required
@@ -1360,9 +1399,6 @@ export default function InventoryIndex({
                                     }
                                     error={restockForm.errors.expiry_date}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <Input
                                     label="Purchase / Pc"
                                     type="number"
@@ -1439,11 +1475,8 @@ export default function InventoryIndex({
                                     }
                                     error={restockForm.errors.box_selling_price}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
-                                    label="Rack / Shelf Location"
+                                    label="Rack Location"
                                     placeholder="Shelf B-04"
                                     value={restockForm.data.rack_location}
                                     onChange={(e) =>
@@ -1455,7 +1488,7 @@ export default function InventoryIndex({
                                     error={restockForm.errors.rack_location}
                                 />
                                 <Input
-                                    label="Batch Note / Challan Ref"
+                                    label="Challan Ref / Note"
                                     placeholder="Optional challan or invoice ref"
                                     value={restockForm.data.notes}
                                     onChange={(e) =>
@@ -1466,25 +1499,25 @@ export default function InventoryIndex({
                                     }
                                     error={restockForm.errors.notes}
                                 />
-                            </div>
 
-                            <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setRestockMedicine(null)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={restockForm.processing}
-                                >
-                                    Receive Stock Batch
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setRestockMedicine(null)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={restockForm.processing}
+                                    >
+                                        Receive Stock Batch
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -1711,47 +1744,49 @@ export default function InventoryIndex({
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
-                        <form onSubmit={handleCategorySubmit} className="p-5 space-y-4">
-                            <Input
-                                label="Category Name"
-                                required
-                                placeholder="e.g. Cardiac & Blood Pressure"
-                                value={categoryForm.data.name}
-                                onChange={(e) =>
-                                    categoryForm.setData('name', e.target.value)
-                                }
-                                error={categoryForm.errors.name}
-                            />
-                            <Textarea
-                                label="Description"
-                                rows={2}
-                                placeholder="Optional shelf group description"
-                                value={categoryForm.data.description}
-                                onChange={(e) =>
-                                    categoryForm.setData(
-                                        'description',
-                                        e.target.value
-                                    )
-                                }
-                                error={categoryForm.errors.description}
-                            />
-                            <div className="flex items-center justify-end gap-2 pt-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setShowCategoryModal(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={categoryForm.processing}
-                                >
-                                    Save Category
-                                </Button>
-                            </div>
-                        </form>
+                        <FormLayoutProvider labelWidth="sm:w-[130px]">
+                            <form onSubmit={handleCategorySubmit} className="p-5 space-y-3">
+                                <Input
+                                    label="Category Name"
+                                    required
+                                    placeholder="e.g. Cardiac & Blood Pressure"
+                                    value={categoryForm.data.name}
+                                    onChange={(e) =>
+                                        categoryForm.setData('name', e.target.value)
+                                    }
+                                    error={categoryForm.errors.name}
+                                />
+                                <Textarea
+                                    label="Description"
+                                    rows={2}
+                                    placeholder="Optional shelf group description"
+                                    value={categoryForm.data.description}
+                                    onChange={(e) =>
+                                        categoryForm.setData(
+                                            'description',
+                                            e.target.value
+                                        )
+                                    }
+                                    error={categoryForm.errors.description}
+                                />
+                                <div className="flex items-center justify-end gap-2 pt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setShowCategoryModal(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={categoryForm.processing}
+                                    >
+                                        Save Category
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}
@@ -1814,22 +1849,24 @@ export default function InventoryIndex({
                                                     <span className="text-[11px] text-slate-500">
                                                         Copies
                                                     </span>
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        max={20}
-                                                        value={bulkCopies[med.id] ?? 1}
-                                                        onChange={(e) =>
-                                                            setBulkCopies((prev) => ({
-                                                                ...prev,
-                                                                [med.id]: Math.max(
-                                                                    1,
-                                                                    Math.min(20, Number(e.target.value) || 1)
-                                                                ),
-                                                            }))
-                                                        }
-                                                        className="h-7 w-14 rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-2 text-center text-xs tabular-nums"
-                                                    />
+                                                    <div className="w-14">
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            max={20}
+                                                            value={bulkCopies[med.id] ?? 1}
+                                                            onChange={(e) =>
+                                                                setBulkCopies((prev) => ({
+                                                                    ...prev,
+                                                                    [med.id]: Math.max(
+                                                                        1,
+                                                                        Math.min(20, Number(e.target.value) || 1)
+                                                                    ),
+                                                                }))
+                                                            }
+                                                            className="h-7 px-2 text-center text-xs tabular-nums"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

@@ -153,31 +153,33 @@ function CartQtyInput({
     };
 
     return (
-        <input
-            type="number"
-            min={1}
-            max={max}
-            value={draft}
-            aria-label={`${name} quantity`}
-            onChange={(e) => {
-                const raw = e.target.value;
-                setDraft(raw);
-                const parsed = parseInt(raw, 10);
-                if (!Number.isNaN(parsed) && parsed >= 1) {
-                    onChangeQty(Math.min(max, parsed));
-                }
-            }}
-            onBlur={commitDraft}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitDraft();
-                    (e.currentTarget as HTMLInputElement).blur();
-                }
-            }}
-            onFocus={(e) => e.currentTarget.select()}
-            className="h-6 w-11 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] px-1 text-center text-[11.5px] font-bold tabular-nums text-slate-900 dark:text-slate-100 focus:border-[#FF4A1F] focus:outline-none"
-        />
+        <div className="w-11">
+            <Input
+                type="number"
+                min={1}
+                max={max}
+                value={draft}
+                aria-label={`${name} quantity`}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setDraft(raw);
+                    const parsed = parseInt(raw, 10);
+                    if (!Number.isNaN(parsed) && parsed >= 1) {
+                        onChangeQty(Math.min(max, parsed));
+                    }
+                }}
+                onBlur={commitDraft}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitDraft();
+                        (e.currentTarget as HTMLInputElement).blur();
+                    }
+                }}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-6 px-1 text-center text-[11.5px] font-bold tabular-nums focus:border-[#FF4A1F]"
+            />
+        </div>
     );
 }
 
@@ -1241,13 +1243,13 @@ export default function PosIndex({
                                         </button>
                                     </div>
                                 </div>
-                                <div className="flex h-[30px] items-center rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
+                                <div className="flex h-[30px] items-center rounded-[1px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] focus-within:border-slate-400 dark:focus-within:border-slate-500 overflow-hidden">
                                     {discountType === 'fixed' && (
                                         <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-r border-slate-200 dark:border-slate-700 select-none">
                                             {currencySymbol}
                                         </span>
                                     )}
-                                    <input
+                                    <Input
                                         id="pos-discount-input"
                                         type="number"
                                         min="0"
@@ -1287,7 +1289,7 @@ export default function PosIndex({
                                                 ? '0'
                                                 : '0.00'
                                         }
-                                        className="h-full w-full min-w-0 bg-transparent px-2.5 text-xs font-medium tabular-nums text-[#202223] dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none dark:[color-scheme:dark]"
+                                        className="h-[28px] border-0 bg-transparent px-2.5 text-xs font-medium tabular-nums"
                                     />
                                     {discountType === 'percent' && (
                                         <span className="px-2 h-full flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#151921] border-l border-slate-200 dark:border-slate-700 select-none">
@@ -1356,14 +1358,14 @@ export default function PosIndex({
                                             />
                                             {paymentMethod === 'cash' ? (
                                                 <div className="flex flex-col gap-0.5">
-                                                    <input
+                                                    <Input
                                                         type="number"
                                                         min="0"
                                                         step="0.01"
                                                         placeholder={`Given Cash (${currencySymbol})`}
                                                         value={givenCash}
                                                         onChange={(e) => setGivenCash(e.target.value)}
-                                                        className="h-[30px] rounded-[4px] border border-slate-300 dark:border-[#384150] bg-white dark:bg-[#1e2329] px-2 text-xs font-bold tabular-nums text-slate-900 dark:text-white focus:border-[#FF4A1F] focus:outline-none"
+                                                        className="h-[30px] px-2 text-xs font-bold tabular-nums focus:border-[#FF4A1F]"
                                                     />
                                                 </div>
                                             ) : (
@@ -1398,24 +1400,26 @@ export default function PosIndex({
                                         {splitPayments.map((row, rIdx) => (
                                             <div key={rIdx} className="grid grid-cols-12 gap-1.5 items-center">
                                                 <div className="col-span-5">
-                                                    <select
+                                                    <Select
+                                                        size="sm"
                                                         value={row.method}
                                                         onChange={(e) => {
                                                             const updated = [...splitPayments];
-                                                            updated[rIdx].method = e.target.value;
+                                                            updated[rIdx].method = String(e.target.value);
                                                             setSplitPayments(updated);
                                                         }}
-                                                        className="w-full h-7 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1f2631] text-[11px] px-1 font-semibold text-slate-800 dark:text-slate-100"
-                                                    >
-                                                        <option value="cash">Cash (নগদ)</option>
-                                                        <option value="bkash">bKash (বিকাশ)</option>
-                                                        <option value="nagad">Nagad (নগদ)</option>
-                                                        <option value="card">Card (কার্ড)</option>
-                                                        <option value="rocket">Rocket (রকেট)</option>
-                                                    </select>
+                                                        options={[
+                                                            { value: 'cash', label: 'Cash (নগদ)' },
+                                                            { value: 'bkash', label: 'bKash (বিকাশ)' },
+                                                            { value: 'nagad', label: 'Nagad (নগদ)' },
+                                                            { value: 'card', label: 'Card (কার্ড)' },
+                                                            { value: 'rocket', label: 'Rocket (রকেট)' },
+                                                        ]}
+                                                        triggerClassName="h-7 text-[11px] bg-white dark:bg-[#1f2631] px-2 font-semibold"
+                                                    />
                                                 </div>
                                                 <div className="col-span-6">
-                                                    <input
+                                                    <Input
                                                         type="number"
                                                         min="0"
                                                         step="0.01"
@@ -1426,7 +1430,7 @@ export default function PosIndex({
                                                             updated[rIdx].amount = e.target.value;
                                                             setSplitPayments(updated);
                                                         }}
-                                                        className="w-full h-7 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1f2631] px-1.5 text-[11px] font-bold tabular-nums text-slate-800 dark:text-slate-100"
+                                                        className="h-7 px-1.5 text-[11px] font-bold tabular-nums bg-white dark:bg-[#1f2631]"
                                                     />
                                                 </div>
                                                 <div className="col-span-1 flex justify-center">
@@ -1483,33 +1487,33 @@ export default function PosIndex({
                                         )}
                                         <div className="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-0.5">
-                                                    Paid Now / আজকে আদায় ({currencySymbol})
-                                                </label>
-                                                <input
+                                                <Input
+                                                    label={`Paid Now / আজকে আদায় (${currencySymbol})`}
                                                     type="number"
                                                     min="0"
                                                     max={grandTotal}
                                                     step="0.01"
                                                     value={duePaidNow}
                                                     onChange={(e) => setDuePaidNow(e.target.value)}
-                                                    className="w-full h-7 rounded border border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
+                                                    className="h-7 border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-bold tabular-nums"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-0.5">
                                                     Payment Method
                                                 </label>
-                                                <select
+                                                <Select
+                                                    size="sm"
                                                     value={dueMethod}
-                                                    onChange={(e) => setDueMethod(e.target.value)}
-                                                    className="w-full h-7 rounded border border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-1 text-xs font-medium text-slate-900 dark:text-white"
-                                                >
-                                                    <option value="cash">Cash (নগদ)</option>
-                                                    <option value="bkash">bKash (বিকাশ)</option>
-                                                    <option value="nagad">Nagad (নগদ)</option>
-                                                    <option value="card">Card (কার্ড)</option>
-                                                </select>
+                                                    onChange={(e) => setDueMethod(String(e.target.value))}
+                                                    options={[
+                                                        { value: 'cash', label: 'Cash (নগদ)' },
+                                                        { value: 'bkash', label: 'bKash (বিকাশ)' },
+                                                        { value: 'nagad', label: 'Nagad (নগদ)' },
+                                                        { value: 'card', label: 'Card (কার্ড)' },
+                                                    ]}
+                                                    triggerClassName="h-7 border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-medium"
+                                                />
                                             </div>
                                         </div>
                                         <div className="pt-1.5 border-t border-rose-200 dark:border-rose-900/50 flex justify-between items-center text-[11px] font-bold text-rose-700 dark:text-rose-300">

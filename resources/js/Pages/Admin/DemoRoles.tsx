@@ -12,6 +12,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/Card';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Textarea } from '@/Components/ui/Textarea';
 import { StatusDot } from '@/Components/ui/StatusDot';
@@ -274,8 +275,13 @@ export default function AdminDemoRoles({ roles }: AdminDemoRolesProps) {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormLayoutProvider labelWidth="sm:w-[175px]">
+                            <form onSubmit={handleSave} className="p-5 space-y-3 max-h-[80vh] overflow-y-auto text-xs">
+                                <Input
+                                    label="Role Key"
+                                    readOnly
+                                    value={editingRole.role_key}
+                                />
                                 <Input
                                     label="Title (English)"
                                     required
@@ -289,9 +295,6 @@ export default function AdminDemoRoles({ roles }: AdminDemoRolesProps) {
                                     onChange={(e) => form.setData('title_bn', e.target.value)}
                                     error={form.errors.title_bn}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
                                     label="Subtitle (English)"
                                     required
@@ -305,117 +308,104 @@ export default function AdminDemoRoles({ roles }: AdminDemoRolesProps) {
                                     onChange={(e) => form.setData('subtitle_bn', e.target.value)}
                                     error={form.errors.subtitle_bn}
                                 />
-                            </div>
-
-                            <Input
-                                label="Autofill Demo Email"
-                                required
-                                value={form.data.email}
-                                onChange={(e) => form.setData('email', e.target.value)}
-                                error={form.errors.email}
-                            />
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Input
+                                    label="Autofill Demo Email"
+                                    required
+                                    value={form.data.email}
+                                    onChange={(e) => form.setData('email', e.target.value)}
+                                    error={form.errors.email}
+                                />
                                 <Textarea
-                                    label="Full Role Description (English)"
+                                    label="Description (English)"
                                     rows={3}
                                     placeholder="Explain the role responsibilities in the pharmacy..."
                                     value={form.data.description_en}
                                     onChange={(e) => form.setData('description_en', e.target.value)}
                                 />
                                 <Textarea
-                                    label="Full Role Description (বাংলা)"
+                                    label="Description (বাংলা)"
                                     rows={3}
                                     placeholder="ফার্মেসিতে এই রোলের কাজ ও দায়িত্ব..."
                                     value={form.data.description_bn}
                                     onChange={(e) => form.setData('description_bn', e.target.value)}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Input
-                                    label="Tags / Badges (English - comma separated)"
+                                    label="Tags (English)"
                                     placeholder="Dashboard, POS, Reports"
                                     value={form.data.tags_en}
                                     onChange={(e) => form.setData('tags_en', e.target.value)}
                                 />
                                 <Input
-                                    label="Tags / Badges (বাংলা - কমা দিয়ে আলাদা করুন)"
+                                    label="Tags (বাংলা)"
                                     placeholder="ড্যাশবোর্ড, পিওএস, রিপোর্ট"
                                     value={form.data.tags_bn}
                                     onChange={(e) => form.setData('tags_bn', e.target.value)}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Textarea
-                                    label="What You Can Do / Features (English - 1 per line)"
+                                    label="Features (English)"
                                     rows={4}
                                     placeholder="Monitor multi-branch revenue&#10;Scan barcodes and bill"
                                     value={form.data.features_en}
                                     onChange={(e) => form.setData('features_en', e.target.value)}
                                 />
                                 <Textarea
-                                    label="What You Can Do / Features (বাংলা - প্রতি লাইনে ১টি)"
+                                    label="Features (বাংলা)"
                                     rows={4}
                                     placeholder="সব শাখার বিক্রি এক পর্দায় দেখুন&#10;বারকোড স্ক্যান করে বিল তৈরি"
                                     value={form.data.features_bn}
                                     onChange={(e) => form.setData('features_bn', e.target.value)}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Textarea
-                                    label="Access Restrictions (English - 1 per line)"
+                                    label="Restrictions (English)"
                                     rows={3}
                                     placeholder="Other tenant data is isolated&#10;Wholesale costs hidden"
                                     value={form.data.restrictions_en}
                                     onChange={(e) => form.setData('restrictions_en', e.target.value)}
                                 />
                                 <Textarea
-                                    label="Access Restrictions (বাংলা - প্রতি লাইনে ১টি)"
+                                    label="Restrictions (বাংলা)"
                                     rows={3}
                                     placeholder="অন্য ব্যবসার ডেটা দেখা যায় না&#10;পাইকারি মূল্য লুকানো"
                                     value={form.data.restrictions_bn}
                                     onChange={(e) => form.setData('restrictions_bn', e.target.value)}
                                 />
-                            </div>
 
-                            <div className="flex items-center gap-2 pt-2">
-                                <input
-                                    type="checkbox"
-                                    id="is_active_demo"
-                                    checked={form.data.is_active}
-                                    onChange={(e) => form.setData('is_active', e.target.checked)}
-                                    className="rounded border-slate-300 text-[#FF4A1F] focus:ring-[#FF4A1F]"
-                                />
-                                <label
-                                    htmlFor="is_active_demo"
-                                    className="text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
-                                >
-                                    Display this role on the public landing page demo explorer
-                                </label>
-                            </div>
+                                <div className="flex items-center gap-2 sm:pl-[185px] pt-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active_demo"
+                                        checked={form.data.is_active}
+                                        onChange={(e) => form.setData('is_active', e.target.checked)}
+                                        className="rounded border-slate-300 text-[#FF4A1F] focus:ring-[#FF4A1F]"
+                                    />
+                                    <label
+                                        htmlFor="is_active_demo"
+                                        className="text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
+                                    >
+                                        Display this role on the public landing page demo explorer
+                                    </label>
+                                </div>
 
-                            <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setEditingRole(null)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    size="sm"
-                                    isLoading={form.processing}
-                                >
-                                    Save Changes & Sync Landing Page
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setEditingRole(null)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        size="sm"
+                                        isLoading={form.processing}
+                                    >
+                                        Save Changes & Sync Landing Page
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </div>
                 </div>
             )}

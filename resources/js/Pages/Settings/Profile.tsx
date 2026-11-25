@@ -4,6 +4,7 @@ import { Eye, EyeOff, Lock, Mail, Phone, Save, User } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/Card';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { SharedPageProps } from '@/types';
 
@@ -55,49 +56,56 @@ export default function ProfileSettings() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={submitProfile} className="space-y-4">
-                            <Input
-                                label="Full Name"
-                                required
-                                value={profileForm.data.name}
-                                onChange={(e) =>
-                                    profileForm.setData('name', e.target.value)
-                                }
-                                error={profileForm.errors.name}
-                                icon={<User className="h-3.5 w-3.5" />}
-                            />
-                            <Input
-                                label="Email Address"
-                                type="email"
-                                required
-                                value={profileForm.data.email}
-                                onChange={(e) =>
-                                    profileForm.setData('email', e.target.value)
-                                }
-                                error={profileForm.errors.email}
-                                icon={<Mail className="h-3.5 w-3.5" />}
-                            />
-                            <Input
-                                label="Phone Number"
-                                value={profileForm.data.phone}
-                                onChange={(e) =>
-                                    profileForm.setData('phone', e.target.value)
-                                }
-                                error={profileForm.errors.phone}
-                                icon={<Phone className="h-3.5 w-3.5" />}
-                            />
+                        <FormLayoutProvider labelWidth="sm:w-[140px]">
+                            <form onSubmit={submitProfile} className="space-y-3">
+                                <Input
+                                    label="Account Type"
+                                    readOnly
+                                    value={(user?.account_type ?? 'staff').replace('_', ' ').toUpperCase()}
+                                />
+                                <Input
+                                    label="Full Name"
+                                    required
+                                    value={profileForm.data.name}
+                                    onChange={(e) =>
+                                        profileForm.setData('name', e.target.value)
+                                    }
+                                    error={profileForm.errors.name}
+                                    icon={<User className="h-3.5 w-3.5" />}
+                                />
+                                <Input
+                                    label="Email Address"
+                                    type="email"
+                                    required
+                                    value={profileForm.data.email}
+                                    onChange={(e) =>
+                                        profileForm.setData('email', e.target.value)
+                                    }
+                                    error={profileForm.errors.email}
+                                    icon={<Mail className="h-3.5 w-3.5" />}
+                                />
+                                <Input
+                                    label="Phone Number"
+                                    value={profileForm.data.phone}
+                                    onChange={(e) =>
+                                        profileForm.setData('phone', e.target.value)
+                                    }
+                                    error={profileForm.errors.phone}
+                                    icon={<Phone className="h-3.5 w-3.5" />}
+                                />
 
-                            <div className="flex justify-end pt-2">
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    isLoading={profileForm.processing}
-                                >
-                                    <Save className="h-3.5 w-3.5" />
-                                    Save Profile
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end pt-2">
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        isLoading={profileForm.processing}
+                                    >
+                                        <Save className="h-3.5 w-3.5" />
+                                        Save Profile
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormLayoutProvider>
                     </CardContent>
                 </Card>
 
@@ -109,7 +117,8 @@ export default function ProfileSettings() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={submitPassword} className="space-y-4">
+                        <FormLayoutProvider labelWidth="sm:w-[155px]">
+                            <form onSubmit={submitPassword} className="space-y-3">
                             <Input
                                 label="Current Password"
                                 type={showCurrent ? 'text' : 'password'}
@@ -195,6 +204,7 @@ export default function ProfileSettings() {
                                 </Button>
                             </div>
                         </form>
+                        </FormLayoutProvider>
                     </CardContent>
                 </Card>
             </div>

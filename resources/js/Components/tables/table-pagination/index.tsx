@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Select } from '@/Components/ui/Select';
 
 export interface TablePaginationProps {
     total: number;
@@ -69,23 +70,20 @@ export default function TablePagination({
                             {resolvedPerPageLabel}
                         </span>
                     )}
-                    <div className="relative">
-                        <select
+                    <div className="w-[62px]">
+                        <Select
+                            size="sm"
                             value={perPage}
+                            direction="up"
+                            showSearch={false}
                             onChange={(e) =>
                                 onPerPageChange(Number(e.target.value))
                             }
-                            className="h-7 pl-2 pr-5 text-[11px] font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#1e2329] border border-slate-200/80 dark:border-slate-700/60 rounded-[3px] shadow-none focus:border-[#ff4a1f] focus:ring-0 outline-none appearance-none cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
-                        >
-                            {options.map((opt) => (
-                                <option key={opt} value={opt}>
-                                    {opt}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown
-                            size={11}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
+                            options={options.map((opt) => ({
+                                value: opt,
+                                label: String(opt),
+                            }))}
+                            triggerClassName="h-7 px-2 pr-6 text-[11px] font-bold bg-white dark:bg-[#1e2329]"
                         />
                     </div>
                 </div>

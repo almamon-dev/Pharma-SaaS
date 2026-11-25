@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { router } from '@inertiajs/react';
 import { UserPlus, X } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 
 interface QuickCustomerModalProps {
@@ -86,62 +87,64 @@ export default function QuickCustomerModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                    {error && (
-                        <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-600 dark:text-rose-300">
-                            {error}
+                <FormLayoutProvider labelWidth="sm:w-[130px]">
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        {error && (
+                            <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-600 dark:text-rose-300">
+                                {error}
+                            </div>
+                        )}
+
+                        <Input
+                            label="Customer Name *"
+                            placeholder="e.g. মো: রফিকুল ইসলাম"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                            autoFocus
+                        />
+
+                        <Input
+                            label="Phone Number"
+                            placeholder="e.g. 017XXXXXXXX"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                        />
+
+                        <Input
+                            label="Address / Area"
+                            placeholder="e.g. মিরপুর-১০, ঢাকা"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                        />
+
+                        <Input
+                            label="Allergies / Notes"
+                            placeholder="e.g. Penicillin, Sulfa"
+                            value={allergies}
+                            onChange={(e) => setAllergies(e.target.value)}
+                        />
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={onClose}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                isLoading={loading}
+                            >
+                                Save & Select
+                            </Button>
                         </div>
-                    )}
-
-                    <Input
-                        label="Customer Name *"
-                        placeholder="e.g. মো: রফিকুল ইসলাম"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        autoFocus
-                    />
-
-                    <Input
-                        label="Phone Number"
-                        placeholder="e.g. 017XXXXXXXX"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                    />
-
-                    <Input
-                        label="Address / Area"
-                        placeholder="e.g. মিরপুর-১০, ঢাকা"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                    />
-
-                    <Input
-                        label="Allergies / Drug Sensitivity"
-                        placeholder="e.g. Penicillin, Sulfa"
-                        value={allergies}
-                        onChange={(e) => setAllergies(e.target.value)}
-                    />
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={onClose}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="sm"
-                            isLoading={loading}
-                        >
-                            Save & Select
-                        </Button>
-                    </div>
-                </form>
+                    </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );

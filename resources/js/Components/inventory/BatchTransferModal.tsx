@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { ArrowRightLeft, X } from 'lucide-react';
 import { Button } from '@/Components/ui/Button';
+import { FormLayoutProvider } from '@/Components/ui/FormLayout';
 import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { Textarea } from '@/Components/ui/Textarea';
@@ -104,57 +105,53 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                 </div>
 
                 {/* Body Form */}
-                <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                    {/* Batch Summary Box */}
-                    <div className="rounded-lg border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-[#141820] p-3 text-xs space-y-1">
-                        <div className="flex justify-between">
-                            <span className="text-slate-500">Medicine:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">
-                                {batch.medicine_name} ({batch.medicine_sku})
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-500">Source Branch:</span>
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {batch.branch_name}
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-500">Batch Number:</span>
-                            <span className="font-mono font-bold text-[#FF4A1F]">
-                                {batch.batch_number}
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-500">Available Stock:</span>
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {batch.quantity_available} {batch.unit ?? 'Pcs'}
-                            </span>
-                        </div>
-                    </div>
+                <FormLayoutProvider labelWidth="sm:w-[155px]">
+                    <form onSubmit={handleSubmit} className="p-5 space-y-3">
+                        {/* Auto-filled Read-only Batch Summary */}
+                        <Input
+                            label="Medicine"
+                            readOnly
+                            value={`${batch.medicine_name} (${batch.medicine_sku})`}
+                        />
+                        <Input
+                            label="Source Branch"
+                            readOnly
+                            value={batch.branch_name}
+                        />
+                        <Input
+                            label="Batch Number"
+                            readOnly
+                            value={batch.batch_number}
+                            className="font-mono font-semibold"
+                        />
+                        <Input
+                            label="Available Stock"
+                            readOnly
+                            value={`${batch.quantity_available} ${batch.unit ?? 'Pcs'}`}
+                            className="font-semibold"
+                        />
 
-                    {availableBranches.length === 0 ? (
-                        <div className="p-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-200 dark:border-amber-800">
-                            No other branches exist in this pharmacy to transfer stock to. Create a second branch first in Branch Management.
-                        </div>
-                    ) : (
-                        <>
-                            <Select
-                                label="Destination Branch (গন্তব্য শাখা)"
-                                required
-                                value={targetBranchId}
-                                options={availableBranches.map((b) => ({
-                                    id: String(b.id),
-                                    value: String(b.id),
-                                    name: b.name,
-                                }))}
-                                onChange={(e) => setTargetBranchId(String(e.target.value))}
-                                error={errors.target_branch_id}
-                            />
+                        {availableBranches.length === 0 ? (
+                            <div className="p-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-200 dark:border-amber-800">
+                                No other branches exist in this pharmacy to transfer stock to. Create a second branch first in Branch Management.
+                            </div>
+                        ) : (
+                            <>
+                                <Select
+                                    label="Destination Branch"
+                                    required
+                                    value={targetBranchId}
+                                    options={availableBranches.map((b) => ({
+                                        id: String(b.id),
+                                        value: String(b.id),
+                                        name: b.name,
+                                    }))}
+                                    onChange={(e) => setTargetBranchId(String(e.target.value))}
+                                    error={errors.target_branch_id}
+                                />
 
-                            <div className="space-y-1">
                                 <Input
-                                    label={`Transfer Quantity (${batch.unit ?? 'Units'})`}
+                                    label={`Transfer Qty (${batch.unit ?? 'Units'})`}
                                     type="number"
                                     required
                                     min={1}
@@ -163,45 +160,42 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                                     onChange={(e) => setQuantity(e.target.value)}
                                     error={errors.quantity}
                                 />
-                                <p className="text-[11px] text-slate-400">
-                                    Enter quantity from 1 to {batch.quantity_available}
-                                </p>
-                            </div>
 
-                            <Input
-                                label="Transfer Reason / Dispatch Note"
-                                placeholder="e.g. Stock replenishment for urgent demand"
-                                value={reason}
-                                onChange={(e) => setReason(e.target.value)}
-                                error={errors.reason}
-                            />
+                                <Input
+                                    label="Transfer Reason"
+                                    placeholder="e.g. Stock replenishment for urgent demand"
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    error={errors.reason}
+                                />
 
-                            <Textarea
-                                label="Dispatch Notes / Transit Reference"
-                                placeholder="Optional gate pass, vehicle number, or staff reference..."
-                                rows={2}
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                error={errors.notes}
-                            />
-                        </>
-                    )}
+                                <Textarea
+                                    label="Dispatch Notes"
+                                    placeholder="Optional gate pass, vehicle number, or staff reference..."
+                                    rows={2}
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    error={errors.notes}
+                                />
+                            </>
+                        )}
 
-                    {/* Footer buttons */}
-                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                        <Button type="button" variant="outline" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            isLoading={processing}
-                            disabled={availableBranches.length === 0 || batch.quantity_available < 1}
-                        >
-                            Confirm Branch Transfer
-                        </Button>
-                    </div>
-                </form>
+                        {/* Footer buttons */}
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                isLoading={processing}
+                                disabled={availableBranches.length === 0 || batch.quantity_available < 1}
+                            >
+                                Confirm Branch Transfer
+                            </Button>
+                        </div>
+                    </form>
+                </FormLayoutProvider>
             </div>
         </div>
     );
