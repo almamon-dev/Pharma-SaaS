@@ -18,6 +18,7 @@ class CounterSession extends Model
         'counter_id',
         'user_id',
         'status',
+        'shift', // 'morning', 'evening', 'night'
         'opened_at',
         'closed_at',
         'opening_float',
@@ -68,4 +69,3 @@ class CounterSession extends Model
         return $this->hasMany(CounterBreakLog::class);
     }
 }
-

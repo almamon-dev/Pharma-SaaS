@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Sale extends Model
 {
@@ -19,6 +21,10 @@ class Sale extends Model
         'counter_session_id',
         'customer_id',
         'user_id',
+        'salesman_id',
+        'cashier_id',
+        'order_number',
+        'order_status', // 'draft', 'submitted', 'unassigned', 'assigned', 'waiting', 'processing', 'payment_pending', 'partially_paid', 'paid', 'completed', 'cancelled', 'reassigned'
         'invoice_number',
         'subtotal',
         'discount_amount',
@@ -31,8 +37,17 @@ class Sale extends Model
         'payment_status',
         'doctor_name',
         'prescription_notes',
+        'prescription_file',
+        'requires_verification',
+        'verification_status', // 'not_required', 'pending', 'approved', 'rejected'
+        'verified_by',
         'notes',
         'sold_at',
+        'assigned_at',
+        'processing_started_at',
+        'completed_at',
+        'cancelled_at',
+        'cancellation_reason',
     ];
 
     protected function casts(): array
@@ -46,6 +61,11 @@ class Sale extends Model
             'due_amount' => 'decimal:2',
             'change_amount' => 'decimal:2',
             'sold_at' => 'datetime',
+            'assigned_at' => 'datetime',
+            'processing_started_at' => 'datetime',
+            'completed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
+            'requires_verification' => 'boolean',
         ];
     }
 
@@ -69,9 +89,24 @@ class Sale extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    public function cashier(): BelongsTo
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function salesman(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'salesman_id');
+    }
+
+    public function cashier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cashier_id');
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
     public function payments(): HasMany
@@ -82,5 +117,48 @@ class Sale extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SaleItem::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(CounterAssignment::class);
+    }
+
+    public function latestAssignment(): HasOne
+    {
+        return $this->hasOne(CounterAssignment::class)->latestOfMany();
+    }
+
+    public function statusHistories(): HasMany
+    {
+        return $this->hasMany(SaleStatusHistory::class)->orderBy('created_at', 'desc');
+    }
+
+    public function recordStatus(string $toStatus, ?User $user = null, ?string $reason = null, ?array $metadata = null): void
+    {
+        $fromStatus = $this->order_status;
+        $this->order_status = $toStatus;
+        $this->save();
+
+        SaleStatusHistory::query()->create([
+            'tenant_id' => $this->tenant_id,
+            'sale_id' => $this->id,
+            'user_id' => $user?->id ?? auth()->id(),
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'reason' => $reason,
+            'metadata' => $metadata,
+            'created_at' => now(),
+        ]);
+    }
+
+    public function scopeActiveQueue(Builder $query): Builder
+    {
+        return $query->whereIn('order_status', ['assigned', 'waiting', 'processing']);
+    }
+
+    public function scopeUnassigned(Builder $query): Builder
+    {
+        return $query->where('order_status', 'unassigned');
     }
 }

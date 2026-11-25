@@ -10,6 +10,7 @@ enum TenantRole: string
     case MANAGER = 'manager';
     case PHARMACIST = 'pharmacist';
     case CASHIER = 'cashier';
+    case SALESMAN = 'salesman';
     case INVENTORY_CLERK = 'inventory_clerk';
 
     public const PERMISSION_CATALOG = [
@@ -22,6 +23,37 @@ enum TenantRole: string
         'branches.manage' => 'Create & Toggle Pharmacy Branches',
         'team.manage' => 'Manage Employees & Assign Roles',
         'settings.manage' => 'Edit Business Compliance & Preferences',
+
+        // Cash Counter & Cash Register
+        'cash_counters.view' => 'View Cash Counters & Terminals',
+        'cash_counters.create' => 'Create Cash Counter Terminals',
+        'cash_counters.edit' => 'Configure Counter Location & Capacity',
+        'cash_counters.delete' => 'Delete Inactive Cash Counters',
+        'cash_counters.assign_cashier' => 'Assign Cashiers to Counter & Shift Schedules',
+        'cash_counters.activate' => 'Activate or Deactivate Cash Counters',
+        'cash_counters.view_all_branches' => 'Monitor Counter Queues Across All Branches',
+        'cash_register.open' => 'Open Shift Register with Opening Cash Float',
+        'cash_register.close' => 'Close Shift Register & Count Physical Cash',
+        'cash_register.cash_in' => 'Deposit Cash Float / Top-up',
+        'cash_register.cash_out' => 'Withdraw Cash from Register',
+        'cash_register.reconcile' => 'Reconcile Cash & Review Z-Report Discrepancy',
+
+        // Sales Orders & Routing
+        'sales_orders.create' => 'Create Sales Orders & Search Medicines',
+        'sales_orders.view_own' => 'Track Own Created Sales Orders',
+        'sales_orders.submit' => 'Submit Order for Dynamic Counter Routing',
+        'sales_orders.cancel' => 'Cancel Pending Sales Orders',
+        'sales_orders.view_assigned' => 'View Orders Assigned to Cashier Counter',
+        'sales_orders.process' => 'Accept & Process Counter Sales Orders',
+        'sales_orders.reassign' => 'Reassign Orders Between Counters (Manager Override)',
+        'sales_orders.view_all' => 'View All Branch Order Queues & History',
+
+        // Payments & Invoicing
+        'payments.receive' => 'Collect Cash, Card & Mobile Banking Payments',
+        'payments.view' => 'View Transaction & Collection History',
+        'payments.refund' => 'Process Order Payment Refunds',
+        'invoices.create' => 'Generate Official Sales Invoices',
+        'invoices.print' => 'Print & Thermal Reprint Cash Receipts',
     ];
 
     public function label(): string
@@ -31,6 +63,7 @@ enum TenantRole: string
             self::MANAGER => 'Branch Manager',
             self::PHARMACIST => 'Licensed Pharmacist',
             self::CASHIER => 'POS Cashier',
+            self::SALESMAN => 'Pharmacy Salesman',
             self::INVENTORY_CLERK => 'Inventory & Supply Clerk',
         };
     }
@@ -39,9 +72,10 @@ enum TenantRole: string
     {
         return match ($this) {
             self::ADMIN => 'Full business authority across subscription, businesses/tenants, branches, CRM, team & billing.',
-            self::MANAGER => 'Manages branch operations, inventory, CRM directory, and assigned branch team members.',
-            self::PHARMACIST => 'Dispenses prescriptions, manages FEFO stock intake, and reviews patient allergies.',
-            self::CASHIER => 'Operates retail POS counter checkout, customer lookup, and receipts.',
+            self::MANAGER => 'Manages branch operations, inventory, counter assignments, CRM directory, and branch team members.',
+            self::PHARMACIST => 'Dispenses prescriptions, verifies orders, manages FEFO stock intake, and reviews patient allergies.',
+            self::CASHIER => 'Operates counter terminal, accepts assigned orders, processes multi-channel payments, and prints invoices.',
+            self::SALESMAN => 'Creates customer medicine orders, selects batches, uploads prescriptions, and submits for automated counter routing.',
             self::INVENTORY_CLERK => 'Handles supplier procurement, medicine stock batches, and expiry alerts.',
         };
     }
@@ -63,6 +97,24 @@ enum TenantRole: string
                 'branches.manage',
                 'team.manage',
                 'settings.manage',
+                'cash_counters.view',
+                'cash_counters.create',
+                'cash_counters.edit',
+                'cash_counters.delete',
+                'cash_counters.assign_cashier',
+                'cash_counters.activate',
+                'cash_counters.view_all_branches',
+                'cash_register.open',
+                'cash_register.close',
+                'cash_register.reconcile',
+                'sales_orders.create',
+                'sales_orders.view_all',
+                'sales_orders.reassign',
+                'sales_orders.process',
+                'payments.receive',
+                'payments.view',
+                'invoices.create',
+                'invoices.print',
             ],
             self::PHARMACIST => [
                 'pos.sell',
@@ -71,10 +123,33 @@ enum TenantRole: string
                 'inventory.adjust',
                 'crm.view',
                 'crm.manage',
+                'sales_orders.create',
+                'sales_orders.view_all',
+                'sales_orders.process',
+                'invoices.create',
+                'invoices.print',
             ],
             self::CASHIER => [
                 'pos.sell',
                 'crm.view',
+                'cash_counters.view',
+                'cash_register.open',
+                'cash_register.close',
+                'cash_register.reconcile',
+                'sales_orders.view_assigned',
+                'sales_orders.process',
+                'payments.receive',
+                'payments.view',
+                'invoices.create',
+                'invoices.print',
+            ],
+            self::SALESMAN => [
+                'inventory.view',
+                'crm.view',
+                'sales_orders.create',
+                'sales_orders.view_own',
+                'sales_orders.submit',
+                'sales_orders.cancel',
             ],
             self::INVENTORY_CLERK => [
                 'inventory.view',

@@ -34,6 +34,20 @@ return Application::configure(basePath: dirname(__DIR__))
             'feature' => \App\Modules\Billing\Middleware\EnsureFeatureEnabled::class,
         ]);
 
+        $middleware->priority([
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+            \Illuminate\Auth\Middleware\Authenticate::class,
+            EnsureTenantContext::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Illuminate\Auth\Middleware\Authorize::class,
+        ]);
+
         $middleware->redirectGuestsTo(fn (Request $request): string => (
             $request->attributes->get(IdentifyTenantFromDomain::ADMIN_ATTRIBUTE)
             || $request->attributes->has(IdentifyTenantFromDomain::REQUEST_ATTRIBUTE)

@@ -119,6 +119,11 @@ export default function Login() {
                                     desc: 'POS',
                                 },
                                 {
+                                    label: '💼 Salesman',
+                                    email: 'salesman@pharmacore.test',
+                                    desc: 'Orders',
+                                },
+                                {
                                     label: '📦 Clerk',
                                     email: 'clerk@pharmacore.test',
                                     desc: 'Inventory',

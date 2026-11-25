@@ -120,6 +120,19 @@ class DemoPharmacySeeder extends Seeder
             ]
         );
 
+        $salesman = User::query()->updateOrCreate(
+            ['email' => 'salesman@pharmacore.test'],
+            [
+                'name' => 'Mahbub Hossain',
+                'phone' => '+880 1711-000505',
+                'password' => Hash::make('password'),
+                'account_type' => 'staff',
+                'subscriber_id' => $admin->id,
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]
+        );
+
         // Tenant 1: GreenLife Pharmacy & Diagnostics
         $greenlife = Tenant::query()->updateOrCreate(
             ['slug' => 'greenlife-pharmacy'],
@@ -233,6 +246,14 @@ class DemoPharmacySeeder extends Seeder
                 'is_active' => true,
                 'joined_at' => now()->subMonth(),
             ],
+            $salesman->id => [
+                'branch_id' => $bananiBranch->id,
+                'is_owner' => false,
+                'role' => TenantRole::SALESMAN->value,
+                'roles' => json_encode([TenantRole::SALESMAN->value]),
+                'is_active' => true,
+                'joined_at' => now()->subMonth(),
+            ],
         ]);
 
         // Tenant 2 under same Subscriber Admin 1: CarePlus Medico Hub
@@ -293,6 +314,7 @@ class DemoPharmacySeeder extends Seeder
         $manager->update(['current_tenant_id' => $greenlife->id]);
         $pharmacist->update(['current_tenant_id' => $greenlife->id]);
         $cashier->update(['current_tenant_id' => $greenlife->id]);
+        $salesman->update(['current_tenant_id' => $greenlife->id]);
 
         $provisionAccess->execute($greenlife);
         $provisionAccess->execute($careplus);

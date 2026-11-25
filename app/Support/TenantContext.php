@@ -118,15 +118,24 @@ class TenantContext
         return $this->tenant !== null;
     }
 
-    public function hasRole(string|array $roles): bool
+    public function hasRole(string|array ...$roles): bool
     {
         if ($this->isOwner) {
             return true;
         }
 
+        $flattened = [];
+        foreach ($roles as $r) {
+            if (is_array($r)) {
+                $flattened = array_merge($flattened, $r);
+            } else {
+                $flattened[] = $r;
+            }
+        }
+
         $expected = array_map(
             fn (string $r) => TenantRole::normalize($r),
-            is_array($roles) ? $roles : [$roles]
+            $flattened
         );
 
         foreach ($this->roles as $assigned) {
@@ -138,15 +147,22 @@ class TenantContext
         return false;
     }
 
-    public function hasPermission(string|array $permissions): bool
+    public function hasPermission(string|array ...$permissions): bool
     {
         if ($this->isOwner || in_array(TenantRole::ADMIN->value, $this->roles, true)) {
             return true;
         }
 
-        $expected = is_array($permissions) ? $permissions : [$permissions];
+        $flattened = [];
+        foreach ($permissions as $p) {
+            if (is_array($p)) {
+                $flattened = array_merge($flattened, $p);
+            } else {
+                $flattened[] = $p;
+            }
+        }
 
-        foreach ($expected as $perm) {
+        foreach ($flattened as $perm) {
             if (in_array($perm, $this->permissions, true)) {
                 return true;
             }

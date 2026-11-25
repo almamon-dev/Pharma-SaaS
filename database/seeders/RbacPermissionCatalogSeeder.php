@@ -84,6 +84,37 @@ class RbacPermissionCatalogSeeder extends Seeder
             ['key' => 'shift.open_close', 'module' => 'Accounts', 'action' => 'shift_manage', 'description' => 'Open, declare cash drawer & close register shift', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => true],
             ['key' => 'shift.view_all', 'module' => 'Accounts', 'action' => 'shift_view_all', 'description' => 'View all employee cash shifts across branches', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
 
+            // Cash Counter & Register Management
+            ['key' => 'cash_counters.view', 'module' => 'Counters', 'action' => 'view_counters', 'description' => 'View cash counter stations & queue metrics', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => true],
+            ['key' => 'cash_counters.create', 'module' => 'Counters', 'action' => 'create_counter', 'description' => 'Create new cash counter terminals', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_counters.edit', 'module' => 'Counters', 'action' => 'edit_counter', 'description' => 'Edit counter configuration & queue limits', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_counters.delete', 'module' => 'Counters', 'action' => 'delete_counter', 'description' => 'Delete inactive cash counter terminals', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_counters.assign_cashier', 'module' => 'Counters', 'action' => 'assign_cashier', 'description' => 'Assign cashiers & shift schedules to counters', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_counters.activate', 'module' => 'Counters', 'action' => 'activate_counter', 'description' => 'Activate or deactivate cash counters', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_counters.view_all_branches', 'module' => 'Counters', 'action' => 'view_all_counters', 'description' => 'Monitor counter queues across all branches', 'is_sensitive' => true, 'requires_feature' => 'branches', 'supports_scope' => false],
+            ['key' => 'cash_register.open', 'module' => 'Counters', 'action' => 'open_register', 'description' => 'Open shift register session with cash float', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_register.close', 'module' => 'Counters', 'action' => 'close_register', 'description' => 'Close shift register session & count cash', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_register.cash_in', 'module' => 'Counters', 'action' => 'cash_in', 'description' => 'Cash float in / register top-up', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_register.cash_out', 'module' => 'Counters', 'action' => 'cash_out', 'description' => 'Cash float withdrawal from register', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'cash_register.reconcile', 'module' => 'Counters', 'action' => 'reconcile', 'description' => 'Review cash drawer discrepancy & Z-Report', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+
+            // Sales Orders & Routing
+            ['key' => 'sales_orders.create', 'module' => 'Sales', 'action' => 'create_order', 'description' => 'Create medicine order and select batches', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.view_own', 'module' => 'Sales', 'action' => 'view_own_orders', 'description' => 'Track own created sales orders & status', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.submit', 'module' => 'Sales', 'action' => 'submit_order', 'description' => 'Submit order for automatic counter routing', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.cancel', 'module' => 'Sales', 'action' => 'cancel_order', 'description' => 'Cancel pending or unassigned sales orders', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.view_assigned', 'module' => 'Sales', 'action' => 'view_assigned_orders', 'description' => 'View incoming order queue assigned to counter', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.process', 'module' => 'Sales', 'action' => 'process_order', 'description' => 'Accept and process counter order payment', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.reassign', 'module' => 'Sales', 'action' => 'reassign_order', 'description' => 'Manually reassign order between counter queues', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'sales_orders.view_all', 'module' => 'Sales', 'action' => 'view_all_orders', 'description' => 'View all branch order queues & audit history', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => true],
+
+            // Payments & Invoices
+            ['key' => 'payments.receive', 'module' => 'Sales', 'action' => 'receive_payment', 'description' => 'Collect cash, card or mobile banking payment', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'payments.view', 'module' => 'Sales', 'action' => 'view_payments', 'description' => 'View payment transaction logs', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'payments.refund', 'module' => 'Sales', 'action' => 'refund_payment', 'description' => 'Process customer payment refund', 'is_sensitive' => true, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'invoices.create', 'module' => 'Sales', 'action' => 'create_invoice', 'description' => 'Issue official sales invoice', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+            ['key' => 'invoices.print', 'module' => 'Sales', 'action' => 'print_invoice', 'description' => 'Print POS customer receipt invoice', 'is_sensitive' => false, 'requires_feature' => 'pos', 'supports_scope' => false],
+
             // Reports
             ['key' => 'report.sales', 'module' => 'Reports', 'action' => 'view_sales', 'description' => 'View sales & register breakdown reports', 'is_sensitive' => false, 'requires_feature' => null, 'supports_scope' => true],
             ['key' => 'report.profit', 'module' => 'Reports', 'action' => 'view_profit', 'description' => 'View profit and loss / margins reports', 'is_sensitive' => true, 'requires_feature' => null, 'supports_scope' => false],

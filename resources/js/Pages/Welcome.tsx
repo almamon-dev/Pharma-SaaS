@@ -141,6 +141,35 @@ const roleDemoItems: RoleDemoItem[] = [
         ],
     },
     {
+        id: 'salesman',
+        roleKey: 'salesman',
+        titleBn: 'সেলসম্যান',
+        titleEn: 'Salesman',
+        subtitleBn: 'সেলস অর্ডার ও ট্র্যাকিং',
+        subtitleEn: 'Sales orders & tracking',
+        email: 'salesman@pharmacore.test',
+        tagsBn: ['সেলস অর্ডার', 'ওষুধ সার্চ', 'প্রেসক্রিপশন আপলোড', 'অর্ডার ট্র্যাকিং'],
+        tagsEn: ['Sales Orders', 'Medicine Search', 'Prescription Upload', 'Order Tracking'],
+        canDoBn: [
+            'গ্রাহকের জন্য দ্রুত সেলস অর্ডার তৈরি',
+            'বারকোড স্ক্যান ও প্রেসক্রিপশন আপলোড',
+            'কাউন্টার অ্যাসাইনমেন্ট ও অর্ডারের লাইভ ট্র্যাকিং',
+        ],
+        canDoEn: [
+            'Create sales orders for customers instantly',
+            'Scan barcodes and upload prescriptions',
+            'Track automatic counter routing in real time',
+        ],
+        cannotDoBn: [
+            'ক্যাশ ড্রয়ার বা পেমেন্ট কালেকশন বন্ধ',
+            'স্টক সমন্বয় ও পাইকারি ক্রয়মূল্য লকড',
+        ],
+        cannotDoEn: [
+            'Direct cash collection & drawer register locked',
+            'Stock adjustments and cost pricing concealed',
+        ],
+    },
+    {
         id: 'manager',
         roleKey: 'manager',
         titleBn: 'ব্রাঞ্চ ম্যানেজার',

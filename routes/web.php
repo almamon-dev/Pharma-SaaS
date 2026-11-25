@@ -6,11 +6,13 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Billing\FeatureAccessController;
 use App\Http\Controllers\Billing\PlanBrowseController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\CashierDashboardController;
 use App\Http\Controllers\CounterController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\SalesOrderController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\TeamController;
@@ -125,6 +127,70 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/counters/{counter}/close-session', [CounterController::class, 'closeSession'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.close-session');
+    Route::post('/counters/{counter}/assign-cashier', [CounterController::class, 'assignCashier'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.assign-cashier');
+    Route::delete('/counters/{counter}/cashiers/{cashier}', [CounterController::class, 'unassignCashier'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.unassign-cashier');
+    Route::get('/counters/monitoring', [CounterController::class, 'monitoring'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.monitoring');
+    Route::post('/counters/orders/{sale}/reassign', [CounterController::class, 'reassign'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.orders.reassign');
+    Route::post('/counters/retry-unassigned', [CounterController::class, 'retryUnassigned'])
+        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->name('counters.retry-unassigned');
+
+    // Salesman Order Management & Dynamic Routing
+    Route::get('/sales/orders', fn () => redirect()->route('sales.orders.create'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,sales_orders.view_own,admin,manager,salesman']);
+    Route::get('/sales/order/create', fn () => redirect()->route('sales.orders.create'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,admin,manager,salesman']);
+    Route::get('/sales', fn () => redirect()->route('sales.orders.create'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,sales_orders.view_own,admin,manager,salesman']);
+    Route::get('/orders', fn () => redirect()->route('sales.orders.create'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,sales_orders.view_own,admin,manager,salesman']);
+    Route::get('/salesman', fn () => redirect()->route('sales.orders.create'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,sales_orders.view_own,admin,manager,salesman']);
+    Route::get('/salesman/orders', fn () => redirect()->route('sales.orders.my-orders'))
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,admin,manager,salesman']);
+    Route::get('/sales/orders/create', [SalesOrderController::class, 'create'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,admin,manager,salesman'])
+        ->name('sales.orders.create');
+    Route::post('/sales/orders', [SalesOrderController::class, 'store'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.create,admin,manager,salesman'])
+        ->name('sales.orders.store');
+    Route::get('/sales/orders/my-orders', [SalesOrderController::class, 'myOrders'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,admin,manager,salesman'])
+        ->name('sales.orders.my-orders');
+    Route::get('/sales/orders/{sale}/track', [SalesOrderController::class, 'track'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,sales_orders.create,admin,manager,salesman,cashier'])
+        ->name('sales.orders.track');
+    Route::post('/sales/orders/{sale}/cancel', [SalesOrderController::class, 'cancel'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.cancel,admin,manager,salesman'])
+        ->name('sales.orders.cancel');
+
+    // Cashier Workstation & Dynamic Queue Dashboard
+    Route::get('/cashier/dashboard', [CashierDashboardController::class, 'dashboard'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
+        ->name('cashier.dashboard');
+    Route::post('/cashier/orders/{sale}/accept', [CashierDashboardController::class, 'accept'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.process,cashier,admin,manager'])
+        ->name('cashier.orders.accept');
+    Route::post('/cashier/orders/{sale}/pay', [CashierDashboardController::class, 'processPayment'])
+        ->middleware(['feature:pos', 'tenant.role:payments.receive,cashier,admin,manager'])
+        ->name('cashier.orders.pay');
+    Route::post('/cashier/orders/{sale}/process-payment', [CashierDashboardController::class, 'processPayment'])
+        ->middleware(['feature:pos', 'tenant.role:payments.receive,cashier,admin,manager'])
+        ->name('cashier.orders.process-payment');
+    Route::post('/cashier/orders/{sale}/request-reassign', [CashierDashboardController::class, 'requestReassign'])
+        ->middleware(['feature:pos', 'tenant.role:cashier,admin,manager'])
+        ->name('cashier.orders.request-reassign');
+    Route::get('/cashier/orders/{sale}/invoice', [CashierDashboardController::class, 'invoice'])
+        ->middleware(['feature:pos', 'tenant.role:invoices.print,cashier,admin,manager'])
+        ->name('cashier.orders.invoice');
 
     Route::get('/inventory', [InventoryController::class, 'index'])
         ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])

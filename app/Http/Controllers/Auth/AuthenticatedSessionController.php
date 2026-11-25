@@ -130,6 +130,7 @@ class AuthenticatedSessionController extends Controller
                 'superadmin' => 'superadmin@pharmacore.test',
                 'pharmacist' => 'pharmacist@pharmacore.test',
                 'cashier' => 'cashier@pharmacore.test',
+                'salesman' => 'salesman@pharmacore.test',
                 'inventory_clerk', 'clerk' => 'clerk@pharmacore.test',
                 'manager', 'pathologist', 'radiologist' => 'manager@pharmacore.test',
                 default => 'admin@pharmacore.test',
@@ -170,7 +171,20 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        $targetRoute = $request->input('target', 'dashboard');
+        $targetRoute = $request->input('target');
+        if (! $targetRoute) {
+            if ($role === 'cashier' && ! $request->has('email')) {
+                $targetRoute = 'pos';
+            } elseif ($role === 'salesman') {
+                $targetRoute = 'sales_orders';
+            } else {
+                $targetRoute = 'dashboard';
+            }
+        }
+
+        if ($targetRoute === 'sales_orders') {
+            return redirect()->route('sales.orders.create');
+        }
 
         return redirect()->route($targetRoute === 'pos' ? 'pos.index' : 'dashboard');
     }

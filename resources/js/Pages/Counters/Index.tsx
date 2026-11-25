@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import {
+    Activity,
     Check,
     Coffee,
     Edit2,
@@ -13,7 +14,10 @@ import {
     Store,
     Trash2,
     User,
+    UserCheck,
+    Users,
     X,
+    Zap,
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
@@ -27,12 +31,45 @@ import {
     TakeBreakModal,
 } from '../Pos/components/PosShiftModals';
 
+export interface AssignedCashierData {
+    id: number;
+    user_id: number;
+    user_name?: string;
+    shift: 'morning' | 'evening' | 'night' | 'any';
+    is_primary: boolean;
+    is_active: boolean;
+}
+
+export interface ExtendedCounterData extends Omit<PosCounterData, 'current_session'> {
+    location?: string | null;
+    max_queue_capacity?: number;
+    auto_assignment_enabled?: boolean;
+    active_queue_count?: number;
+    assigned_cashiers?: AssignedCashierData[];
+    printer_ip?: string | null;
+    terminal_device_id?: string | null;
+    is_active?: boolean;
+    current_user?: { id: number; name: string } | null;
+    current_session?: {
+        id: number;
+        user_id: number;
+        user_name?: string | null;
+        shift?: string;
+        opened_at?: string | null;
+        opening_float: number;
+        total_sales_amount: number;
+        total_transactions: number;
+        system_expected_cash: number;
+    } | null;
+}
+
 interface RecentSession {
     id: number;
     counter_code?: string;
     counter_name?: string;
     user_name?: string;
     status: string;
+    shift?: string;
     opened_at?: string;
     closed_at?: string;
     opening_float: number;
@@ -44,9 +81,16 @@ interface RecentSession {
     notes?: string | null;
 }
 
+interface EligibleCashier {
+    id: number;
+    name: string;
+    email?: string;
+}
+
 interface CountersIndexProps {
-    counters: PosCounterData[];
+    counters: ExtendedCounterData[];
     recentSessions: RecentSession[];
+    eligibleCashiers?: EligibleCashier[];
     branchName?: string | null;
     currency: string;
     canManageCounters?: boolean;
@@ -56,13 +100,15 @@ interface CountersIndexProps {
 export default function CountersIndex({
     counters = [],
     recentSessions = [],
+    eligibleCashiers = [],
     branchName,
     currency = 'BDT',
     canManageCounters = true,
     isCashier = false,
 }: CountersIndexProps) {
     const [createModalOpen, setCreateModalOpen] = useState(false);
-    const [editingCounter, setEditingCounter] = useState<PosCounterData | null>(null);
+    const [editingCounter, setEditingCounter] = useState<ExtendedCounterData | null>(null);
+    const [assignCashierCounter, setAssignCashierCounter] = useState<ExtendedCounterData | null>(null);
 
     // Active session modal targets
     const [openShiftCounter, setOpenShiftCounter] = useState<PosCounterData | null>(null);
@@ -73,7 +119,7 @@ export default function CountersIndex({
     const [resumeError, setResumeError] = useState('');
     const [resumeSubmitting, setResumeSubmitting] = useState(false);
 
-    const handleDeleteCounter = (counter: PosCounterData) => {
+    const handleDeleteCounter = (counter: ExtendedCounterData) => {
         if (counter.status !== 'closed') {
             alert(`Cannot delete Counter ${counter.code} while a shift is active. Please close the shift first.`);
             return;
@@ -105,6 +151,7 @@ export default function CountersIndex({
                 c.code.toLowerCase().includes(q) ||
                 c.name.toLowerCase().includes(q) ||
                 c.type.toLowerCase().includes(q) ||
+                (c.location && c.location.toLowerCase().includes(q)) ||
                 (c.current_user_name && c.current_user_name.toLowerCase().includes(q))
             );
         }
@@ -144,42 +191,58 @@ export default function CountersIndex({
             subtitle={
                 isCashier
                     ? `${branchName ?? 'Branch'} · Personal shift station, float, and sales log`
-                    : `${branchName ?? 'Branch'} · Counter terminals & cashier shifts`
+                    : `${branchName ?? 'Branch'} · Counter terminals, cashier shift schedules, & dynamic queues`
             }
             actions={
-                canManageCounters ? (
-                    <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setCreateModalOpen(true)}
-                        className="gap-1.5 bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-medium rounded-[4px]"
-                    >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add Counter</span>
-                    </Button>
-                ) : (
-                    <Link href={route('pos.index')}>
+                <div className="flex items-center gap-2">
+                    {canManageCounters && (
+                        <Link href={route('counters.monitoring')}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-[3px] hover:bg-slate-100 dark:hover:bg-slate-800"
+                            >
+                                <Activity className="h-3.5 w-3.5 text-[#FF4A1F]" />
+                                <span>Live Queue Monitor</span>
+                            </Button>
+                        </Link>
+                    )}
+
+                    {canManageCounters ? (
                         <Button
                             type="button"
                             variant="primary"
                             size="sm"
-                            className="gap-1.5 bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-medium rounded-[4px]"
+                            onClick={() => setCreateModalOpen(true)}
+                            className="gap-1.5 bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-semibold rounded-[3px]"
                         >
-                            <ShoppingCart className="h-3.5 w-3.5" />
-                            <span>Open POS Terminal</span>
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Add Counter</span>
                         </Button>
-                    </Link>
-                )
+                    ) : (
+                        <Link href={route('pos.index')}>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                className="gap-1.5 bg-[#FF4A1F] hover:bg-[#e03d15] text-white text-xs font-semibold rounded-[3px]"
+                            >
+                                <ShoppingCart className="h-3.5 w-3.5" />
+                                <span>Open POS Terminal</span>
+                            </Button>
+                        </Link>
+                    )}
+                </div>
             }
         >
             <Head title={isCashier ? 'My Shift & Register' : 'Counters & Shifts'} />
 
             <div className="space-y-3.5">
-                {/* Segmented Control & Search (or Cashier Status Banner) */}
+                {/* Segmented Control & Search */}
                 {canManageCounters ? (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <div className="inline-flex items-center gap-1 bg-slate-100/80 dark:bg-[#181d26] p-0.5 rounded-[4px] border border-slate-200/60 dark:border-slate-800/60 overflow-x-auto text-xs">
+                        <div className="inline-flex items-center gap-1 bg-slate-100/80 dark:bg-[#181d26] p-0.5 rounded-[3px] border border-slate-200/60 dark:border-slate-800/60 overflow-x-auto text-xs">
                             <button
                                 type="button"
                                 onClick={() => setStatusFilter('all')}
@@ -231,11 +294,11 @@ export default function CountersIndex({
 
                         <div className="w-full sm:w-64">
                             <Input
-                                placeholder="Filter counter or cashier..."
+                                placeholder="Filter counter, cashier, zone..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 icon={<Search className="h-3.5 w-3.5 text-slate-400" />}
-                                className="h-8 text-xs rounded-[4px]"
+                                className="h-8 text-xs rounded-[3px]"
                             />
                         </div>
                     </div>
@@ -252,9 +315,9 @@ export default function CountersIndex({
                     </div>
                 )}
 
-                {/* Counter Stations Grid (Internal Summary Metric Card Design) */}
+                {/* Counter Stations Grid */}
                 {filteredCounters.length === 0 ? (
-                    <div className="text-center py-10 rounded-[4px] border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-[#12161c] p-6">
+                    <div className="text-center py-10 rounded-[3px] border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-[#12161c] p-6">
                         <Store className="h-8 w-8 mx-auto text-slate-400 mb-2" />
                         <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">No counters found</h4>
                         <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs mx-auto">
@@ -268,6 +331,9 @@ export default function CountersIndex({
                             const isActive = counter.status === 'active';
                             const isOnBreak = counter.status === 'on_break';
                             const isClosed = counter.status === 'closed';
+                            const queueCount = counter.active_queue_count ?? 0;
+                            const maxCapacity = counter.max_queue_capacity ?? 20;
+                            const isFull = queueCount >= maxCapacity;
 
                             const actionItems: TableActionItem[] = [
                                 ...(isClosed
@@ -313,6 +379,12 @@ export default function CountersIndex({
                                 ...(canManageCounters
                                     ? [
                                           {
+                                              key: 'assign-cashier',
+                                              label: 'Assign Cashiers & Shifts',
+                                              icon: <Users className="h-3.5 w-3.5 text-blue-600" />,
+                                              onClick: () => setAssignCashierCounter(counter),
+                                          },
+                                          {
                                               key: 'edit',
                                               label: 'Edit Counter',
                                               icon: <Edit2 className="h-3.5 w-3.5 text-slate-500" />,
@@ -332,34 +404,85 @@ export default function CountersIndex({
                             return (
                                 <div
                                     key={counter.id}
-                                    className="rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none"
+                                    className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] flex flex-col justify-between overflow-hidden transition-all shadow-none"
                                 >
-                                    {/* Card Header (Compact, no clutter) */}
+                                    {/* Card Header */}
                                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-[#151921]/50">
-                                        <div className="flex items-start gap-2">
-                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs text-slate-800 dark:text-slate-200 shrink-0 mt-0.5">
-                                                {counter.code}
-                                            </span>
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug break-words">
-                                                    {counter.name}
-                                                </h4>
-                                                <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5 flex-wrap">
-                                                    <span className="uppercase font-semibold tracking-wider">{counter.type}</span>
-                                                    {counter.zone && <span>· {counter.zone}</span>}
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                                <span className="px-1.5 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs text-slate-800 dark:text-slate-200 shrink-0 mt-0.5">
+                                                    {counter.code}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug truncate">
+                                                        {counter.name}
+                                                    </h4>
+                                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5 flex-wrap">
+                                                        <span className="uppercase font-semibold tracking-wider">{counter.type}</span>
+                                                        {counter.location && <span>· {counter.location}</span>}
+                                                        {counter.zone && <span>· {counter.zone}</span>}
+                                                    </div>
                                                 </div>
                                             </div>
+
+                                            {/* Auto-Assignment Pill */}
+                                            {counter.auto_assignment_enabled ? (
+                                                <span
+                                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[3px] text-[9.5px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0"
+                                                    title="Automatic order routing enabled"
+                                                >
+                                                    <Zap className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+                                                    Auto
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[3px] text-[9.5px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0"
+                                                    title="Manual assignment only"
+                                                >
+                                                    Manual
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Card Content (Simple Key : Value List) */}
-                                    <div className="p-3 text-xs flex-1 flex flex-col justify-between">
+                                    {/* Card Content */}
+                                    <div className="p-3 text-xs flex-1 flex flex-col justify-between space-y-2.5">
+                                        {/* Active Queue Bar */}
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-slate-500 font-medium">Active Queue</span>
+                                                <span
+                                                    className={`font-mono font-bold ${
+                                                        isFull
+                                                            ? 'text-rose-600 dark:text-rose-400'
+                                                            : queueCount > 0
+                                                            ? 'text-[#FF4A1F]'
+                                                            : 'text-slate-600 dark:text-slate-400'
+                                                    }`}
+                                                >
+                                                    {queueCount} / {maxCapacity} {isFull && '(Full)'}
+                                                </span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full transition-all duration-300 ${
+                                                        isFull
+                                                            ? 'bg-rose-500'
+                                                            : queueCount / maxCapacity > 0.7
+                                                            ? 'bg-amber-500'
+                                                            : 'bg-[#FF4A1F]'
+                                                    }`}
+                                                    style={{ width: `${Math.min(100, (queueCount / maxCapacity) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+
                                         {session ? (
-                                            <div className="space-y-1.5 py-1 text-[11.5px]">
+                                            <div className="space-y-1.5 py-1 text-[11.5px] border-t border-slate-100 dark:border-slate-800/80 pt-2">
                                                 <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
-                                                    <span>Opening Float:</span>
-                                                    <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
-                                                        {formatCurrency(session.opening_float, currency)}
+                                                    <span>Active Shift:</span>
+                                                    <span className="font-semibold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                                        {session.shift || 'Morning'}
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
@@ -376,30 +499,54 @@ export default function CountersIndex({
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
-                                                Ready for next cashier shift
+                                            <div className="py-4 text-center text-xs text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+                                                Ready for cashier shift
                                             </div>
                                         )}
 
-                                        {/* Card Footer: Cashier on left, Status Pill & Three-Dot on right */}
+                                        {/* Assigned Staff Mini-Chips */}
+                                        {counter.assigned_cashiers && counter.assigned_cashiers.length > 0 && (
+                                            <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                                                <span className="text-[10px] text-slate-400 font-semibold block mb-1">
+                                                    Assigned Cashiers ({counter.assigned_cashiers.length}):
+                                                </span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {counter.assigned_cashiers.map((ac) => (
+                                                        <span
+                                                            key={ac.id}
+                                                            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-[3px] border ${
+                                                                ac.is_primary
+                                                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-900'
+                                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                                            }`}
+                                                        >
+                                                            <span>{ac.user_name || 'Staff'}</span>
+                                                            <span className="opacity-70 text-[9px] uppercase">({ac.shift[0]})</span>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Card Footer: Active Cashier & Status Menu */}
                                         <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11.5px] text-slate-600 dark:text-slate-400 gap-2">
                                             <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
                                                 <User className="h-3 w-3 text-slate-400 shrink-0" />
-                                                <span className="text-[11px] text-slate-500">Cashier:</span>
+                                                <span className="text-[11px] text-slate-500">Active:</span>
                                                 <span className="font-semibold text-slate-900 dark:text-white truncate">
-                                                    {counter.current_user_name || (counter.status !== 'closed' ? 'Assigned' : 'Available')}
+                                                    {counter.current_user?.name || counter.current_user_name || (counter.status !== 'closed' ? 'Serving' : 'None')}
                                                 </span>
                                             </div>
 
                                             <div className="flex items-center gap-1.5 shrink-0">
                                                 {/* Status Pill */}
                                                 <span
-                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold border border-slate-200/80 dark:border-slate-700 ${
+                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] text-[10px] font-semibold border ${
                                                         isActive
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
                                                             : isOnBreak
-                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 animate-pulse'
-                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80 animate-pulse'
+                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
                                                     }`}
                                                 >
                                                     <span
@@ -426,7 +573,7 @@ export default function CountersIndex({
                 )}
 
                 {/* Shift History & Z-Report Audit Log */}
-                <div className="rounded-[4px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden mt-4">
+                <div className="rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden mt-4">
                     <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-[#151921]">
                         <div className="flex items-center gap-2">
                             <Layers className="h-4 w-4 text-[#FF4A1F]" />
@@ -445,6 +592,7 @@ export default function CountersIndex({
                                 <tr>
                                     <th className="py-2 px-3">Counter</th>
                                     <th className="py-2 px-3">Cashier</th>
+                                    <th className="py-2 px-3">Shift</th>
                                     <th className="py-2 px-3">Timing</th>
                                     <th className="py-2 px-3 text-right">Opening Float</th>
                                     <th className="py-2 px-3 text-right">Sales Amount</th>
@@ -457,7 +605,7 @@ export default function CountersIndex({
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
                                 {recentSessions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={canManageCounters ? 9 : 8} className="text-center py-6 text-slate-400 font-sans">
+                                        <td colSpan={canManageCounters ? 10 : 9} className="text-center py-6 text-slate-400 font-sans">
                                             No shift sessions recorded yet.
                                         </td>
                                     </tr>
@@ -465,13 +613,16 @@ export default function CountersIndex({
                                     recentSessions.map((s) => (
                                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                                             <td className="py-2 px-3 font-sans font-bold text-slate-900 dark:text-white">
-                                                <span className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10.5px] mr-1.5 text-slate-700 dark:text-slate-300">
+                                                <span className="px-1 py-0.5 rounded-[3px] bg-slate-100 dark:bg-slate-800 font-mono text-[10.5px] mr-1.5 text-slate-700 dark:text-slate-300">
                                                     {s.counter_code}
                                                 </span>
                                                 {s.counter_name}
                                             </td>
                                             <td className="py-2 px-3 font-sans text-slate-700 dark:text-slate-300">
                                                 {s.user_name || 'Staff'}
+                                            </td>
+                                            <td className="py-2 px-3 font-sans capitalize text-slate-600 dark:text-slate-400 text-[10.5px]">
+                                                {s.shift || 'Morning'}
                                             </td>
                                             <td className="py-2 px-3 font-sans text-slate-500 text-[10.5px]">
                                                 <div>{s.opened_at}</div>
@@ -531,7 +682,7 @@ export default function CountersIndex({
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteSession(s)}
-                                                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                                            className="p-1 rounded-[3px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                                                             title="Delete shift record"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
@@ -557,6 +708,16 @@ export default function CountersIndex({
                         setCreateModalOpen(false);
                         setEditingCounter(null);
                     }}
+                />
+            )}
+
+            {/* Assign Cashier & Shift Modal */}
+            {assignCashierCounter && (
+                <AssignCashierModal
+                    open={!!assignCashierCounter}
+                    counter={assignCashierCounter}
+                    eligibleCashiers={eligibleCashiers}
+                    onClose={() => setAssignCashierCounter(null)}
                 />
             )}
 
@@ -590,7 +751,7 @@ export default function CountersIndex({
             {/* Resume Service PIN Modal */}
             {resumeCounter && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-                    <div className="w-full max-w-sm rounded-[4px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl p-4">
+                    <div className="w-full max-w-sm rounded-[3px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl p-4">
                         <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800 mb-3">
                             <h3 className="text-xs font-bold text-slate-900 dark:text-white">
                                 Unlock Counter · {resumeCounter.code}
@@ -615,7 +776,7 @@ export default function CountersIndex({
                                 autoFocus
                                 value={resumePin}
                                 onChange={(e) => setResumePin(e.target.value)}
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-center text-sm font-bold tracking-widest text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-2 text-center text-sm font-bold tracking-widest text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
                             />
 
                             {resumeError && (
@@ -623,7 +784,7 @@ export default function CountersIndex({
                             )}
 
                             <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-                                <Button type="button" variant="outline" size="sm" onClick={() => setResumeCounter(null)}>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setResumeCounter(null)} className="rounded-[3px]">
                                     Cancel
                                 </Button>
                                 <Button
@@ -631,7 +792,7 @@ export default function CountersIndex({
                                     variant="primary"
                                     size="sm"
                                     disabled={resumeSubmitting || !resumePin}
-                                    className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white"
+                                    className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
                                 >
                                     {resumeSubmitting ? 'Unlocking...' : 'Unlock Terminal'}
                                 </Button>
@@ -650,14 +811,17 @@ function CounterFormModal({
     onClose,
 }: {
     open: boolean;
-    counter: PosCounterData | null;
+    counter: ExtendedCounterData | null;
     onClose: () => void;
 }) {
     const isEdit = !!counter;
-    const [code, setCode] = useState(counter?.code || 'C-01');
+    const [code, setCode] = useState(counter?.code || '');
     const [name, setName] = useState(counter?.name || 'Main Cashier Counter');
     const [type, setType] = useState(counter?.type || 'opd');
+    const [location, setLocation] = useState(counter?.location || '');
     const [zone, setZone] = useState(counter?.zone || 'Ground Floor Area A');
+    const [maxQueueCapacity, setMaxQueueCapacity] = useState<number>(counter?.max_queue_capacity ?? 20);
+    const [autoAssignmentEnabled, setAutoAssignmentEnabled] = useState<boolean>(counter?.auto_assignment_enabled ?? true);
     const [submitting, setSubmitting] = useState(false);
 
     if (!open) return null;
@@ -672,10 +836,13 @@ function CounterFormModal({
         router[method](
             url,
             {
-                code: code.trim(),
+                code: code ? code.trim() : undefined,
                 name: name.trim(),
                 type,
-                zone: zone.trim(),
+                location: location.trim() || undefined,
+                zone: zone.trim() || 'General',
+                max_queue_capacity: Number(maxQueueCapacity),
+                auto_assignment_enabled: Boolean(autoAssignmentEnabled),
             },
             {
                 onSuccess: () => {
@@ -692,10 +859,10 @@ function CounterFormModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-[4px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl p-4">
+            <div className="w-full max-w-lg rounded-[3px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl p-4">
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800 mb-3">
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                        {isEdit ? 'Edit Counter Information' : 'Add New Pharmacy Counter'}
+                        {isEdit ? `Edit Counter · ${counter.code}` : 'Add New Pharmacy Counter'}
                     </h3>
                     <button type="button" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600">
                         <X className="h-4 w-4" />
@@ -706,16 +873,16 @@ function CounterFormModal({
                     <div className="grid grid-cols-3 gap-2">
                         <div>
                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Code <span className="text-rose-500">*</span>
+                                Counter Code
                             </label>
                             <input
                                 type="text"
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                placeholder="C-01"
-                                required
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                placeholder="Auto (e.g. C-01)"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
                             />
+                            <span className="text-[10px] text-slate-400">Leave blank to auto-generate</span>
                         </div>
                         <div className="col-span-2">
                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -727,7 +894,7 @@ function CounterFormModal({
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="e.g. OPD Dispensing Counter"
                                 required
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
                             />
                         </div>
                     </div>
@@ -735,12 +902,12 @@ function CounterFormModal({
                     <div className="grid grid-cols-2 gap-2">
                         <div>
                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Counter Type
+                                Counter Type <span className="text-rose-500">*</span>
                             </label>
                             <select
                                 value={type}
                                 onChange={(e) => setType(e.target.value)}
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
                             >
                                 <option value="opd">OPD Dispensing</option>
                                 <option value="ipd">IPD / Inpatient</option>
@@ -752,16 +919,63 @@ function CounterFormModal({
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                Location Zone
+                                Counter Location
+                            </label>
+                            <input
+                                type="text"
+                                value={location}
+                                onChange={(e) => setLocation(e.target.value)}
+                                placeholder="e.g. Ground Floor Main Hall"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                Zone / Area
                             </label>
                             <input
                                 type="text"
                                 value={zone}
                                 onChange={(e) => setZone(e.target.value)}
-                                placeholder="e.g. Ground Floor Wing A"
-                                className="w-full rounded-[4px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                                placeholder="e.g. Zone A"
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
                             />
                         </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                Max Queue Capacity <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={maxQueueCapacity}
+                                onChange={(e) => setMaxQueueCapacity(Number(e.target.value))}
+                                required
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Auto Assignment Toggle */}
+                    <div className="p-2.5 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#181d26]/60 flex items-center justify-between">
+                        <div>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                                Enable Dynamic Automatic Assignment
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                Include this counter in automatic Round-Robin order distribution when cashier shift is active.
+                            </span>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={autoAssignmentEnabled}
+                            onChange={(e) => setAutoAssignmentEnabled(e.target.checked)}
+                            className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600 cursor-pointer"
+                        />
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -781,14 +995,14 @@ function CounterFormModal({
                                         });
                                     }
                                 }}
-                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900"
+                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900 rounded-[3px]"
                             >
                                 <Trash2 className="h-3.5 w-3.5 mr-1" />
                                 Delete Counter
                             </Button>
                         ) : <div />}
                         <div className="flex items-center gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                            <Button type="button" variant="outline" size="sm" onClick={onClose} className="rounded-[3px]">
                                 Cancel
                             </Button>
                             <Button
@@ -796,13 +1010,207 @@ function CounterFormModal({
                                 variant="primary"
                                 size="sm"
                                 disabled={submitting}
-                                className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white"
+                                className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
                             >
                                 {submitting ? 'Saving...' : (isEdit ? 'Update Counter' : 'Create Counter')}
                             </Button>
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    );
+}
+
+function AssignCashierModal({
+    open,
+    counter,
+    eligibleCashiers,
+    onClose,
+}: {
+    open: boolean;
+    counter: ExtendedCounterData;
+    eligibleCashiers: EligibleCashier[];
+    onClose: () => void;
+}) {
+    const [selectedUserId, setSelectedUserId] = useState<number | ''>(
+        eligibleCashiers[0]?.id ?? ''
+    );
+    const [shift, setShift] = useState<'morning' | 'evening' | 'night' | 'any'>('morning');
+    const [isPrimary, setIsPrimary] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+
+    if (!open) return null;
+
+    const assignedCashiers = counter.assigned_cashiers || [];
+
+    const handleAssign = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedUserId) return;
+
+        setSubmitting(true);
+        router.post(
+            route('counters.assign-cashier', counter.id),
+            {
+                user_id: Number(selectedUserId),
+                shift,
+                is_primary: isPrimary,
+            },
+            {
+                onSuccess: () => {
+                    setSubmitting(false);
+                },
+                onError: (errs) => {
+                    setSubmitting(false);
+                    alert(Object.values(errs)[0] || 'Failed to assign cashier.');
+                },
+            }
+        );
+    };
+
+    const handleUnassign = (userId: number, userName?: string) => {
+        if (confirm(`Remove cashier ${userName || 'this user'} from Counter ${counter.code}?`)) {
+            router.delete(route('counters.unassign-cashier', { counter: counter.id, cashier: userId }));
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="w-full max-w-lg rounded-[3px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl p-4">
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800 mb-3">
+                    <div>
+                        <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                            Assign Cashiers & Shifts · {counter.code}
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                            {counter.name} {counter.location && `(${counter.location})`}
+                        </p>
+                    </div>
+                    <button type="button" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Form to add cashier */}
+                <form onSubmit={handleAssign} className="space-y-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                Select Cashier <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                                value={selectedUserId}
+                                onChange={(e) => setSelectedUserId(Number(e.target.value))}
+                                required
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            >
+                                <option value="" disabled>Choose employee...</option>
+                                {eligibleCashiers.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name} {c.email ? `(${c.email})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                Shift Schedule <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                                value={shift}
+                                onChange={(e) => setShift(e.target.value as any)}
+                                className="w-full rounded-[3px] border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#12161c] px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FF4A1F]"
+                            >
+                                <option value="morning">Morning Shift (08:00 AM - 04:00 PM)</option>
+                                <option value="evening">Evening Shift (04:00 PM - 12:00 AM)</option>
+                                <option value="night">Night Shift (12:00 AM - 08:00 AM)</option>
+                                <option value="any">Flexible / All Shifts</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                            <input
+                                type="checkbox"
+                                checked={isPrimary}
+                                onChange={(e) => setIsPrimary(e.target.checked)}
+                                className="h-4 w-4 rounded-[3px] text-[#FF4A1F] focus:ring-[#FF4A1F] border-slate-300 dark:border-slate-600"
+                            />
+                            <span>Set as primary cashier for this counter</span>
+                        </label>
+
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            disabled={submitting || !selectedUserId}
+                            className="bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[3px]"
+                        >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            {submitting ? 'Assigning...' : 'Assign to Counter'}
+                        </Button>
+                    </div>
+                </form>
+
+                {/* Assigned Cashiers List */}
+                <div className="mt-3">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center justify-between">
+                        <span>Currently Assigned Cashiers</span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                            {assignedCashiers.length} assigned
+                        </span>
+                    </h4>
+
+                    {assignedCashiers.length === 0 ? (
+                        <div className="text-center py-6 text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-[3px]">
+                            No cashiers assigned yet. Any available cashier with credentials can open shift on this counter.
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-[3px] overflow-hidden">
+                            {assignedCashiers.map((ac) => (
+                                <div key={ac.id} className="p-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-[3px] bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+                                            <UserCheck className="h-4 w-4 text-[#FF4A1F]" />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                    {ac.user_name || 'Staff User'}
+                                                </span>
+                                                {ac.is_primary && (
+                                                    <span className="text-[9px] px-1.5 py-0.2 rounded-[3px] bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 font-bold uppercase">
+                                                        Primary
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="text-[10px] text-slate-500 capitalize">
+                                                Shift: {ac.shift}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleUnassign(ac.user_id, ac.user_name)}
+                                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                        title="Remove assignment"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-end pt-3 mt-3 border-t border-slate-200 dark:border-slate-800">
+                    <Button type="button" variant="outline" size="sm" onClick={onClose} className="rounded-[3px]">
+                        Done
+                    </Button>
+                </div>
             </div>
         </div>
     );

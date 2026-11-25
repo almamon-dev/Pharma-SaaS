@@ -44,5 +44,20 @@ trait BelongsToTenant
         return $query->withoutGlobalScope(TenantScope::class)
             ->where($this->qualifyColumn('tenant_id'), $tenantId);
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (! app(CurrentTenant::class)->has()) {
+            $tenantId = session('active_tenant_id') ?? auth()->user()?->current_tenant_id;
+            if ($tenantId) {
+                $tenant = Tenant::find($tenantId);
+                if ($tenant) {
+                    app(CurrentTenant::class)->set($tenant);
+                }
+            }
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
 }
 

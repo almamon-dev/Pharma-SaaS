@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    Clock,
+    ClipboardList,
     Contact2,
     CreditCard,
     GitBranch,
@@ -9,6 +9,7 @@ import {
     LayoutDashboard,
     LogOut,
     Package,
+    ReceiptText,
     Settings,
     ShieldCheck,
     ShoppingCart,
@@ -249,22 +250,76 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 active: route().current('dashboard'),
                 icon: LayoutDashboard,
             },
-            ...(hasFeature('pos') && hasPerm('pos.sell')
+            ...(hasFeature('pos') && (hasPerm('sales_orders.create', 'sales_orders.view_own') || tenant?.role === 'salesman' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
                 ? [
                       {
                           category: 'Main Menu',
-                          name: 'Point of Sale',
-                          href: route('pos.index'),
-                          active: route().current('pos.*'),
-                          icon: ShoppingCart,
+                          group: 'Sales Orders',
+                          icon: ClipboardList,
+                          items: [
+                              {
+                                  name: 'New Sales Order',
+                                  href: route('sales.orders.create'),
+                                  active: route().current('sales.orders.create'),
+                              },
+                              {
+                                  name: 'My Orders & Tracking',
+                                  href: route('sales.orders.my-orders'),
+                                  active: route().current('sales.orders.my-orders'),
+                              },
+                          ],
                       },
+                  ]
+                : []),
+            ...(hasFeature('pos') && (hasPerm('sales_orders.process', 'payments.receive') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
+                ? [
                       {
                           category: 'Main Menu',
-                          name: canManageCounters ? 'Counters & Shifts' : 'My Shift',
-                          href: route('counters.index'),
-                          active: route().current('counters.*'),
-                          icon: canManageCounters ? Store : Clock,
+                          name: 'Cashier Station',
+                          href: route('cashier.dashboard'),
+                          active: route().current('cashier.dashboard'),
+                          icon: ReceiptText,
                       },
+                  ]
+                : []),
+            ...(hasFeature('pos') && (hasPerm('pos.sell', 'cash_counters.view') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
+                ? [
+                      ...(hasPerm('pos.sell') && tenant?.role !== 'salesman'
+                          ? [
+                                {
+                                    category: 'Main Menu',
+                                    name: 'Point of Sale (Direct)',
+                                    href: route('pos.index'),
+                                    active: route().current('pos.*'),
+                                    icon: ShoppingCart,
+                                },
+                            ]
+                          : []),
+                      ...(hasPerm('cash_counters.view', 'cash_register.open') || tenant?.role === 'cashier' || canManageCounters
+                          ? [
+                                {
+                                    category: 'Main Menu',
+                                    group: 'Counters & Shifts',
+                                    icon: Store,
+                                    items: [
+                                        {
+                                            name: canManageCounters ? 'Counter Terminals' : 'My Terminal Shift',
+                                            href: route('counters.index'),
+                                            active: route().current('counters.index'),
+                                        },
+                                        ...(canManageCounters
+                                            ? [
+                                                  {
+                                                      name: 'Live Queue Monitor',
+                                                      href: route('counters.monitoring'),
+                                                      active: route().current('counters.monitoring'),
+                                                  },
+                                              ]
+                                            : []),
+                                    ],
+                                },
+                            ]
+                          : []),
                   ]
                 : []),
             ...(inventoryItems.length > 0
