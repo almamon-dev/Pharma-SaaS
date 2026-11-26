@@ -28,6 +28,10 @@ import {
     BarcodeCameraModal,
     BarcodeScanFeedback,
 } from '@/Components/BarcodeCameraModal';
+import {
+    POS_SEARCH_PLACEHOLDERS,
+    useTypingPlaceholder,
+} from '@/hooks/useTypingPlaceholder';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import SalesCustomerModal from './components/SalesCustomerModal';
 import OrderPreviewModal from './components/OrderPreviewModal';
@@ -227,6 +231,10 @@ export default function CreateOrder({
 
     // Search & Filter
     const [query, setQuery] = useState('');
+    const searchPlaceholder = useTypingPlaceholder(
+        POS_SEARCH_PLACEHOLDERS,
+        Boolean(query)
+    );
     const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all');
     const [cameraOpen, setCameraOpen] = useState(false);
     const [scanStatus, setScanStatus] = useState<BarcodeScanFeedback | null>(null);
@@ -859,7 +867,7 @@ export default function CreateOrder({
                             <div className="flex-1 min-w-0">
                                 <Input
                                     ref={scanInputRef}
-                                    placeholder="Scan barcode or SKU (F2), or search medicine... (Enter)"
+                                    placeholder={searchPlaceholder}
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={handleSearchKeyDown}
@@ -878,12 +886,12 @@ export default function CreateOrder({
                                                 ✕
                                             </button>
                                         ) : (
-                                            <kbd className="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                                            <kbd className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
                                                 F2
                                             </kbd>
                                         )
                                     }
-                                    className="h-8 text-[12.5px]"
+                                    className="h-8 rounded-full border-slate-200/90 dark:border-slate-700/80 focus:border-slate-200/90 dark:focus:border-slate-700/80 bg-white dark:bg-[#12161c] pl-9 pr-11 text-[12.5px]"
                                 />
                             </div>
                             <Button
@@ -1757,37 +1765,34 @@ export default function CreateOrder({
                             </div>
                         </div>
 
-                        {/* Submit Button */}
-                        <Button
-                            type="button"
-                            variant="primary"
-                            size="lg"
-                            fullWidth
-                            isLoading={submitting}
-                            disabled={cart.length === 0 || submitting}
-                            onClick={handleInitiateSubmit}
-                            className="h-10 bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[4px] font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                            <ShoppingCart className="h-4 w-4" />
-                            <span>Submit Sales Order</span>
-                            <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono">
-                                F9
-                            </kbd>
-                        </Button>
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="primary"
+                                isLoading={submitting}
+                                disabled={cart.length === 0 || submitting}
+                                onClick={handleInitiateSubmit}
+                                className="flex-1 min-w-0 h-9 px-3 bg-[#FF4A1F] hover:bg-[#e03d15] text-white rounded-[4px] font-bold text-[12px] shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                            >
+                                <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">Submit Order</span>
+                                <kbd className="px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono shrink-0">
+                                    F9
+                                </kbd>
+                            </Button>
 
-                        {/* Save as Draft */}
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            fullWidth
-                            disabled={cart.length === 0 || submitting}
-                            onClick={() => executeSubmitOrder(true)}
-                            className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-[4px] cursor-pointer"
-                        >
-                            <Save className="h-3.5 w-3.5 mr-1" />
-                            <span>Save as Draft</span>
-                        </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={cart.length === 0 || submitting}
+                                onClick={() => executeSubmitOrder(true)}
+                                className="shrink-0 h-9 px-3 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[12px] font-semibold rounded-[4px] whitespace-nowrap cursor-pointer"
+                            >
+                                <Save className="h-3.5 w-3.5 shrink-0" />
+                                <span>Save as Draft</span>
+                            </Button>
+                        </div>
 
                         <p className="flex items-center justify-center gap-1 text-[11px] text-slate-400">
                             <Check className="h-3 w-3 text-emerald-500" />

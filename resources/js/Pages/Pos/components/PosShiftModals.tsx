@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -51,9 +51,7 @@ export interface PosCounterData {
     } | null;
 }
 
-const PRIMARY_BDT_NOTES = [1000, 500, 100];
-const ALL_BDT_NOTES = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
-const BDT_NOTES = ALL_BDT_NOTES;
+const BDT_NOTES = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
 
 interface QuickStartShiftModalProps {
     open: boolean;
@@ -201,28 +199,8 @@ export function OpenShiftModal({
     const [selectedCounterId, setSelectedCounterId] = useState<number | ''>(
         initialCounter?.id ?? availableCounters[0]?.id ?? counters[0]?.id ?? ''
     );
-    const [noteCounts, setNoteCounts] = useState<Record<number, string>>({
-        1000: '',
-        500: '',
-        100: '',
-    });
-    const [showAllNotes, setShowAllNotes] = useState(false);
-    const [manualMode, setManualMode] = useState(false);
-    const [manualFloat, setManualFloat] = useState<string>('0');
-    const [notes] = useState<string>('');
+    const [openingFloat, setOpeningFloat] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
-
-    const visibleNotes = showAllNotes ? ALL_BDT_NOTES : PRIMARY_BDT_NOTES;
-
-    const noteTotal = useMemo(() => {
-        let sum = 0;
-        for (const n of ALL_BDT_NOTES) {
-            sum += n * (parseInt(noteCounts[n] || '0', 10) || 0);
-        }
-        return sum;
-    }, [noteCounts]);
-
-    const effectiveOpeningFloat = manualMode ? Math.max(0, parseFloat(manualFloat) || 0) : noteTotal;
 
     if (!open) return null;
 
@@ -234,16 +212,10 @@ export function OpenShiftModal({
     const startedLabel = new Date().toLocaleString('en-GB', {
         day: '2-digit',
         month: 'short',
-        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
     });
-
-    const handleCountChange = (note: number, raw: string) => {
-        const cleaned = raw.replace(/[^0-9]/g, '');
-        setNoteCounts((prev) => ({ ...prev, [note]: cleaned }));
-    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -252,19 +224,13 @@ export function OpenShiftModal({
             return;
         }
 
-        const openingDenominations = !manualMode
-            ? Object.fromEntries(
-                  ALL_BDT_NOTES.map((n) => [String(n), parseInt(noteCounts[n] || '0', 10) || 0])
-              )
-            : null;
-
         setSubmitting(true);
         router.post(
             route('counters.open-session', selectedCounterId, false),
             {
-                opening_float: effectiveOpeningFloat,
-                opening_denominations: openingDenominations,
-                notes: notes.trim() || null,
+                opening_float: Math.max(0, parseFloat(openingFloat) || 0),
+                opening_denominations: null,
+                notes: null,
             },
             {
                 preserveScroll: true,
@@ -282,168 +248,79 @@ export function OpenShiftModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-            <div className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-[6px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Open Shift</h3>
+            <div className="w-full max-w-md rounded-[5px] bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#12161c]">
                     <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800 text-[11px] font-semibold">
-                            Counter Available
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Open Shift</h3>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[3px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800 text-[10.5px] font-semibold">
+                            Available
                         </span>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="p-1 rounded-[3px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
                     </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1 rounded-[3px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
-                    {/* 3 Info Summary Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div className="rounded-[5px] bg-[#FF4A1F]/[0.06] dark:bg-[#FF4A1F]/10 border border-[#FF4A1F]/15 px-3 py-2">
-                            <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Counter</div>
-                            <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 leading-snug">
-                                {selectedCounter ? `${selectedCounter.code} · ${selectedCounter.name}` : 'Select Counter'}
-                            </div>
-                        </div>
-                        <div className="rounded-[5px] bg-[#FF4A1F]/[0.06] dark:bg-[#FF4A1F]/10 border border-[#FF4A1F]/15 px-3 py-2">
-                            <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Cashier</div>
-                            <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 truncate">
-                                {auth?.user?.name || 'Cashier'}
-                            </div>
-                        </div>
-                        <div className="rounded-[5px] bg-[#FF4A1F]/[0.06] dark:bg-[#FF4A1F]/10 border border-[#FF4A1F]/15 px-3 py-2">
-                            <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Started</div>
-                            <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 leading-snug">
-                                {startedLabel}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Counter selector only when opened without a pre-selected counter card */}
-                    {!initialCounter && (
-                        <div>
-                            <Select
-                                label="Select Counter *"
-                                size="sm"
-                                value={selectedCounterId || ''}
-                                placeholder="-- Choose Counter --"
-                                onChange={(e) => setSelectedCounterId(Number(e.target.value))}
-                                options={counters.map((c) => ({
-                                    value: c.id,
-                                    label: `${c.code} - ${c.name} (${(c.type || 'POS').toUpperCase()}) ${c.status !== 'closed' ? `[Occupied by ${c.current_user_name || 'Staff'}]` : '[Available]'}`,
-                                    disabled: c.status === 'active' && !!c.current_user_id,
-                                }))}
-                                triggerClassName="h-[34px] text-xs"
-                            />
-                        </div>
-                    )}
-
-                    {/* Opening Float (Cash Count Table) */}
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                Opening Float (cash count)
-                            </label>
-                            <div className="flex items-center gap-3 text-[11px] font-semibold">
-                                {!manualMode && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAllNotes((v) => !v)}
-                                        className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                                    >
-                                        {showAllNotes ? 'Compact (৳1000/500/100)' : 'All Notes (৳1000–৳1)'}
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setManualMode((v) => {
-                                            const next = !v;
-                                            if (next) setManualFloat(String(noteTotal));
-                                            return next;
-                                        });
-                                    }}
-                                    className="text-[#FF4A1F] hover:underline cursor-pointer"
-                                >
-                                    {manualMode ? 'Count by Notes' : 'Enter Total Directly'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {manualMode ? (
-                            <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={manualFloat}
-                                onChange={(e) => setManualFloat(e.target.value)}
-                                icon={<span className="text-xs font-bold text-slate-400">৳</span>}
-                                className="h-[38px] text-sm font-bold focus:border-[#FF4A1F]"
-                                placeholder="0.00"
-                                required
-                            />
-                        ) : (
-                            <div className="rounded-[5px] border border-slate-200 dark:border-slate-800 overflow-hidden">
-                                <table className="w-full text-xs border-collapse">
-                                    <thead className="bg-slate-50 dark:bg-[#181d26] text-[11px] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                                        <tr>
-                                            <th className="py-2 px-3 text-left font-semibold">Note</th>
-                                            <th className="py-2 px-3 text-center font-semibold">Count</th>
-                                            <th className="py-2 px-3 text-right font-semibold">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                                        {visibleNotes.map((note) => {
-                                            const qty = parseInt(noteCounts[note] || '0', 10) || 0;
-                                            const rowAmount = note * qty;
-                                            return (
-                                                <tr key={note} className="bg-white dark:bg-[#12161c]">
-                                                    <td className="py-2 px-3 font-mono font-semibold text-slate-800 dark:text-slate-200">
-                                                        ৳ {note}
-                                                    </td>
-                                                    <td className="py-1.5 px-3 text-center">
-                                                        <div className="w-20 mx-auto">
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                inputMode="numeric"
-                                                                value={noteCounts[note] ?? ''}
-                                                                onChange={(e) => handleCountChange(note, e.target.value)}
-                                                                placeholder="0"
-                                                                className="h-7 text-center bg-slate-50 dark:bg-[#181d26] px-2 text-xs font-mono font-bold focus:border-[#FF4A1F]"
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-2 px-3 text-right font-mono font-semibold text-slate-700 dark:text-slate-300">
-                                                        {rowAmount.toLocaleString('en-US', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Highlighted Total Opening Float */}
-                    <div className="flex items-center justify-between px-4 py-2.5 rounded-[5px] bg-[#FF4A1F]/[0.08] dark:bg-[#FF4A1F]/15 border border-[#FF4A1F]/20">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">Total Opening Float</span>
-                        <span className="text-base font-mono font-black text-[#FF4A1F]">
-                            {formatCurrency(effectiveOpeningFloat, currency)}
+                <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-[3px] bg-slate-50 dark:bg-[#12161c] border border-slate-200/80 dark:border-slate-800 px-3 py-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">
+                            {selectedCounter ? `${selectedCounter.code} · ${selectedCounter.name}` : 'Select Counter'}
+                        </span>
+                        <span>
+                            {auth?.user?.name || 'Cashier'} · {startedLabel}
                         </span>
                     </div>
 
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        After opening, this counter is locked to you. Payments can be taken only while the shift is open.
-                    </p>
+                    {!initialCounter && (
+                        <Select
+                            label="Select Counter *"
+                            size="sm"
+                            value={selectedCounterId || ''}
+                            placeholder="-- Choose Counter --"
+                            onChange={(e) => setSelectedCounterId(Number(e.target.value))}
+                            options={counters.map((c) => ({
+                                value: c.id,
+                                label: `${c.code} - ${c.name} (${(c.type || 'POS').toUpperCase()}) ${c.status !== 'closed' ? `[Occupied by ${c.current_user_name || 'Staff'}]` : '[Available]'}`,
+                                disabled: c.status === 'active' && !!c.current_user_id,
+                            }))}
+                        />
+                    )}
+
+                    <div>
+                        <Input
+                            label={`Opening Cash (${currency}) *`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={openingFloat}
+                            onChange={(e) => setOpeningFloat(e.target.value)}
+                            icon={<span className="text-xs font-bold text-slate-400">৳</span>}
+                            className="font-bold tabular-nums focus:border-[#FF4A1F]"
+                            placeholder="0.00"
+                            required
+                            autoFocus
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {['0', '500', '1000', '2000', '5000'].map((amt) => (
+                                <button
+                                    key={amt}
+                                    type="button"
+                                    onClick={() => setOpeningFloat(amt)}
+                                    className={`px-2 py-0.5 text-[11px] font-semibold rounded-[3px] border cursor-pointer transition-colors ${
+                                        openingFloat === amt
+                                            ? 'border-[#FF4A1F] bg-[#FF4A1F]/10 text-[#FF4A1F]'
+                                            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#FF4A1F]'
+                                    }`}
+                                >
+                                    ৳{Number(amt).toLocaleString()}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                         <Button type="button" variant="outline" size="sm" onClick={onClose}>

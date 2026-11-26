@@ -159,12 +159,12 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
             <html>
             <head>
                 <meta charset="utf-8">
-                <title>${report.report_type} - ${report.z_report_number}</title>
+                <title>${report.status === 'closed' ? 'Daily Report' : 'Live Shift Report'} - ${report.z_report_number}</title>
                 ${existingStyles}
                 <style>
                     @page {
                         size: ${isThermal ? '80mm auto' : 'A4 portrait'};
-                        margin: ${isThermal ? '2mm' : '12mm'};
+                        margin: 0;
                     }
                     * {
                         box-sizing: border-box;
@@ -175,7 +175,7 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
                         background: #ffffff !important;
                         color: #0f172a !important;
                         margin: 0 !important;
-                        padding: 0 !important;
+                        padding: ${isThermal ? '3mm' : '12mm'} !important;
                         font-family: ${isThermal ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'Inter, system-ui, sans-serif'};
                         font-size: ${isThermal ? '10.5px' : '12px'};
                     }
@@ -183,7 +183,9 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
                         width: 100%;
                         max-width: ${isThermal ? '74mm' : '186mm'};
                         margin: 0 auto;
+                        ${!isThermal ? 'min-height: 270mm; display: flex; flex-direction: column; gap: 12px;' : ''}
                     }
+                    ${!isThermal ? '.z-report-footer { margin-top: auto; padding-top: 20px; break-inside: avoid; }' : ''}
                 </style>
             </head>
             <body>
@@ -226,12 +228,12 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
                         </div>
                         <div>
                             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                                {report ? `${report.report_type} · ${report.z_report_number}` : 'Shift Reconciliation Report'}
+                                {report ? `${isClosed ? 'Daily Report' : 'Live Shift Report'} · ${report.z_report_number}` : 'Daily Report'}
                             </h3>
                             <p className="text-[11px] text-slate-500">
                                 {isClosed
-                                    ? 'Immutable end-of-shift cash drawer & Z-Report audit record'
-                                    : 'Live mid-shift X-Report preview (shift still open)'}
+                                    ? 'End-of-shift sales & cash reconciliation summary'
+                                    : 'Live mid-shift summary (shift still open)'}
                             </p>
                         </div>
                     </div>
@@ -324,7 +326,7 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
                                 <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[3px] bg-slate-900 text-white text-[11px] font-bold tracking-wider uppercase">
                                     <Receipt className="h-3 w-3" />
                                     <span>
-                                        {report.report_type} · {report.z_report_number}
+                                        {isClosed ? 'Daily Report' : 'Live Shift Report'} · {report.z_report_number}
                                     </span>
                                 </div>
                             </div>
@@ -570,24 +572,26 @@ export default function ZReportModal({ sessionId, onClose }: ZReportModalProps) 
                                 </div>
                             )}
 
-                            {/* Audit Signatures */}
-                            <div className="grid grid-cols-2 gap-8 pt-6 text-center text-[10.5px] text-slate-600">
-                                <div>
-                                    <div className="border-t border-slate-400 pt-1 font-semibold text-slate-800">
-                                        Cashier Signature
+                            {/* Audit Signatures Footer */}
+                            <div className="z-report-footer">
+                                <div className="grid grid-cols-2 gap-8 pt-6 text-center text-[10.5px] text-slate-600">
+                                    <div>
+                                        <div className="border-t border-slate-400 pt-1 font-semibold text-slate-800">
+                                            Cashier Signature
+                                        </div>
+                                        <div>{report.cashier.name}</div>
                                     </div>
-                                    <div>{report.cashier.name}</div>
-                                </div>
-                                <div>
-                                    <div className="border-t border-slate-400 pt-1 font-semibold text-slate-800">
-                                        Manager / Auditor Signature
+                                    <div>
+                                        <div className="border-t border-slate-400 pt-1 font-semibold text-slate-800">
+                                            Manager / Auditor Signature
+                                        </div>
+                                        <div>{report.closed_by?.name || 'Verified By'}</div>
                                     </div>
-                                    <div>{report.closed_by?.name || 'Verified By'}</div>
                                 </div>
-                            </div>
 
-                            <div className="text-center text-[10px] text-slate-400 pt-2">
-                                Generated on {report.generated_at} · PharmaCore Audit System
+                                <div className="text-center text-[10px] text-slate-400 pt-2">
+                                    Generated on {report.generated_at} · PharmaCore Audit System
+                                </div>
                             </div>
                         </div>
                     )}

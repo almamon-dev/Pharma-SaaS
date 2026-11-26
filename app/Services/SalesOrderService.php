@@ -450,24 +450,36 @@ class SalesOrderService
             } else {
                 $method = (string) ($paymentData['payment_method'] ?? 'cash');
                 $givenPaid = isset($paymentData['paid_amount']) ? (float) $paymentData['paid_amount'] : $totalAmount;
-                $paymentLines[] = [
-                    'method' => $method,
-                    'amount' => max(0, round($givenPaid, 2)),
-                    'reference_number' => $paymentData['reference_number'] ?? null,
-                ];
+                $clampedGiven = max(0, round($givenPaid, 2));
+                if ($clampedGiven > 0) {
+                    $paymentLines[] = [
+                        'method' => $method === 'due' ? 'cash' : $method,
+                        'amount' => $clampedGiven,
+                        'reference_number' => $paymentData['reference_number'] ?? null,
+                    ];
+                }
             }
 
-            if (empty($paymentLines)) {
-                throw ValidationException::withMessages([
-                    'payments' => ['At least one valid payment amount is required.'],
-                ]);
+            $totalCollected = array_sum(array_column($paymentLines, 'amount'));
+            if ($totalCollected >= $totalAmount) {
+                $paidAmount = $totalAmount;
+                $changeAmount = round($totalCollected - $totalAmount, 2);
+                $dueAmount = 0.0;
+                $paymentStatus = 'paid';
+            } else {
+                $paidAmount = round($totalCollected, 2);
+                $changeAmount = 0.0;
+                $dueAmount = max(0, round($totalAmount - $totalCollected, 2));
+                $paymentStatus = $paidAmount > 0 ? 'partially_paid' : 'due';
+
+                if ($dueAmount > 0 && empty($lockedSale->customer_id)) {
+                    throw ValidationException::withMessages([
+                        'customer_id' => ['A registered customer is required for credit/due sales (বাকিতে বিক্রি করতে কাস্টমার থাকা আবশ্যক)।'],
+                    ]);
+                }
             }
 
-            $totalPaid = array_sum(array_column($paymentLines, 'amount'));
-            $dueAmount = max(0, round($totalAmount - $totalPaid, 2));
-            $changeAmount = max(0, round($totalPaid - $totalAmount, 2));
-
-            // Record each payment line
+            // Record each positive payment line
             foreach ($paymentLines as $pline) {
                 SalePayment::query()->create([
                     'tenant_id' => $lockedSale->tenant_id,
@@ -480,12 +492,13 @@ class SalesOrderService
 
             // 3. Finalize Sale & Invoice
             $finalInvoice = $this->generateInvoiceNumber($lockedSale->tenant_id);
-            $paymentStatus = $dueAmount <= 0 ? 'paid' : ($totalPaid > 0 ? 'partially_paid' : 'due');
-            $primaryMethod = implode(' + ', array_unique(array_map(fn ($p) => ucfirst($p['method']), $paymentLines)));
+            $primaryMethod = ! empty($paymentLines)
+                ? implode(' + ', array_unique(array_map(fn ($p) => ucfirst($p['method']), $paymentLines)))
+                : 'Due';
 
             $lockedSale->update([
                 'invoice_number' => $finalInvoice,
-                'paid_amount' => $totalPaid,
+                'paid_amount' => $paidAmount,
                 'due_amount' => $dueAmount,
                 'change_amount' => $changeAmount,
                 'payment_method' => $primaryMethod,
@@ -538,12 +551,13 @@ class SalesOrderService
 
             AuditLog::record(
                 action: 'sales_order.completed',
-                description: "Cashier {$cashier->name} collected {$totalPaid} BDT for order #{$lockedSale->order_number} (Invoice: {$finalInvoice}).",
+                description: "Cashier {$cashier->name} collected {$paidAmount} BDT (Due: {$dueAmount} BDT) for order #{$lockedSale->order_number} (Invoice: {$finalInvoice}).",
                 subject: $lockedSale,
                 metadata: [
                     'invoice_number' => $finalInvoice,
                     'total_amount' => $totalAmount,
-                    'paid_amount' => $totalPaid,
+                    'paid_amount' => $paidAmount,
+                    'due_amount' => $dueAmount,
                     'payment_status' => $paymentStatus,
                 ],
                 userId: $cashier->id

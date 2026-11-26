@@ -482,6 +482,7 @@ class CashierDashboardController extends Controller
             'id' => $s->id,
             'order_number' => $s->order_number,
             'invoice_number' => $s->invoice_number,
+            'customer_id' => $s->customer_id,
             'customer_name' => $s->customer?->name ?? 'Walk-in Customer',
             'customer_phone' => $s->customer?->phone,
             'customer_allergies' => $s->customer?->allergies,

@@ -3,6 +3,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     AlertCircle,
+    AlertTriangle,
     ArrowRightLeft,
     Banknote,
     Calendar,
@@ -24,6 +25,7 @@ import {
     ShoppingCart,
     Smartphone,
     Store,
+    Trash2,
     TrendingUp,
     User,
     Users,
@@ -36,7 +38,7 @@ import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { DataTable, Column, EmptyState, TableActionMenu } from '@/Components/tables';
 import { PosReceiptData, SharedPageProps } from '@/types';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import PosReceiptModal from '../Pos/components/PosReceiptModal';
 import {
     CloseShiftModal,
@@ -65,6 +67,7 @@ export interface CashierOrder {
     id: number;
     order_number: string;
     invoice_number?: string | null;
+    customer_id?: number | null;
     customer_name: string;
     customer_phone?: string | null;
     customer_allergies?: string | null;
@@ -194,13 +197,16 @@ export default function CashierDashboard({
 
     // Processing / Payment Tender Modal
     const [tenderOrder, setTenderOrder] = useState<CashierOrder | null>(null);
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bkash' | 'nagad' | 'split'>('cash');
+    const [paymentMode, setPaymentMode] = useState<'single' | 'split' | 'due'>('single');
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bkash' | 'nagad' | 'rocket'>('cash');
     const [tenderedCash, setTenderedCash] = useState<number | ''>('');
     const [referenceNumber, setReferenceNumber] = useState('');
-    const [splitPayments, setSplitPayments] = useState<Array<{ method: 'cash' | 'card' | 'bkash' | 'nagad'; amount: number; reference_number?: string }>>([
-        { method: 'cash', amount: 0 },
-        { method: 'bkash', amount: 0 },
+    const [splitPayments, setSplitPayments] = useState<Array<{ method: 'cash' | 'card' | 'bkash' | 'nagad' | 'rocket'; amount: string; reference_number?: string }>>([
+        { method: 'cash', amount: '' },
+        { method: 'bkash', amount: '' },
     ]);
+    const [duePaidNow, setDuePaidNow] = useState<string>('0');
+    const [dueMethod, setDueMethod] = useState<'cash' | 'card' | 'bkash' | 'nagad'>('cash');
     const [submittingPayment, setSubmittingPayment] = useState(false);
 
     // Receipt Modal State
@@ -249,12 +255,15 @@ export default function CashierDashboard({
     // Open Payment Tender Modal
     const openTenderModal = (order: CashierOrder) => {
         setTenderOrder(order);
+        setPaymentMode('single');
         setTenderedCash(order.total_amount);
         setPaymentMethod('cash');
         setReferenceNumber('');
+        setDuePaidNow('0');
+        setDueMethod('cash');
         setSplitPayments([
-            { method: 'cash', amount: Math.round(order.total_amount / 2) },
-            { method: 'bkash', amount: Math.round(order.total_amount / 2) },
+            { method: 'cash', amount: String(Math.round((order.total_amount / 2) * 100) / 100) },
+            { method: 'bkash', amount: String(Math.round((order.total_amount - Math.round((order.total_amount / 2) * 100) / 100) * 100) / 100) },
         ]);
     };
 
@@ -266,17 +275,46 @@ export default function CashierDashboard({
         e.preventDefault();
         if (!tenderOrder) return;
 
-        setSubmittingPayment(true);
-
         const payload: any = {};
-        if (paymentMethod === 'split') {
-            payload.payments = splitPayments.filter((p) => p.amount > 0);
+
+        if (paymentMode === 'split') {
+            const validLines = splitPayments
+                .map((p) => ({
+                    method: p.method,
+                    amount: Number(p.amount) || 0,
+                    reference_number: p.reference_number || undefined,
+                }))
+                .filter((p) => p.amount > 0);
+
+            if (validLines.length === 0) {
+                alert('Please enter at least one valid split payment amount.');
+                return;
+            }
+            const splitSum = validLines.reduce((sum, p) => sum + p.amount, 0);
+            if (splitSum < tenderOrder.total_amount && !tenderOrder.customer_id) {
+                alert('Split total is less than payable amount. Walk-in customer cannot buy on credit/due.');
+                return;
+            }
+            payload.payments = validLines;
+        } else if (paymentMode === 'due') {
+            if (!tenderOrder.customer_id) {
+                alert('বাকিতে বিক্রি করতে কাস্টমার রেজিস্টার্ড হতে হবে (Walk-in কাস্টমারে বাকি সম্ভব নয়)।');
+                return;
+            }
+            const paidNow = Math.max(0, Number(duePaidNow) || 0);
+            payload.payment_method = dueMethod;
+            payload.paid_amount = Math.min(paidNow, tenderOrder.total_amount);
         } else {
+            if (paymentMethod === 'cash' && (Number(tenderedCash) || 0) < tenderOrder.total_amount) {
+                alert('Given cash is less than total payable. Use "Due (বাকি)" for credit/partial payment.');
+                return;
+            }
             payload.payment_method = paymentMethod;
             payload.paid_amount = paymentMethod === 'cash' ? Number(tenderedCash) : tenderOrder.total_amount;
             payload.reference_number = referenceNumber || undefined;
         }
 
+        setSubmittingPayment(true);
         router.post(route('cashier.orders.pay', tenderOrder.id), payload, {
             onSuccess: () => {
                 setSubmittingPayment(false);
@@ -1260,150 +1298,273 @@ export default function CashierDashboard({
                                 </div>
                             </div>
 
-                            {/* Payment Method Selector */}
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    Payment Method
-                                </label>
-                                <div className="grid grid-cols-5 gap-1.5">
-                                    {(['cash', 'card', 'bkash', 'nagad', 'split'] as const).map((m) => (
-                                        <button
-                                            key={m}
-                                            type="button"
-                                            onClick={() => setPaymentMethod(m)}
-                                            className={`py-2 px-1 text-center rounded-[4px] border text-xs font-bold uppercase transition-colors cursor-pointer ${
-                                                paymentMethod === m
-                                                    ? 'bg-[#FF4A1F] text-white border-[#FF4A1F]'
-                                                    : 'bg-white dark:bg-[#181d26] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                                            }`}
-                                        >
-                                            {m}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Cash Tender & Quick Buttons */}
-                            {paymentMethod === 'cash' && (
-                                <div className="space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <Input
-                                                label="Tendered Cash Amount"
-                                                type="number"
-                                                min={tenderOrder.total_amount}
-                                                step="any"
-                                                value={tenderedCash}
-                                                onChange={(e) => setTenderedCash(e.target.value ? Number(e.target.value) : '')}
-                                                required
-                                                className="h-[34px] text-sm font-mono font-bold focus:border-[#FF4A1F]"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                Change Due
-                                            </label>
-                                            <div className="w-full h-[34px] flex items-center rounded-[1px] border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#181d26] px-3 text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">
-                                                {formatCurrency(changeDue, currency)}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Quick Cash Buttons */}
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <button
-                                            type="button"
-                                            onClick={() => setTenderedCash(tenderOrder.total_amount)}
-                                            className="px-2 py-1 rounded-[4px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
-                                        >
-                                            Exact
-                                        </button>
-                                        {[50, 100, 500, 1000].map((inc) => (
-                                            <button
-                                                key={inc}
-                                                type="button"
-                                                onClick={() => setTenderedCash(Math.ceil(tenderOrder.total_amount / inc) * inc)}
-                                                className="px-2 py-1 rounded-[4px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
-                                            >
-                                                +{inc}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Card / Mobile Reference Number */}
-                            {(paymentMethod === 'card' || paymentMethod === 'bkash' || paymentMethod === 'nagad') && (
-                                <div>
-                                    <Input
-                                        label="Transaction / Reference ID"
-                                        type="text"
-                                        placeholder="e.g. TrxID / POS Slip Approval Code"
-                                        value={referenceNumber}
-                                        onChange={(e) => setReferenceNumber(e.target.value)}
-                                        className="h-[34px] text-xs focus:border-[#FF4A1F]"
-                                    />
-                                </div>
-                            )}
-
-                            {/* Split Payment Rows */}
-                            {paymentMethod === 'split' && (
-                                <div className="space-y-2">
-                                    <span className="text-[11px] text-slate-500 font-semibold block">
-                                        Multi-Channel Tender Breakdown
+                            {/* Payment Method Selector (POS Style: Single / Split / Due) */}
+                            <div className="space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">
+                                        Payment Method (পেমেন্ট পদ্ধতি)
+                                    </label>
+                                    <span className="text-[10.5px] text-slate-400 font-medium">
+                                        {paymentMode === 'single' ? 'একক' : paymentMode === 'split' ? 'মিক্সড' : 'বাকি'}
                                     </span>
-                                    {splitPayments.map((sp, idx) => (
-                                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                                            <div className="col-span-4">
-                                                <Select
-                                                    size="sm"
-                                                    value={sp.method}
-                                                    onChange={(e) => {
-                                                        const updated = [...splitPayments];
-                                                        updated[idx].method = String(e.target.value) as any;
-                                                        setSplitPayments(updated);
-                                                    }}
-                                                    options={[
-                                                        { value: 'cash', label: 'Cash' },
-                                                        { value: 'card', label: 'Card' },
-                                                        { value: 'bkash', label: 'bKash' },
-                                                        { value: 'nagad', label: 'Nagad' },
-                                                    ]}
-                                                    triggerClassName="h-[30px] bg-white dark:bg-[#12161c] px-2 text-xs"
-                                                />
-                                            </div>
-                                            <div className="col-span-4">
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-1 p-0.5 rounded-[5px] bg-slate-100 dark:bg-[#1a202a] border border-slate-200 dark:border-slate-800 text-[11px] font-semibold">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('single')}
+                                        className={`py-1.5 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'single'
+                                                ? 'bg-white dark:bg-[#252d3d] text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/80 dark:border-slate-700'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Single Pay
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('split')}
+                                        className={`py-1.5 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'split'
+                                                ? 'bg-[#FF4A1F] text-white shadow-xs font-bold'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Split / Mixed
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentMode('due')}
+                                        className={`py-1.5 rounded-[4px] transition-colors cursor-pointer text-center ${
+                                            paymentMode === 'due'
+                                                ? 'bg-rose-600 text-white shadow-xs font-bold'
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        Due (বাকি)
+                                    </button>
+                                </div>
+
+                                {/* Single Payment Mode */}
+                                {paymentMode === 'single' && (
+                                    <div className="space-y-2 pt-0.5">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Select
+                                                size="sm"
+                                                value={paymentMethod}
+                                                onChange={(e) => setPaymentMethod(String(e.target.value) as any)}
+                                                options={[
+                                                    { value: 'cash', label: 'Cash Counter (নগদ)' },
+                                                    { value: 'card', label: 'Debit / Credit Card (কার্ড)' },
+                                                    { value: 'bkash', label: 'bKash (বিকাশ)' },
+                                                    { value: 'nagad', label: 'Nagad (নগদ ওয়ালেট)' },
+                                                    { value: 'rocket', label: 'Rocket (রকেট)' },
+                                                ]}
+                                            />
+                                            {paymentMethod === 'cash' ? (
                                                 <Input
                                                     type="number"
-                                                    min={0}
-                                                    step="any"
-                                                    value={sp.amount || ''}
-                                                    placeholder="Amount"
-                                                    onChange={(e) => {
-                                                        const updated = [...splitPayments];
-                                                        updated[idx].amount = Number(e.target.value);
-                                                        setSplitPayments(updated);
-                                                    }}
-                                                    className="h-[30px] px-2 text-xs font-mono"
+                                                    min="0"
+                                                    step="0.01"
+                                                    placeholder={`Given Cash (${getCurrencySymbol(currency)})`}
+                                                    value={tenderedCash}
+                                                    onChange={(e) => setTenderedCash(e.target.value ? Number(e.target.value) : '')}
+                                                    className="h-[30px] px-2 text-xs font-bold tabular-nums focus:border-[#FF4A1F]"
+                                                />
+                                            ) : (
+                                                <div className="h-[30px] flex items-center justify-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 rounded-[2px] border border-emerald-200 dark:border-emerald-900/50">
+                                                    Full Pay: {formatCurrency(tenderOrder.total_amount, currency)}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {paymentMethod === 'cash' && (
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTenderedCash(tenderOrder.total_amount)}
+                                                        className="px-2 py-0.5 rounded-[3px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                                    >
+                                                        Exact
+                                                    </button>
+                                                    {[50, 100, 500, 1000].map((inc) => (
+                                                        <button
+                                                            key={inc}
+                                                            type="button"
+                                                            onClick={() => setTenderedCash(Math.ceil(tenderOrder.total_amount / inc) * inc)}
+                                                            className="px-2 py-0.5 rounded-[3px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                                        >
+                                                            +{inc}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {changeDue > 0 && (
+                                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                                        Change: {formatCurrency(changeDue, currency)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {paymentMethod !== 'cash' && (
+                                            <Input
+                                                type="text"
+                                                placeholder="Transaction / Reference ID (optional)"
+                                                value={referenceNumber}
+                                                onChange={(e) => setReferenceNumber(e.target.value)}
+                                                className="text-xs focus:border-[#FF4A1F]"
+                                            />
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Split / Mixed Payment Mode */}
+                                {paymentMode === 'split' && (
+                                    <div className="space-y-2 p-2.5 rounded-[4px] bg-slate-50 dark:bg-[#161c24] border border-slate-200 dark:border-slate-800 text-xs">
+                                        <div className="flex items-center justify-between font-bold text-[11px] text-slate-700 dark:text-slate-300 pb-1 border-b border-slate-200 dark:border-slate-700">
+                                            <span>Mixed Methods</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSplitPayments([...splitPayments, { method: 'card', amount: '' }])}
+                                                className="text-[#FF4A1F] hover:underline cursor-pointer flex items-center gap-0.5"
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                                Add Row
+                                            </button>
+                                        </div>
+
+                                        {splitPayments.map((row, rIdx) => (
+                                            <div key={rIdx} className="grid grid-cols-12 gap-1.5 items-center">
+                                                <div className="col-span-5">
+                                                    <Select
+                                                        size="sm"
+                                                        value={row.method}
+                                                        onChange={(e) => {
+                                                            const updated = [...splitPayments];
+                                                            updated[rIdx].method = String(e.target.value) as any;
+                                                            setSplitPayments(updated);
+                                                        }}
+                                                        options={[
+                                                            { value: 'cash', label: 'Cash (নগদ)' },
+                                                            { value: 'bkash', label: 'bKash (বিকাশ)' },
+                                                            { value: 'nagad', label: 'Nagad (নগদ)' },
+                                                            { value: 'card', label: 'Card (কার্ড)' },
+                                                            { value: 'rocket', label: 'Rocket (রকেট)' },
+                                                        ]}
+                                                        triggerClassName="h-7 text-[11px] bg-white dark:bg-[#1f2631] px-2 font-semibold"
+                                                    />
+                                                </div>
+                                                <div className="col-span-6">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder={`Amount (${getCurrencySymbol(currency)})`}
+                                                        value={row.amount}
+                                                        onChange={(e) => {
+                                                            const updated = [...splitPayments];
+                                                            updated[rIdx].amount = e.target.value;
+                                                            setSplitPayments(updated);
+                                                        }}
+                                                        className="h-7 px-2 text-[11px] font-bold tabular-nums bg-white dark:bg-[#1f2631]"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 flex justify-center">
+                                                    {splitPayments.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== rIdx))}
+                                                            className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {(() => {
+                                            const totalPaid = splitPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                                            const remaining = Math.max(0, Math.round((tenderOrder.total_amount - totalPaid) * 100) / 100);
+                                            const change = Math.max(0, Math.round((totalPaid - tenderOrder.total_amount) * 100) / 100);
+                                            return (
+                                                <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
+                                                    <div className="flex justify-between font-semibold">
+                                                        <span>Total Collected:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(totalPaid, currency)}</span>
+                                                    </div>
+                                                    {remaining > 0 ? (
+                                                        <div className="flex justify-between text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded">
+                                                            <span>Remaining Due (বাকি):</span>
+                                                            <span>{formatCurrency(remaining, currency)}</span>
+                                                        </div>
+                                                    ) : (
+                                                        change > 0 && (
+                                                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                                                                <span>Change / ফেরত:</span>
+                                                                <span>{formatCurrency(change, currency)}</span>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+
+                                {/* Due Sale Mode */}
+                                {paymentMode === 'due' && (
+                                    <div className="space-y-2 p-2.5 rounded-[4px] bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-xs">
+                                        {!tenderOrder.customer_id && (
+                                            <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                                <span>বাকিতে বিক্রি করতে কাস্টমার রেজিস্টার্ড থাকা প্রয়োজন (Walk-in বাকি হবে না)</span>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <Input
+                                                    label={`Paid Now / আজকে আদায় (${getCurrencySymbol(currency)})`}
+                                                    type="number"
+                                                    min="0"
+                                                    max={tenderOrder.total_amount}
+                                                    step="0.01"
+                                                    value={duePaidNow}
+                                                    onChange={(e) => setDuePaidNow(e.target.value)}
+                                                    className="h-7 border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-bold tabular-nums"
                                                 />
                                             </div>
-                                            <div className="col-span-4">
-                                                <Input
-                                                    type="text"
-                                                    placeholder="Ref #"
-                                                    value={sp.reference_number || ''}
-                                                    onChange={(e) => {
-                                                        const updated = [...splitPayments];
-                                                        updated[idx].reference_number = e.target.value;
-                                                        setSplitPayments(updated);
-                                                    }}
-                                                    className="h-[30px] px-2 text-xs"
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-0.5">
+                                                    Payment Method
+                                                </label>
+                                                <Select
+                                                    size="sm"
+                                                    value={dueMethod}
+                                                    onChange={(e) => setDueMethod(String(e.target.value) as any)}
+                                                    options={[
+                                                        { value: 'cash', label: 'Cash (নগদ)' },
+                                                        { value: 'bkash', label: 'bKash (বিকাশ)' },
+                                                        { value: 'nagad', label: 'Nagad (নগদ)' },
+                                                        { value: 'card', label: 'Card (কার্ড)' },
+                                                    ]}
+                                                    triggerClassName="h-7 border-rose-300 dark:border-rose-800 bg-white dark:bg-[#1a202a] px-2 text-xs font-medium"
                                                 />
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                        <div className="flex justify-between font-bold text-rose-700 dark:text-rose-400 pt-1 border-t border-rose-200 dark:border-rose-900/40">
+                                            <span>Due to Record (নতুন বকেয়া):</span>
+                                            <span>
+                                                {formatCurrency(
+                                                    Math.max(0, tenderOrder.total_amount - (Number(duePaidNow) || 0)),
+                                                    currency
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                                 <Button

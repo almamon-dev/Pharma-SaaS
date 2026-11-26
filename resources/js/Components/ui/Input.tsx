@@ -10,6 +10,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
     rightIcon?: React.ReactNode;
     layout?: FormLayoutMode;
     labelWidth?: string;
+    borderless?: boolean;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -25,6 +26,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             required,
             layout,
             labelWidth,
+            borderless = false,
             ...props
         },
         ref
@@ -75,12 +77,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         id={inputId}
                         required={required}
                         className={cn(
-                            'block h-[30px] w-full rounded-[2px] border bg-white dark:bg-[#12161c] px-2.5 py-0.5 text-[12.5px] font-normal text-[#202223] dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800/60 disabled:text-slate-500 read-only:bg-slate-100 dark:read-only:bg-slate-800/70 read-only:text-slate-600 dark:read-only:text-slate-300 read-only:border-slate-200 dark:read-only:border-slate-700/70 read-only:focus:border-slate-200 dark:read-only:focus:border-slate-700/70 read-only:cursor-default shadow-none font-sans antialiased dark:[color-scheme:dark]',
+                            'block h-[30px] w-full rounded-[2px] px-2.5 py-0.5 text-[12.5px] font-normal text-[#202223] dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 read-only:cursor-default shadow-none font-sans antialiased dark:[color-scheme:dark]',
                             Boolean(icon) && 'pl-9',
                             Boolean(rightIcon) && 'pr-10',
-                            error
-                                ? 'border-[#d82c0d]'
-                                : 'border-slate-300 dark:border-slate-700/80 focus:border-slate-400 dark:focus:border-slate-500',
+                            borderless
+                                ? 'border-0 border-transparent bg-transparent dark:bg-transparent focus:border-0 focus:border-transparent focus-visible:border-0'
+                                : cn(
+                                      'border bg-white dark:bg-[#12161c] disabled:bg-slate-100 dark:disabled:bg-slate-800/60 disabled:text-slate-500 read-only:bg-slate-100 dark:read-only:bg-slate-800/70 read-only:text-slate-600 dark:read-only:text-slate-300 read-only:border-slate-200 dark:read-only:border-slate-700/70 read-only:focus:border-slate-200 dark:read-only:focus:border-slate-700/70',
+                                      error
+                                          ? 'border-[#d82c0d]'
+                                          : 'border-slate-300 dark:border-slate-700/80 focus:border-slate-400 dark:focus:border-slate-500'
+                                  ),
                             className
                         )}
                         ref={ref}

@@ -1,4 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    BarcodeCameraModal,
+    BarcodeScanFeedback,
+} from '@/Components/BarcodeCameraModal';
+import { BarcodeSvg } from '@/Components/BarcodeSvg';
+import { Button } from '@/Components/ui/Button';
+import { Input } from '@/Components/ui/Input';
+import { Select } from '@/Components/ui/Select';
+import { StatusDot } from '@/Components/ui/StatusDot';
+import { AppLayout } from '@/Layouts/AppLayout';
+import {
+    POS_SEARCH_PLACEHOLDERS,
+    useTypingPlaceholder,
+} from '@/hooks/useTypingPlaceholder';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
+import { PosReceiptData, SharedPageProps } from '@/types';
 import { router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -15,29 +30,18 @@ import {
     Trash2,
     UserPlus,
 } from 'lucide-react';
-import { AppLayout } from '@/Layouts/AppLayout';
-import {
-    BarcodeCameraModal,
-    BarcodeScanFeedback,
-} from '@/Components/BarcodeCameraModal';
-import { BarcodeSvg } from '@/Components/BarcodeSvg';
-import { Button } from '@/Components/ui/Button';
-import { Input } from '@/Components/ui/Input';
-import { Select } from '@/Components/ui/Select';
-import { StatusDot } from '@/Components/ui/StatusDot';
-import { PosReceiptData, SharedPageProps } from '@/types';
-import { formatCurrency, getCurrencySymbol } from '@/lib/format';
-import PosReceiptModal from './components/PosReceiptModal';
-import QuickCustomerModal from './components/QuickCustomerModal';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import HeldBillsModal, { HeldBill } from './components/HeldBillsModal';
-import { PosCounterBar } from './components/PosCounterBar';
 import { PosBreakLockOverlay } from './components/PosBreakLockOverlay';
+import { PosCounterBar } from './components/PosCounterBar';
+import PosReceiptModal from './components/PosReceiptModal';
 import {
     CloseShiftModal,
     OpenShiftModal,
     PosCounterData,
     TakeBreakModal,
 } from './components/PosShiftModals';
+import QuickCustomerModal from './components/QuickCustomerModal';
 
 interface PosMedicine {
     id: number;
@@ -199,6 +203,10 @@ export default function PosIndex({
     const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 
     const [query, setQuery] = useState('');
+    const searchPlaceholder = useTypingPlaceholder(
+        POS_SEARCH_PLACEHOLDERS,
+        Boolean(query)
+    );
     const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [customerId, setCustomerId] = useState('');
@@ -235,14 +243,14 @@ export default function PosIndex({
             if (raw) {
                 setHeldBills(JSON.parse(raw));
             }
-        } catch {}
+        } catch { }
     }, []);
 
     const saveHeldBills = (bills: HeldBill[]) => {
         setHeldBills(bills);
         try {
             localStorage.setItem('pos_held_bills', JSON.stringify(bills));
-        } catch {}
+        } catch { }
     };
 
     const handleHoldBill = () => {
@@ -581,11 +589,11 @@ export default function PosIndex({
     const discountAmount =
         discountType === 'percent'
             ? Math.min(
-                  subtotal,
-                  Math.round(
-                      ((subtotal * effectiveDiscountPercent) / 100) * 100
-                  ) / 100
-              )
+                subtotal,
+                Math.round(
+                    ((subtotal * effectiveDiscountPercent) / 100) * 100
+                ) / 100
+            )
             : Math.min(subtotal, Math.round(rawDiscountValue * 100) / 100);
     const grandTotal = Math.max(
         0,
@@ -717,7 +725,7 @@ export default function PosIndex({
                             <div className="flex-1 min-w-0">
                                 <Input
                                     ref={scanInputRef}
-                                    placeholder="Scan barcode or SKU (F2), or search medicine... (Enter)"
+                                    placeholder={searchPlaceholder}
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={handleSearchKeyDown}
@@ -738,12 +746,12 @@ export default function PosIndex({
                                                 ✕
                                             </button>
                                         ) : (
-                                            <kbd className="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                                            <kbd className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
                                                 F2
                                             </kbd>
                                         )
                                     }
-                                    className="h-8 text-[12.5px]"
+                                    className="h-8 rounded-full border-slate-200/90 dark:border-slate-700/80 focus:border-slate-200/90 dark:focus:border-slate-700/80 bg-white dark:bg-[#12161c] pl-9 pr-11 text-[12.5px]"
                                 />
                             </div>
                             <Button
@@ -775,11 +783,10 @@ export default function PosIndex({
                                         onClick={() =>
                                             setCatalogFilter(tab.key)
                                         }
-                                        className={`h-7 px-2.5 rounded-[3px] text-[11.5px] font-semibold transition-colors cursor-pointer ${
-                                            active
+                                        className={`h-7 px-2.5 rounded-[3px] text-[11.5px] font-semibold transition-colors cursor-pointer ${active
                                                 ? 'bg-[#FF4A1F] text-white'
                                                 : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] text-slate-600 dark:text-slate-300 hover:border-slate-300'
-                                        }`}
+                                            }`}
                                     >
                                         {tab.label}
                                     </button>
@@ -795,13 +802,12 @@ export default function PosIndex({
 
                     {scanStatus && (
                         <div
-                            className={`px-3 py-1.5 border-b text-[11.5px] font-medium flex items-center justify-between gap-2 ${
-                                scanStatus.tone === 'success'
+                            className={`px-3 py-1.5 border-b text-[11.5px] font-medium flex items-center justify-between gap-2 ${scanStatus.tone === 'success'
                                     ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-300'
                                     : scanStatus.tone === 'warning'
-                                      ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/80 dark:border-amber-900/50 text-amber-800 dark:text-amber-300'
-                                      : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/50 text-rose-700 dark:text-rose-300'
-                            }`}
+                                        ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/80 dark:border-amber-900/50 text-amber-800 dark:text-amber-300'
+                                        : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/50 text-rose-700 dark:text-rose-300'
+                                }`}
                         >
                             <span>{scanStatus.message}</span>
                             <button
@@ -875,13 +881,12 @@ export default function PosIndex({
                                         return (
                                             <tr
                                                 key={med.id}
-                                                className={`transition-colors ${
-                                                    outOfStock
+                                                className={`transition-colors ${outOfStock
                                                         ? 'opacity-55 bg-slate-50/30 dark:bg-slate-900/20'
                                                         : cartQty > 0
-                                                          ? 'bg-orange-50/40 dark:bg-[#ff4a1f]/10'
-                                                          : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
-                                                }`}
+                                                            ? 'bg-orange-50/40 dark:bg-[#ff4a1f]/10'
+                                                            : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
+                                                    }`}
                                             >
                                                 <td className="px-1.5 py-1 font-mono text-[9.5px] font-bold text-[#FF4A1F] whitespace-nowrap">
                                                     {med.sku}
@@ -942,12 +947,11 @@ export default function PosIndex({
                                                         </StatusDot>
                                                     ) : (
                                                         <span
-                                                            className={`font-semibold tabular-nums ${
-                                                                med.available_stock <=
-                                                                20
+                                                            className={`font-semibold tabular-nums ${med.available_stock <=
+                                                                    20
                                                                     ? 'text-amber-600 dark:text-amber-400'
                                                                     : 'text-slate-700 dark:text-slate-300'
-                                                            }`}
+                                                                }`}
                                                         >
                                                             {
                                                                 med.available_stock
@@ -1214,11 +1218,10 @@ export default function PosIndex({
                                                 )
                                             }
                                             title={`Fixed amount (${currencySymbol})`}
-                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                                discountType === 'fixed'
+                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${discountType === 'fixed'
                                                     ? 'bg-[#FF4A1F] text-white'
                                                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                                            }`}
+                                                }`}
                                         >
                                             {currencySymbol}
                                         </button>
@@ -1233,11 +1236,10 @@ export default function PosIndex({
                                                 )
                                             }
                                             title="Percentage (%)"
-                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${
-                                                discountType === 'percent'
+                                            className={`px-1.5 py-0.5 text-[10.5px] font-bold leading-none transition-colors cursor-pointer ${discountType === 'percent'
                                                     ? 'bg-[#FF4A1F] text-white'
                                                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                                            }`}
+                                                }`}
                                         >
                                             %
                                         </button>
@@ -1278,7 +1280,7 @@ export default function PosIndex({
                                             }
                                             if (
                                                 discountType ===
-                                                    'percent' &&
+                                                'percent' &&
                                                 num > 100
                                             ) {
                                                 setDiscount('100');
@@ -1314,33 +1316,30 @@ export default function PosIndex({
                                     <button
                                         type="button"
                                         onClick={() => setPaymentMode('single')}
-                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
-                                            paymentMode === 'single'
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${paymentMode === 'single'
                                                 ? 'bg-white dark:bg-[#252d3d] text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/80 dark:border-slate-700'
                                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                                        }`}
+                                            }`}
                                     >
                                         Single Pay
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setPaymentMode('split')}
-                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
-                                            paymentMode === 'split'
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${paymentMode === 'split'
                                                 ? 'bg-[#FF4A1F] text-white shadow-xs font-bold'
                                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                                        }`}
+                                            }`}
                                     >
                                         Split / Mixed
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setPaymentMode('due')}
-                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${
-                                            paymentMode === 'due'
+                                        className={`py-1 rounded-[4px] transition-colors cursor-pointer text-center ${paymentMode === 'due'
                                                 ? 'bg-rose-600 text-white shadow-xs font-bold'
                                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                                        }`}
+                                            }`}
                                     >
                                         Due (বাকি)
                                     </button>
@@ -1563,8 +1562,8 @@ export default function PosIndex({
                                                     {saleUnit === 'piece'
                                                         ? medicine.unit
                                                         : saleUnit === 'strip'
-                                                          ? `strip (${packSize} pcs)`
-                                                          : `box (${packSize} pcs)`}
+                                                            ? `strip (${packSize} pcs)`
+                                                            : `box (${packSize} pcs)`}
                                                     {saleUnit !== 'piece' && (
                                                         <span className="ml-1 text-slate-500 dark:text-slate-400">
                                                             = {qty * packSize}{' '}
@@ -1575,71 +1574,70 @@ export default function PosIndex({
                                                 {(medicine.units_per_strip >
                                                     1 ||
                                                     medicine.units_per_box >
-                                                        1) && (
-                                                    <div className="mt-1 inline-flex items-center rounded-[3px] border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50">
-                                                        {(
-                                                            [
-                                                                'piece',
-                                                                'strip',
-                                                                'box',
-                                                            ] as SaleUnit[]
-                                                        )
-                                                            .filter(
-                                                                (u) =>
-                                                                    u ===
-                                                                        'piece' ||
-                                                                    (u ===
-                                                                        'strip' &&
-                                                                        medicine.units_per_strip >
-                                                                            1) ||
-                                                                    (u ===
-                                                                        'box' &&
-                                                                        medicine.units_per_box >
-                                                                            1)
+                                                    1) && (
+                                                        <div className="mt-1 inline-flex items-center rounded-[3px] border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50">
+                                                            {(
+                                                                [
+                                                                    'piece',
+                                                                    'strip',
+                                                                    'box',
+                                                                ] as SaleUnit[]
                                                             )
-                                                            .map((u) => {
-                                                                const uMax =
-                                                                    getMaxSelectableQty(
-                                                                        medicine,
-                                                                        u
+                                                                .filter(
+                                                                    (u) =>
+                                                                        u ===
+                                                                        'piece' ||
+                                                                        (u ===
+                                                                            'strip' &&
+                                                                            medicine.units_per_strip >
+                                                                            1) ||
+                                                                        (u ===
+                                                                            'box' &&
+                                                                            medicine.units_per_box >
+                                                                            1)
+                                                                )
+                                                                .map((u) => {
+                                                                    const uMax =
+                                                                        getMaxSelectableQty(
+                                                                            medicine,
+                                                                            u
+                                                                        );
+                                                                    const active =
+                                                                        saleUnit ===
+                                                                        u;
+                                                                    const label =
+                                                                        u ===
+                                                                            'piece'
+                                                                            ? 'Pc'
+                                                                            : u ===
+                                                                                'strip'
+                                                                                ? `Strip (${medicine.units_per_strip})`
+                                                                                : `Box (${medicine.units_per_box})`;
+                                                                    return (
+                                                                        <button
+                                                                            key={u}
+                                                                            type="button"
+                                                                            disabled={
+                                                                                uMax <=
+                                                                                0
+                                                                            }
+                                                                            onClick={() =>
+                                                                                setItemSaleUnit(
+                                                                                    medicine.id,
+                                                                                    u
+                                                                                )
+                                                                            }
+                                                                            className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${active
+                                                                                    ? 'bg-[#FF4A1F] text-white'
+                                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/60'
+                                                                                }`}
+                                                                        >
+                                                                            {label}
+                                                                        </button>
                                                                     );
-                                                                const active =
-                                                                    saleUnit ===
-                                                                    u;
-                                                                const label =
-                                                                    u ===
-                                                                    'piece'
-                                                                        ? 'Pc'
-                                                                        : u ===
-                                                                            'strip'
-                                                                          ? `Strip (${medicine.units_per_strip})`
-                                                                          : `Box (${medicine.units_per_box})`;
-                                                                return (
-                                                                    <button
-                                                                        key={u}
-                                                                        type="button"
-                                                                        disabled={
-                                                                            uMax <=
-                                                                            0
-                                                                        }
-                                                                        onClick={() =>
-                                                                            setItemSaleUnit(
-                                                                                medicine.id,
-                                                                                u
-                                                                            )
-                                                                        }
-                                                                        className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                                                            active
-                                                                                ? 'bg-[#FF4A1F] text-white'
-                                                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/60'
-                                                                        }`}
-                                                                    >
-                                                                        {label}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                    </div>
-                                                )}
+                                                                })}
+                                                        </div>
+                                                    )}
                                             </div>
 
                                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1723,7 +1721,7 @@ export default function PosIndex({
                                     <span>
                                         Discount
                                         {discountType === 'percent' &&
-                                        effectiveDiscountPercent > 0
+                                            effectiveDiscountPercent > 0
                                             ? ` (${effectiveDiscountPercent}%)`
                                             : ''}
                                     </span>
