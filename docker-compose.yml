@@ -2,13 +2,13 @@ services:
   app:
     build:
       context: .
-      dockerfile: docker/php/Dockerfile
+      dockerfile: infra/docker/php/Dockerfile
     image: pharmacy-saas-app:latest
     container_name: pharmacy-saas-app
-    working_dir: /app
+    working_dir: /workspace/apps/pharmacy-api
     volumes:
-      - ./:/app
-      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - ./:/workspace
+      - ./infra/docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
     ports:
       - "8001:8000"
     restart: unless-stopped
