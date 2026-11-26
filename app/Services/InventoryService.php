@@ -11,12 +11,20 @@ use App\Models\MedicineBatch;
 use App\Models\StockMovement;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Inventory\Application\DTO\AdjustBatchCommand;
+use App\Modules\Inventory\Application\DTO\TransferBatchCommand;
+use App\Modules\Inventory\Application\StockControlWorkflow;
+use App\Modules\Inventory\Domain\InventoryProblem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class InventoryService
 {
+    public function __construct(
+        private readonly StockControlWorkflow $stockControl,
+    ) {}
+
     /**
      * Normalize piece and box pricing from validated request inputs.
      *
@@ -32,38 +40,7 @@ class InventoryService
      */
     public function normalizePricing(array $validated): array
     {
-        $unitsPerStrip = max(1, (int) ($validated['units_per_strip'] ?? 1));
-        $unitsPerBox = max(1, (int) ($validated['units_per_box'] ?? 1));
-
-        $hasPiecePurchase = isset($validated['purchase_price']) && $validated['purchase_price'] !== '' && $validated['purchase_price'] !== null;
-        $hasBoxPurchase = isset($validated['box_purchase_price']) && $validated['box_purchase_price'] !== '' && $validated['box_purchase_price'] !== null;
-        $hasPieceSelling = isset($validated['selling_price']) && $validated['selling_price'] !== '' && $validated['selling_price'] !== null;
-        $hasBoxSelling = isset($validated['box_selling_price']) && $validated['box_selling_price'] !== '' && $validated['box_selling_price'] !== null;
-
-        $unitPurchase = $hasPiecePurchase
-            ? round((float) $validated['purchase_price'], 2)
-            : round(((float) ($validated['box_purchase_price'] ?? 0)) / $unitsPerBox, 2);
-
-        $unitSelling = $hasPieceSelling
-            ? round((float) $validated['selling_price'], 2)
-            : round(((float) ($validated['box_selling_price'] ?? 0)) / $unitsPerBox, 2);
-
-        $boxPurchase = $hasBoxPurchase
-            ? round((float) $validated['box_purchase_price'], 2)
-            : ($unitsPerBox > 1 ? round($unitPurchase * $unitsPerBox, 2) : null);
-
-        $boxSelling = $hasBoxSelling
-            ? round((float) $validated['box_selling_price'], 2)
-            : ($unitsPerBox > 1 ? round($unitSelling * $unitsPerBox, 2) : null);
-
-        return [
-            'units_per_strip' => $unitsPerStrip,
-            'units_per_box' => $unitsPerBox,
-            'default_purchase_price' => $unitPurchase,
-            'box_purchase_price' => $boxPurchase,
-            'default_selling_price' => $unitSelling,
-            'box_selling_price' => $boxSelling,
-        ];
+        return $this->stockControl->normalizePricing($validated)->toArray();
     }
 
     /**
@@ -311,165 +288,22 @@ class InventoryService
         ?User $actor = null,
         bool $disposeEntireBatch = false,
     ): MedicineBatch {
-        if (! in_array($movementType, [
-            StockMovementType::ADJUSTMENT_IN,
-            StockMovementType::ADJUSTMENT_OUT,
-            StockMovementType::DAMAGE,
-            StockMovementType::EXPIRY_DISPOSAL,
-            StockMovementType::SUPPLIER_RETURN,
-        ], true)) {
-            throw ValidationException::withMessages([
-                'adjustment_type' => 'Unsupported batch adjustment type.',
-            ]);
+        try {
+            $updated = $this->stockControl->adjustBatch(new AdjustBatchCommand(
+                batchId: (int) $batch->id,
+                movementType: $movementType->value,
+                movementLabel: $movementType->label(),
+                quantity: $quantity,
+                reason: $reason,
+                notes: $notes,
+                actorId: $actor?->id,
+                disposeEntireBatch: $disposeEntireBatch,
+            ));
+        } catch (InventoryProblem $problem) {
+            throw ValidationException::withMessages([$problem->field => $problem->getMessage()]);
         }
 
-        return DB::transaction(function () use (
-            $batch,
-            $movementType,
-            $quantity,
-            $reason,
-            $notes,
-            $actor,
-            $disposeEntireBatch
-        ): MedicineBatch {
-            /** @var MedicineBatch $locked */
-            $locked = MedicineBatch::query()->lockForUpdate()->findOrFail($batch->id);
-            $before = (int) $locked->quantity_available;
-            $unitCost = (float) $locked->purchase_price;
-            $cleanReason = trim($reason);
-            $cleanNotes = $notes ? trim($notes) : null;
-
-            if ($movementType === StockMovementType::ADJUSTMENT_IN) {
-                if ($locked->isExpired()) {
-                    throw ValidationException::withMessages([
-                        'quantity' => 'Expired batches cannot receive positive shelf adjustments.',
-                    ]);
-                }
-
-                if (in_array($locked->status, [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value], true)) {
-                    throw ValidationException::withMessages([
-                        'quantity' => 'Damaged or disposed batches cannot be returned to active shelf stock.',
-                    ]);
-                }
-
-                if ($quantity < 1) {
-                    throw ValidationException::withMessages([
-                        'quantity' => 'Adjustment quantity must be at least 1 unit.',
-                    ]);
-                }
-
-                $after = $before + $quantity;
-                $locked->quantity_available = $after;
-                if ($locked->status === BatchStatus::DEPLETED->value) {
-                    $locked->status = BatchStatus::ACTIVE->value;
-                }
-                $locked->save();
-
-                $this->recordMovement(
-                    branchId: (int) $locked->branch_id,
-                    medicineId: (int) $locked->medicine_id,
-                    batchId: $locked->id,
-                    movementType: $movementType,
-                    quantityChange: $quantity,
-                    balanceBefore: $before,
-                    balanceAfter: $after,
-                    unitCost: $unitCost,
-                    reason: $cleanReason,
-                    notes: $cleanNotes,
-                    actor: $actor,
-                    reference: $locked,
-                );
-
-                AuditLog::record(
-                    action: 'inventory.batch_adjusted',
-                    description: "Adjusted batch {$locked->batch_number} by +{$quantity} ({$cleanReason}).",
-                    subject: $locked,
-                    metadata: ['before' => $before, 'after' => $after, 'type' => $movementType->value],
-                    userId: $actor?->id,
-                );
-
-                return $locked->fresh();
-            }
-
-            if (in_array($locked->status, [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value], true) && $before <= 0) {
-                throw ValidationException::withMessages([
-                    'quantity' => 'This batch has already been fully written off.',
-                ]);
-            }
-
-            $effectiveQty = ($disposeEntireBatch && in_array($movementType, [StockMovementType::DAMAGE, StockMovementType::EXPIRY_DISPOSAL], true))
-                ? $before
-                : $quantity;
-
-            if ($effectiveQty < 1 && ! ($disposeEntireBatch && $before === 0 && $locked->isExpired())) {
-                throw ValidationException::withMessages([
-                    'quantity' => 'Quantity to deduct must be at least 1 unit.',
-                ]);
-            }
-
-            if ($effectiveQty > $before) {
-                throw ValidationException::withMessages([
-                    'quantity' => "Cannot deduct {$effectiveQty} units because only {$before} remain in batch {$locked->batch_number}.",
-                ]);
-            }
-
-            $after = max(0, $before - $effectiveQty);
-            $locked->quantity_available = $after;
-
-            if ($movementType === StockMovementType::EXPIRY_DISPOSAL && ($after === 0 || $disposeEntireBatch)) {
-                $locked->status = BatchStatus::DISPOSED->value;
-                $locked->disposed_at = now();
-                $locked->disposal_reason = $cleanReason;
-                $locked->disposed_by = $actor?->id;
-            } elseif ($movementType === StockMovementType::DAMAGE && ($after === 0 || $disposeEntireBatch)) {
-                $locked->status = BatchStatus::DAMAGED->value;
-                $locked->disposed_at = now();
-                $locked->disposal_reason = $cleanReason;
-                $locked->disposed_by = $actor?->id;
-            } elseif ($after === 0 && $locked->status === BatchStatus::ACTIVE->value) {
-                $locked->status = BatchStatus::DEPLETED->value;
-            }
-
-            $locked->save();
-
-            if ($effectiveQty > 0) {
-                $this->recordMovement(
-                    branchId: (int) $locked->branch_id,
-                    medicineId: (int) $locked->medicine_id,
-                    batchId: $locked->id,
-                    movementType: $movementType,
-                    quantityChange: -$effectiveQty,
-                    balanceBefore: $before,
-                    balanceAfter: $after,
-                    unitCost: $unitCost,
-                    reason: $cleanReason,
-                    notes: $cleanNotes,
-                    actor: $actor,
-                    reference: $locked,
-                );
-            }
-
-            AuditLog::record(
-                action: match ($movementType) {
-                    StockMovementType::DAMAGE => 'inventory.batch_damaged',
-                    StockMovementType::EXPIRY_DISPOSAL => 'inventory.batch_disposed',
-                    StockMovementType::SUPPLIER_RETURN => 'inventory.batch_supplier_returned',
-                    default => 'inventory.batch_adjusted',
-                },
-                description: "{$movementType->label()} on batch {$locked->batch_number} (-{$effectiveQty}): {$cleanReason}.",
-                subject: $locked,
-                metadata: [
-                    'before' => $before,
-                    'after' => $after,
-                    'type' => $movementType->value,
-                    'status' => $locked->status,
-                    'cost_loss' => round($effectiveQty * $unitCost, 2),
-                ],
-                userId: $actor?->id,
-            );
-
-            return $locked->fresh();
-        });
+        return MedicineBatch::query()->findOrFail($updated->id);
     }
 
     /**
@@ -486,118 +320,24 @@ class InventoryService
         ?string $notes = null,
         ?User $actor = null,
     ): array {
-        return DB::transaction(function () use ($sourceBatch, $targetBranch, $quantity, $reason, $notes, $actor): array {
-            $lockedSource = MedicineBatch::query()->lockForUpdate()->findOrFail($sourceBatch->id);
-
-            if ($lockedSource->branch_id === $targetBranch->id) {
-                throw ValidationException::withMessages([
-                    'target_branch_id' => 'Target branch must be different from the source branch.',
-                ]);
-            }
-
-            $available = (int) $lockedSource->quantity_available;
-            if ($quantity <= 0 || $quantity > $available) {
-                throw ValidationException::withMessages([
-                    'quantity' => "Cannot transfer {$quantity} units. Only {$available} units available in source batch.",
-                ]);
-            }
-
-            $beforeSource = $available;
-            $afterSource = $beforeSource - $quantity;
-            $lockedSource->quantity_available = $afterSource;
-            if ($afterSource === 0 && $lockedSource->status === BatchStatus::ACTIVE->value) {
-                $lockedSource->status = BatchStatus::DEPLETED->value;
-            }
-            $lockedSource->save();
-
-            // Find or create batch in target branch
-            $targetBatch = MedicineBatch::query()
-                ->where('branch_id', $targetBranch->id)
-                ->where('medicine_id', $lockedSource->medicine_id)
-                ->where('batch_number', $lockedSource->batch_number)
-                ->lockForUpdate()
-                ->first();
-
-            $beforeTarget = 0;
-            if ($targetBatch) {
-                $beforeTarget = (int) $targetBatch->quantity_available;
-                $afterTarget = $beforeTarget + $quantity;
-                $targetBatch->quantity_available = $afterTarget;
-                $targetBatch->quantity_received += $quantity;
-                if ($targetBatch->status === BatchStatus::DEPLETED->value && $afterTarget > 0) {
-                    $targetBatch->status = BatchStatus::ACTIVE->value;
-                }
-                $targetBatch->save();
-            } else {
-                $afterTarget = $quantity;
-                $targetBatch = MedicineBatch::query()->create([
-                    'branch_id' => $targetBranch->id,
-                    'medicine_id' => $lockedSource->medicine_id,
-                    'supplier_id' => $lockedSource->supplier_id,
-                    'batch_number' => $lockedSource->batch_number,
-                    'manufacturing_date' => $lockedSource->manufacturing_date,
-                    'expiry_date' => $lockedSource->expiry_date,
-                    'quantity_received' => $quantity,
-                    'quantity_available' => $quantity,
-                    'purchase_price' => $lockedSource->purchase_price,
-                    'selling_price' => $lockedSource->selling_price,
-                    'rack_location' => $lockedSource->rack_location,
-                    'status' => BatchStatus::ACTIVE->value,
-                    'notes' => "Transferred from {$lockedSource->branch?->name}",
-                ]);
-            }
-
-            $cleanReason = trim((string) ($reason ?: "Branch transfer to {$targetBranch->name}"));
-
-            // Record Transfer Out on source
-            $this->recordMovement(
-                branchId: (int) $lockedSource->branch_id,
-                medicineId: (int) $lockedSource->medicine_id,
-                batchId: $lockedSource->id,
-                movementType: StockMovementType::TRANSFER_OUT,
-                quantityChange: -$quantity,
-                balanceBefore: $beforeSource,
-                balanceAfter: $afterSource,
-                unitCost: (float) $lockedSource->purchase_price,
-                reason: $cleanReason,
+        try {
+            $result = $this->stockControl->transferBatch(new TransferBatchCommand(
+                sourceBatchId: (int) $sourceBatch->id,
+                targetBranchId: (int) $targetBranch->id,
+                targetBranchName: (string) $targetBranch->name,
+                quantity: $quantity,
+                reason: $reason,
                 notes: $notes,
-                actor: $actor,
-                reference: $targetBatch,
-            );
+                actorId: $actor?->id,
+            ));
+        } catch (InventoryProblem $problem) {
+            throw ValidationException::withMessages([$problem->field => $problem->getMessage()]);
+        }
 
-            // Record Transfer In on target
-            $this->recordMovement(
-                branchId: (int) $targetBranch->id,
-                medicineId: (int) $lockedSource->medicine_id,
-                batchId: $targetBatch->id,
-                movementType: StockMovementType::TRANSFER_IN,
-                quantityChange: $quantity,
-                balanceBefore: $beforeTarget,
-                balanceAfter: $afterTarget,
-                unitCost: (float) $lockedSource->purchase_price,
-                reason: "Received from {$lockedSource->branch?->name}: {$cleanReason}",
-                notes: $notes,
-                actor: $actor,
-                reference: $lockedSource,
-            );
-
-            AuditLog::record(
-                action: 'inventory.batch_transferred',
-                description: "Transferred {$quantity} units of batch {$lockedSource->batch_number} from {$lockedSource->branch?->name} to {$targetBranch->name}.",
-                subject: $lockedSource,
-                metadata: [
-                    'quantity' => $quantity,
-                    'source_branch_id' => $lockedSource->branch_id,
-                    'target_branch_id' => $targetBranch->id,
-                ],
-                userId: $actor?->id,
-            );
-
-            return [
-                'source' => $lockedSource->fresh(),
-                'target' => $targetBatch->fresh(),
-            ];
-        });
+        return [
+            'source' => MedicineBatch::query()->findOrFail($result['source']->id),
+            'target' => MedicineBatch::query()->findOrFail($result['target']->id),
+        ];
     }
 
     public function recordMovement(
@@ -637,25 +377,7 @@ class InventoryService
 
     public function generateUniqueEan13(int $tenantId): string
     {
-        $tenantPart = str_pad((string) ($tenantId % 1000), 3, '0', STR_PAD_LEFT);
-
-        for ($attempt = 0; $attempt < 20; $attempt++) {
-            $randomPart = str_pad((string) random_int(0, 9999999), 7, '0', STR_PAD_LEFT);
-            $base = '20'.$tenantPart.$randomPart;
-
-            $sum = 0;
-            for ($i = 0; $i < 12; $i++) {
-                $sum += ((int) $base[$i]) * ($i % 2 === 0 ? 1 : 3);
-            }
-            $checkDigit = (10 - ($sum % 10)) % 10;
-            $candidate = $base.$checkDigit;
-
-            if (! Medicine::query()->withTrashed()->where('barcode', $candidate)->exists()) {
-                return $candidate;
-            }
-        }
-
-        return '20'.substr((string) (int) (microtime(true) * 1000), -11);
+        return $this->stockControl->generateUniqueEan13($tenantId);
     }
 }
 

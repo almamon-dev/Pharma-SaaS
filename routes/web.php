@@ -115,7 +115,7 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->whereNumber('counter')
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.destroy');
-    Route::post('/counters/{counter}/open-session', [CounterController::class, 'openSession'])
+    Route::post('/counters/{counter}/open-session', [\App\Modules\CashCounter\Interfaces\Http\ShiftOperationsController::class, 'openSession'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.open-session');
     Route::post('/counters/{counter}/take-break', [CounterController::class, 'takeBreak'])
@@ -124,16 +124,16 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/counters/{counter}/resume-service', [CounterController::class, 'resumeService'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.resume-service');
-    Route::post('/counters/{counter}/close-session', [CounterController::class, 'closeSession'])
+    Route::post('/counters/{counter}/close-session', [\App\Modules\CashCounter\Interfaces\Http\ShiftOperationsController::class, 'closeSession'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('counters.close-session');
-    Route::post('/counters/{counter}/force-close-session', [CounterController::class, 'forceCloseSession'])
+    Route::post('/counters/{counter}/force-close-session', [\App\Modules\CashCounter\Interfaces\Http\ShiftOperationsController::class, 'forceCloseSession'])
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.force-close-session');
-    Route::post('/counters/{counter}/cash-movement', [CounterController::class, 'recordCashMovement'])
+    Route::post('/counters/{counter}/cash-movement', [\App\Modules\CashCounter\Interfaces\Http\ShiftOperationsController::class, 'recordCashMovement'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.cash_in,cash_register.cash_out,admin,manager,pharmacist,cashier'])
         ->name('counters.cash-movement');
-    Route::get('/counters/sessions/{session}/z-report', [CounterController::class, 'zReport'])
+    Route::get('/counters/sessions/{session}/z-report', [\App\Modules\CashCounter\Interfaces\Http\ShiftOperationsController::class, 'zReport'])
         ->whereNumber('session')
         ->middleware(['feature:pos', 'tenant.role:pos.sell,cash_register.reconcile,admin,manager,pharmacist,cashier'])
         ->name('counters.sessions.z-report');
@@ -370,23 +370,23 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
         ->name('team.users.reset-password');
 
-    Route::get('/crm/customers', [CrmController::class, 'customers'])
+    Route::get('/crm/customers', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'customers'])
         ->middleware(['feature:crm', 'tenant.role:crm.view,crm.manage,admin,manager,pharmacist,cashier'])
         ->name('crm.customers');
-    Route::post('/crm/customers', [CrmController::class, 'storeCustomer'])
+    Route::post('/crm/customers', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'storeCustomer'])
         ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager,pharmacist'])
         ->name('crm.customers.store');
-    Route::put('/crm/customers/{customer}', [CrmController::class, 'updateCustomer'])
+    Route::put('/crm/customers/{customer}', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'updateCustomer'])
         ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager,pharmacist'])
         ->name('crm.customers.update');
 
-    Route::get('/crm/suppliers', [CrmController::class, 'suppliers'])
+    Route::get('/crm/suppliers', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'suppliers'])
         ->middleware(['feature:crm', 'tenant.role:crm.view,crm.manage,admin,manager,inventory_clerk,pharmacist'])
         ->name('crm.suppliers');
-    Route::post('/crm/suppliers', [CrmController::class, 'storeSupplier'])
+    Route::post('/crm/suppliers', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'storeSupplier'])
         ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager,inventory_clerk'])
         ->name('crm.suppliers.store');
-    Route::patch('/crm/suppliers/{supplier}/toggle', [CrmController::class, 'toggleSupplier'])
+    Route::patch('/crm/suppliers/{supplier}/toggle', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'toggleSupplier'])
         ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager,inventory_clerk'])
         ->name('crm.suppliers.toggle');
 

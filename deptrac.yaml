@@ -1,0 +1,50 @@
+deptrac:
+  paths:
+    - ./app/Modules
+    - ./packages/foundation/src
+  layers:
+    - name: Domain
+      collectors:
+        - type: classLike
+          value: ^App\\Modules\\[^\\]+\\Domain\\
+    - name: Application
+      collectors:
+        - type: classLike
+          value: ^App\\Modules\\[^\\]+\\Application\\
+    - name: Infrastructure
+      collectors:
+        - type: classLike
+          value: ^App\\Modules\\[^\\]+\\Infrastructure\\
+    - name: Interfaces
+      collectors:
+        - type: classLike
+          value: ^App\\Modules\\[^\\]+\\Interfaces\\
+    - name: Providers
+      collectors:
+        - type: classLike
+          value: ^App\\Modules\\[^\\]+\\Providers\\
+    - name: FoundationPackage
+      collectors:
+        - type: classLike
+          value: ^PharmaCore\\Foundation\\
+  ruleset:
+    Domain:
+      - FoundationPackage
+    Application:
+      - Domain
+      - FoundationPackage
+    Infrastructure:
+      - Application
+      - Domain
+      - FoundationPackage
+    Interfaces:
+      - Application
+      - Domain
+      - FoundationPackage
+    Providers:
+      - Application
+      - Domain
+      - Infrastructure
+      - Interfaces
+      - FoundationPackage
+

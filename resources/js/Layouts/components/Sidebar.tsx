@@ -307,29 +307,35 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                             ]
                           : []),
                       ...(hasPerm('cash_counters.view', 'cash_register.open') || tenant?.role === 'cashier' || canManageCounters
-                          ? [
-                                {
-                                    category: 'Main Menu',
-                                    group: 'Counters & Shifts',
-                                    icon: Store,
-                                    items: [
-                                        {
-                                            name: canManageCounters ? 'Counter Terminals' : 'My Terminal Shift',
-                                            href: toPath('counters.index'),
-                                            active: route().current('counters.index'),
-                                        },
-                                        ...(canManageCounters
-                                            ? [
-                                                  {
-                                                      name: 'Live Queue Monitor',
-                                                      href: toPath('counters.monitoring'),
-                                                      active: route().current('counters.monitoring'),
-                                                  },
-                                              ]
-                                            : []),
-                                    ],
-                                },
-                            ]
+                          ? canManageCounters
+                              ? [
+                                    {
+                                        category: 'Main Menu',
+                                        group: 'Counters & Shifts',
+                                        icon: Store,
+                                        items: [
+                                            {
+                                                name: 'Counter Terminals',
+                                                href: toPath('counters.index'),
+                                                active: route().current('counters.index'),
+                                            },
+                                            {
+                                                name: 'Live Queue Monitor',
+                                                href: toPath('counters.monitoring'),
+                                                active: route().current('counters.monitoring'),
+                                            },
+                                        ],
+                                    },
+                                ]
+                              : [
+                                    {
+                                        category: 'Main Menu',
+                                        name: 'My Terminal Shift',
+                                        href: toPath('counters.index'),
+                                        active: route().current('counters.index'),
+                                        icon: Store,
+                                    },
+                                ]
                           : []),
                   ]
                 : []),

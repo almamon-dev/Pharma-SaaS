@@ -1,0 +1,16 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "pharmacore/foundation",
+    "description": "Framework-free Clean Architecture foundation primitives and ports for PharmaCore",
+    "type": "library",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "PharmaCore\\Foundation\\": "src/"
+        }
+    }
+}
+
