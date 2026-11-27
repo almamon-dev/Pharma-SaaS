@@ -135,6 +135,81 @@ class AccountingPhase1Controller extends Controller
         }
     }
 
+    public function storeMultipleSimpleEntries(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $this->accessService->authorize($user, 'accounting.expense.create', 'You do not have permission to record income or expense entries.');
+
+        $this->ensureBootstrapped();
+
+        $validated = $request->validate([
+            'date' => ['required', 'date'],
+            'branch_id' => ['nullable', 'integer'],
+            'entries' => ['required', 'array', 'min:1', 'max:50'],
+            'entries.*.kind' => ['required', 'in:income,expense'],
+            'entries.*.category_id' => ['required', 'integer'],
+            'entries.*.amount' => ['required', 'string', 'regex:/^\d+(?:,\d{3})*(?:\.\d{1,2})?$/'],
+            'entries.*.payment_channel' => ['required', 'in:cash,bank,wallet'],
+            'entries.*.date' => ['nullable', 'date'],
+            'entries.*.party_name' => ['nullable', 'string', 'max:120'],
+            'entries.*.note' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        try {
+            $branchId = $this->accessService->resolveWriteBranchId(
+                $user,
+                isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
+            );
+
+            $rows = [];
+            $totalIncomePaisa = 0;
+            $totalExpensePaisa = 0;
+
+            foreach ($validated['entries'] as $index => $entry) {
+                $amountPaisa = MoneyPaisa::fromBdt($entry['amount']);
+                if ($amountPaisa <= 0) {
+                    throw new DomainException('Row '.($index + 1).': Amount must be greater than zero.');
+                }
+                if ($entry['kind'] === 'income') {
+                    $totalIncomePaisa += $amountPaisa;
+                } else {
+                    $totalExpensePaisa += $amountPaisa;
+                }
+
+                $rows[] = [
+                    'kind' => $entry['kind'],
+                    'category_id' => (int) $entry['category_id'],
+                    'amount_paisa' => $amountPaisa,
+                    'payment_channel' => $entry['payment_channel'],
+                    'date' => $entry['date'] ?? $validated['date'],
+                    'party_name' => $entry['party_name'] ?? null,
+                    'note' => $entry['note'] ?? null,
+                ];
+            }
+
+            $vouchers = $this->simpleService->recordMultipleSimpleEntries(
+                $rows,
+                $branchId,
+                $validated['date'],
+                $user,
+            );
+
+            $count = count($vouchers);
+            $parts = [];
+            if ($totalIncomePaisa > 0) {
+                $parts[] = 'Income '.MoneyPaisa::formatBdt($totalIncomePaisa);
+            }
+            if ($totalExpensePaisa > 0) {
+                $parts[] = 'Expense '.MoneyPaisa::formatBdt($totalExpensePaisa);
+            }
+            $summary = $parts !== [] ? ' ('.implode(', ', $parts).')' : '';
+
+            return back()->with('success', "Saved {$count} entries{$summary}.");
+        } catch (DomainException|\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
     public function storeSimpleCategory(Request $request): RedirectResponse
     {
         $user = $request->user();

@@ -44,7 +44,7 @@ class TenantProvisioningService
 
     public function createTenantForUser(User $user, array $data): Tenant
     {
-        return DB::transaction(function () use ($user, $data): Tenant {
+        $tenant = DB::transaction(function () use ($user, $data): Tenant {
             $name = trim((string) $data['name']);
             $baseSlug = Str::slug($name) ?: 'business';
             $slug = $baseSlug;
@@ -143,5 +143,16 @@ class TenantProvisioningService
 
             return $tenant->fresh(['domains', 'branches']);
         });
+
+        if (! app()->runningUnitTests()) {
+            try {
+                app(\App\Modules\Catalog\Services\BangladeshCatalogImportService::class)
+                    ->provisionForNewTenantIfCached($tenant);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $tenant;
     }
 }

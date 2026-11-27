@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { AlertTriangle, Pill, Plus, Search, Stethoscope, User } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import PharmacistMobileNav from './components/PharmacistMobileNav';
 import { PharmacistBranchContext, PrescriptionMedicineItem } from './types';
 
@@ -84,13 +85,18 @@ export default function PharmacistPatientHistory({ context, patients }: PatientH
                         </p>
                     </div>
                     <div className="relative w-full md:w-[300px]">
-                        <Search className="w-4 h-4 text-[#666666] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
+                        <AnimatedSearchInput
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search patient, phone or allergy..."
-                            className="w-full h-[36px] pl-9 pr-3 rounded-[2px] border border-[#CCCCCC] dark:border-slate-700 bg-white dark:bg-[#181d25] text-[13px] text-[#333333] dark:text-slate-100 focus:outline-none focus:border-[#0E5F3F]"
+                            placeholders={[
+                                'Search by patient name...',
+                                'Search by phone number...',
+                                'Search by documented allergy...',
+                            ]}
+                            icon={<Search className="w-4 h-4" />}
+                            wrapperClassName="h-[36px] rounded-[4px]"
+                            className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-3"
                         />
                     </div>
                 </div>

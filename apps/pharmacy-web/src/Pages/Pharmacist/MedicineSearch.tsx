@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import { ArrowLeftRight, Pill, Search, ShieldCheck, X } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { DataTable, Column, EmptyState } from '@/Components/tables';
 import PharmacistMobileNav from './components/PharmacistMobileNav';
 import { PharmacistBranchContext } from './types';
@@ -118,13 +119,18 @@ export default function PharmacistMedicineSearch({ context, medicines }: Medicin
 
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
                         <div className="md:col-span-5 relative">
-                            <Search className="w-4 h-4 text-[#666666] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            <input
+                            <AnimatedSearchInput
                                 type="text"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Search brand, generic, company, SKU or barcode..."
-                                className="w-full h-[36px] pl-9 pr-3 rounded-[2px] border border-[#CCCCCC] dark:border-slate-700 bg-white dark:bg-[#181d25] text-[13px] text-[#333333] dark:text-slate-100 focus:outline-none focus:border-[#0E5F3F]"
+                                placeholders={[
+                                    'Search by brand name...',
+                                    'Search by generic molecule...',
+                                    'Search by company, SKU or barcode...',
+                                ]}
+                                icon={<Search className="w-4 h-4" />}
+                                wrapperClassName="h-[36px] rounded-[4px]"
+                                className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-3"
                             />
                         </div>
 

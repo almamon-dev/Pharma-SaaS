@@ -72,24 +72,28 @@ class DashboardController extends Controller
             ->where('expiry_date', '<=', $cutoffDate)
             ->count();
 
-        $allMedicines = Medicine::query()
+        $lowStockBaseQuery = Medicine::query()
             ->where('is_active', true)
             ->withSum(['batches as available_stock' => fn ($q) => $q->where('status', 'active')], 'quantity_available')
-            ->orderBy('name')
-            ->get(['id', 'name', 'sku', 'unit', 'reorder_level']);
+            ->whereRaw(
+                '(SELECT COALESCE(SUM(mb.quantity_available), 0) FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.status = ?) <= medicines.reorder_level',
+                ['active']
+            );
 
-        $lowStockAll = $allMedicines
-            ->filter(fn (Medicine $med) => (int) ($med->available_stock ?? 0) <= $med->reorder_level)
-            ->values();
+        $lowStockCount = (clone $lowStockBaseQuery)->count();
 
-        $lowStockMedicines = $lowStockAll->take(6)->map(fn (Medicine $med) => [
-            'id' => $med->id,
-            'name' => $med->name,
-            'sku' => $med->sku,
-            'unit' => $med->unit,
-            'available_stock' => (int) ($med->available_stock ?? 0),
-            'reorder_level' => $med->reorder_level,
-        ]);
+        $lowStockMedicines = (clone $lowStockBaseQuery)
+            ->orderByRaw('(SELECT COALESCE(SUM(mb.quantity_available), 0) FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.status = ?) DESC, medicines.name ASC', ['active'])
+            ->limit(6)
+            ->get(['id', 'name', 'sku', 'unit', 'reorder_level'])
+            ->map(fn (Medicine $med) => [
+                'id' => $med->id,
+                'name' => $med->name,
+                'sku' => $med->sku,
+                'unit' => $med->unit,
+                'available_stock' => (int) ($med->available_stock ?? 0),
+                'reorder_level' => $med->reorder_level,
+            ]);
 
         // 2. Sales & Checkout metrics
         $todaySalesQuery = Sale::query()->whereDate('sold_at', today());
@@ -178,11 +182,18 @@ class DashboardController extends Controller
         $subscriberAdmin = $tenant?->owner;
         $accountUsage = $subscriberAdmin?->subscriptionUsage();
 
+        $customMedicinesUsed = Medicine::query()
+            ->where('is_active', true)
+            ->where(function ($q): void {
+                $q->whereNull('sku')->orWhere('sku', 'NOT LIKE', 'BD-%');
+            })
+            ->count();
+
         $usage = $isOwnerOrAdmin ? [
             'tenants' => ['used' => $accountUsage['tenants'] ?? 1, 'limit' => $plan?->max_pharmacies ?? 1],
             'branches' => ['used' => $accountUsage['branches'] ?? $branchCount, 'limit' => $plan?->max_branches ?? 1],
             'users' => ['used' => $accountUsage['employees'] ?? $teamCount, 'limit' => $plan?->max_users ?? 5],
-            'medicines' => ['used' => $totalMedicines, 'limit' => $plan?->max_medicines ?? 500],
+            'medicines' => ['used' => $customMedicinesUsed, 'limit' => $plan?->max_medicines ?? 500],
         ] : null;
 
         // Role-Specific Context & Testing Switcher
@@ -233,7 +244,7 @@ class DashboardController extends Controller
                 'totalStockUnits' => $totalStockUnits,
                 'inventoryValuation' => $inventoryValuation !== null ? round($inventoryValuation, 2) : null,
                 'expiringSoonCount' => $expiringSoonCount,
-                'lowStockCount' => $lowStockAll->count(),
+                'lowStockCount' => $lowStockCount,
                 'todaySalesTotal' => $todaySalesTotal !== null ? round($todaySalesTotal, 2) : null,
                 'todaySalesCount' => $todaySalesCount,
                 'myTodaySalesTotal' => round($myTodaySalesTotal, 2),

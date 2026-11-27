@@ -72,11 +72,30 @@ class ProductController extends Controller
 
         $branches = $tenant->branches()->where('is_active', true)->get(['id', 'name', 'code']);
 
+        $rawStats = Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereNull('deleted_at')
+            ->selectRaw("
+                COUNT(*) as total_all,
+                COUNT(CASE WHEN type = 'medicine' THEN 1 END) as total_medicine,
+                COUNT(CASE WHEN type <> 'medicine' THEN 1 END) as total_non_medicine,
+                COUNT(CASE WHEN is_active = true THEN 1 END) as total_active,
+                COUNT(CASE WHEN is_active = false THEN 1 END) as total_inactive
+            ")
+            ->first();
+
         return inertia('Catalog/Index', [
             'categories' => $categories,
             'companies' => $companies,
             'generics' => $generics,
             'branches' => $branches,
+            'productStats' => [
+                'all' => (int) ($rawStats->total_all ?? 0),
+                'medicine' => (int) ($rawStats->total_medicine ?? 0),
+                'non_medicine' => (int) ($rawStats->total_non_medicine ?? 0),
+                'active' => (int) ($rawStats->total_active ?? 0),
+                'inactive' => (int) ($rawStats->total_inactive ?? 0),
+            ],
             'planLimit' => [
                 'allowed' => $allowed,
                 'used' => $used,

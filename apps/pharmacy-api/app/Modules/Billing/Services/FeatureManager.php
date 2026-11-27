@@ -155,9 +155,15 @@ class FeatureManager
             'max_products' => (int) \App\Modules\Catalog\Models\Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->whereNull('deleted_at')
+                ->where(function ($q): void {
+                    $q->whereNull('sku')->orWhere('sku', 'NOT LIKE', 'BD-%');
+                })
                 ->count() ?: (int) Medicine::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->where('is_active', true)
+                ->where(function ($q): void {
+                    $q->whereNull('sku')->orWhere('sku', 'NOT LIKE', 'BD-%');
+                })
                 ->count(),
 
             'max_bills_month', 'sms_quota_month' => (int) UsageCounter::withoutGlobalScopes()

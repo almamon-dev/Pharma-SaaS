@@ -81,7 +81,7 @@ export function DataTableDataBody<T extends Record<string, any>>({
                         >
                             {showCheckbox && (
                                 <td
-                                    className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80`}
+                                    className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap`}
                                 >
                                     <div className="flex items-center justify-center">
                                         <input
@@ -97,10 +97,7 @@ export function DataTableDataBody<T extends Record<string, any>>({
                                     </div>
                                 </td>
                             )}
-                            {activeVisibleColumns.map((col, colIdx) => {
-                                const isLastCell =
-                                    !actions &&
-                                    colIdx === activeVisibleColumns.length - 1;
+                            {activeVisibleColumns.map((col) => {
                                 const isNoWrapCol =
                                     col.className?.includes(
                                         'whitespace-nowrap'
@@ -119,11 +116,7 @@ export function DataTableDataBody<T extends Record<string, any>>({
                                 return (
                                     <td
                                         key={col.id}
-                                        className={`${cellPaddingClass} ${cellWrapClass} font-sans text-[13px] font-normal text-[#333333] dark:text-slate-200 ${
-                                            !isLastCell
-                                                ? 'border-r border-slate-200/80 dark:border-slate-800/80'
-                                                : ''
-                                        } ${col.className || ''}`}
+                                        className={`${cellPaddingClass} ${cellWrapClass} font-sans text-[13px] xl:text-[14px] font-normal text-[#0f172a] dark:text-slate-200 ${col.className || ''}`}
                                     >
                                         {col.render
                                             ? col.render(item, index)

@@ -9,9 +9,10 @@
 @source '../**/*.ts';
 
 @theme {
-    --font-sans: 'Lato', 'Helvetica Neue', Helvetica, Arial, 'SolaimanLipi', 'Noto Sans Bengali', sans-serif,
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'SolaimanLipi', 'Noto Sans Bengali', sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-heading: 'Raleway', 'Lato', 'Helvetica Neue', Helvetica, Arial, 'SolaimanLipi', 'Noto Sans Bengali', sans-serif;
+    --font-heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'SolaimanLipi', 'Noto Sans Bengali', sans-serif;
+    --font-bengali: 'Noto Sans Bengali', 'SolaimanLipi', system-ui, sans-serif;
     --color-brand: #0E5F3F;
     --color-brand-hover: #0A4D33;
     --color-brand-light: #EAF5F0;
@@ -41,10 +42,10 @@
 
     html,
     body {
-        color: #333333;
-        -webkit-font-smoothing: auto;
+        color: #0f172a;
+        -webkit-font-smoothing: subpixel-antialiased;
         -moz-osx-font-smoothing: auto;
-        text-rendering: optimizeLegibility;
+        text-rendering: auto;
     }
 
     h1,
@@ -305,10 +306,66 @@ html.dark .animated-search-pill {
     animation: searchCaretBlink 0.9s steps(1, end) infinite;
 }
 
-/* Standardize all table data cells (td) across every table to crisp whole-pixel 12px */
-table tbody td:not([colspan]),
-table tbody td:not([colspan]) :where(span, div, p, a, strong, b, button, label) {
+/* Crisp whole-pixel font sizes for table data cells so 1x desktop monitors never blur stems across half-pixels */
+table tbody td:not([colspan]) {
+    font-size: 13px;
+    line-height: 20px;
+}
+
+@media (min-width: 1280px) {
+    table tbody td:not([colspan]) {
+        font-size: 14px;
+        line-height: 21px;
+    }
+}
+
+/* Force any legacy tiny/fractional pixel utility classes inside table cells to whole 12px or 13px */
+table tbody td:not([colspan]) :where(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]) {
     font-size: 12px;
+    line-height: 18px;
+}
+
+table tbody td:not([colspan]) :where(.text-\[12\.5px\], .text-\[13\.5px\]) {
+    font-size: 13px;
+    line-height: 20px;
+}
+
+/* Render monospace table cells (codes, dates, amounts) in crisp grid-aligned tabular numerals */
+table .font-mono {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Strengthen faint muted cell text in light mode for crisp readability on desktop monitors */
+html:not(.dark) table tbody td:not([colspan]) .text-slate-400 {
+    color: #475569;
+}
+
+html:not(.dark) table tbody td:not([colspan]) .text-slate-500 {
+    color: #334155;
+}
+
+html:not(.dark) table thead th {
+    color: #0f172a;
+}
+
+/* Apply crisp aligned sans numerals everywhere tables used jagged system monospace */
+table .font-mono {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Strengthen faint muted text & header contrast across all DataTables and raw HTML tables */
+html:not(.dark) table thead th {
+    color: #0f172a;
+}
+
+html:not(.dark) table tbody td:not([colspan]) .text-slate-400 {
+    color: #475569;
+}
+
+html:not(.dark) table tbody td:not([colspan]) .text-slate-500 {
+    color: #334155;
 }
 
 /* Remove focus border highlight, ring, and outline on all inputs, selects, and textareas */

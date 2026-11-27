@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { DataTable, Column, EmptyState } from '@/Components/tables';
 import PharmacistMobileNav from './components/PharmacistMobileNav';
 import {
@@ -164,25 +165,30 @@ export default function PharmacistDashboard({
 
                     {/* Medicine Search Box (Brand or Generic — Availability Only) */}
                     <div className="relative w-full lg:w-[380px]">
-                        <div className="relative flex items-center">
-                            <Search className="w-4 h-4 text-[#666666] dark:text-slate-400 absolute left-3 pointer-events-none" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search medicine, brand or generic"
-                                className="w-full h-[36px] pl-9 pr-8 rounded-[2px] border border-[#CCCCCC] dark:border-slate-700 bg-white dark:bg-[#181d25] text-[13px] text-[#333333] dark:text-slate-100 placeholder:text-[#777777] focus:outline-none focus:border-[#0E5F3F]"
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-2.5 text-[11px] font-semibold text-[#666666] hover:text-[#222222] dark:text-slate-400 cursor-pointer"
-                                >
-                                    Clear
-                                </button>
-                            )}
-                        </div>
+                        <AnimatedSearchInput
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholders={[
+                                'Search medicine name...',
+                                'Search by brand or generic...',
+                                'Check live branch availability...',
+                            ]}
+                            icon={<Search className="w-4 h-4" />}
+                            wrapperClassName="h-[36px] rounded-[4px]"
+                            className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-12"
+                            rightIcon={
+                                searchQuery ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQuery('')}
+                                        className="text-[11px] font-semibold text-[#666666] hover:text-[#222222] dark:text-slate-400 cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                ) : undefined
+                            }
+                        />
 
                         {normalizedQuery.length > 0 && (
                             <div className="absolute right-0 left-0 top-full mt-1 z-30 bg-white dark:bg-[#181d25] border border-[#CCCCCC] dark:border-slate-700 rounded-[4px] shadow-lg overflow-hidden">

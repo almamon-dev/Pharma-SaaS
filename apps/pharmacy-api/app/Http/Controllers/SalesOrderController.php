@@ -38,7 +38,11 @@ class SalesOrderController extends Controller
             ->withSum([
                 'batches as available_stock' => fn ($q) => $q->sellable($branchId),
             ], 'quantity_available')
-            ->orderBy('name')
+            ->orderByRaw(
+                "CASE WHEN EXISTS (SELECT 1 FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.status = 'active' AND mb.quantity_available > 0"
+                .($branchId ? ' AND mb.branch_id = '.(int) $branchId : '')
+                .') THEN 0 ELSE 1 END, name ASC'
+            )
             ->limit(500)
             ->get()
             ->map(fn (Medicine $med) => [

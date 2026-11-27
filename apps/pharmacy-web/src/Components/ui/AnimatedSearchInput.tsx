@@ -8,6 +8,38 @@ const DEFAULT_PLACEHOLDERS = [
     'Press Enter to add instantly...',
 ];
 
+/**
+ * Derive cycling typewriter phrases from a standard comma/or-delimited placeholder string.
+ */
+export function buildSearchPhrases(placeholder?: string): string[] {
+    const clean = (placeholder || '').trim();
+    if (!clean) {
+        return DEFAULT_PLACEHOLDERS;
+    }
+
+    const stripped = clean.replace(/\.{2,}$/, '').trim();
+    const isBn = /[\u0980-\u09FF]/.test(stripped);
+
+    const parts = stripped
+        .replace(/^(search across all [\d,]+\+?\s+\w+\s*(?:by|for)?\s*|search\s+(?:by|for)?\s*)/i, '')
+        .replace(/[()]/g, ',')
+        .split(/,|\bor\b|\bবা\b/i)
+        .map((p) => p.replace(/(দিয়ে|দিয়ে)?\s*সার্চ(\s*করুন)?/g, '').trim())
+        .filter((p) => p.length >= 2 && !/^e\.?g\.?$/i.test(p));
+
+    if (parts.length >= 2) {
+        const phrases = parts.slice(0, 4).map((part) =>
+            isBn ? `${part} দিয়ে সার্চ করুন...` : `Search by ${part}...`
+        );
+        return phrases;
+    }
+
+    return [
+        clean,
+        isBn ? 'খুঁজতে টাইপ করুন...' : 'Type keyword to filter results...',
+    ];
+}
+
 export interface AnimatedSearchInputProps
     extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'placeholder'> {
     placeholders?: string[];
@@ -43,7 +75,8 @@ export const AnimatedSearchInput = React.forwardRef<
         const [isDeleting, setIsDeleting] = React.useState(false);
 
         const hasValue = value !== undefined && String(value).length > 0;
-        const currentPhrase = placeholders[phraseIdx] ?? placeholders[0] ?? '';
+        const safePlaceholders = placeholders.length > 0 ? placeholders : DEFAULT_PLACEHOLDERS;
+        const currentPhrase = safePlaceholders[phraseIdx % safePlaceholders.length] ?? '';
 
         React.useEffect(() => {
             if (hasValue || !currentPhrase) return;

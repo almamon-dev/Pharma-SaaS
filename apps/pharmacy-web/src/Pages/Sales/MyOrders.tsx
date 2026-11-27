@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { Column, DataTable } from '@/Components/tables';
 import { formatCurrency } from '@/lib/format';
 
@@ -467,13 +468,18 @@ export default function MyOrders({
  </div>
 
  <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
- <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400 pointer-events-none"/>
- <input
+ <AnimatedSearchInput
  type="text"
- placeholder="Search Order # or Customer..."
  value={searchQuery}
  onChange={(e) => setSearchQuery(e.target.value)}
- className="w-full h-8 pl-8 pr-3 text-xs rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12161c] text-slate-900 dark:text-white focus:outline-none focus:border-[#0E5F3F]"
+ placeholders={[
+ 'Search by Order #...',
+ 'Search by Customer name...',
+ 'Press Enter to search orders...',
+ ]}
+ icon={<Search className="h-3.5 w-3.5"/>}
+ wrapperClassName="h-8 rounded-[4px]"
+ className="h-8 rounded-[4px] text-xs pl-9 pr-3"
  />
  </form>
  </div>

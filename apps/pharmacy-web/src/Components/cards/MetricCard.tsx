@@ -33,7 +33,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
     const inner = (
         <div
             className={cn(
-                'bg-white dark:bg-[#1e2329] p-2.5 sm:p-3 md:p-3.5 rounded-[2px] border border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all flex flex-col justify-between w-full shadow-2xs',
+                'bg-white dark:bg-[#1e2329] p-2.5 sm:p-3 md:p-3.5 rounded-[2px] border border-slate-200/90 dark:border-slate-800 flex flex-col justify-between w-full shadow-2xs',
                 onClick && 'cursor-pointer',
                 isLastOnMobile && 'col-span-2 sm:col-span-1',
                 className

@@ -220,6 +220,8 @@ class HandleInertiaRequests extends Middleware
                 'features' => [],
                 'branches' => [],
                 'tenants' => [],
+                'accountingMode' => 'simple',
+                'batchAlertCount' => 0,
             ];
         }
 
@@ -348,6 +350,35 @@ class HandleInertiaRequests extends Middleware
             'features' => $features,
             'branches' => $branches,
             'tenants' => $tenants,
+            'accountingMode' => (function () use ($tenant): string {
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('accounting_settings')) {
+                        return \App\Modules\Accounting\Models\AccountingSetting::withoutGlobalScopes()
+                            ->where('tenant_id', $tenant->id)
+                            ->value('mode') ?? 'simple';
+                    }
+                } catch (\Throwable) {
+                }
+
+                return 'simple';
+            })(),
+            'batchAlertCount' => (function () use ($tenant, $context): int {
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('medicine_batches')) {
+                        $branchId = $context->branchId();
+                        return (int) \App\Models\MedicineBatch::withoutGlobalScopes()
+                            ->where('tenant_id', $tenant->id)
+                            ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
+                            ->where('quantity_available', '>', 0)
+                            ->whereNotIn('status', ['damaged', 'disposed', 'depleted'])
+                            ->whereDate('expiry_date', '<=', now()->addDays(30)->toDateString())
+                            ->count();
+                    }
+                } catch (\Throwable) {
+                }
+
+                return 0;
+            })(),
         ];
     }
 

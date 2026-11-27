@@ -229,6 +229,7 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->group(function (): void {
             Route::get('/', [AccountingPhase1Controller::class, 'dashboard'])->name('dashboard');
             Route::post('/simple/entries', [AccountingPhase1Controller::class, 'storeSimpleEntry'])->name('simple.entries.store');
+            Route::post('/simple/entries/bulk', [AccountingPhase1Controller::class, 'storeMultipleSimpleEntries'])->name('simple.entries.bulk');
             Route::post('/simple/categories', [AccountingPhase1Controller::class, 'storeSimpleCategory'])->name('simple.categories.store');
             Route::get('/day-book', [AccountingPhase1Controller::class, 'dayBook'])->name('day-book');
             Route::get('/cash-book', [AccountingPhase1Controller::class, 'cashBook'])->name('cash-book');
@@ -351,6 +352,9 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::get('/inventory/movements', [InventoryController::class, 'movements'])
         ->middleware(['feature:batch_expiry', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
         ->name('inventory.movements');
+    Route::get('/inventory/medicines/search', [InventoryController::class, 'searchMedicines'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])
+        ->name('inventory.medicines.search');
     Route::get('/inventory/{medicineId}/batches', [InventoryController::class, 'medicineBatches'])
         ->whereNumber('medicineId')
         ->middleware(['feature:batch_expiry', 'tenant.role:inventory.view,inventory.manage,inventory.adjust,admin,manager,pharmacist,inventory_clerk'])

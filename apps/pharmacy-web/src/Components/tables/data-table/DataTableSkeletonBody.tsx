@@ -42,27 +42,19 @@ export function DataTableSkeletonBody<T = any>({
                     >
                         {showCheckbox && (
                             <td
-                                className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap border-r border-slate-200/80 dark:border-slate-800/80`}
+                                className={`${cellPaddingClass} w-[36px] min-w-[36px] max-w-[36px] whitespace-nowrap`}
                             >
                                 <div className="flex items-center justify-center">
                                     <Skeleton className="h-3.5 w-3.5 rounded-[2px]" />
                                 </div>
                             </td>
                         )}
-                        {activeVisibleColumns.map((col, colIdx) => {
-                            const isLastCol =
-                                !actions &&
-                                colIdx === activeVisibleColumns.length - 1;
-
+                        {activeVisibleColumns.map((col) => {
                             if (col.skeleton) {
                                 return (
                                     <td
                                         key={col.id}
-                                        className={`${cellPaddingClass} ${
-                                            !isLastCol
-                                                ? 'border-r border-slate-200/80 dark:border-slate-800/80'
-                                                : ''
-                                        } ${col.className || ''}`}
+                                        className={`${cellPaddingClass} ${col.className || ''}`}
                                     >
                                         {col.skeleton()}
                                     </td>
@@ -77,11 +69,7 @@ export function DataTableSkeletonBody<T = any>({
                             return (
                                 <td
                                     key={col.id}
-                                    className={`${cellPaddingClass} ${
-                                        !isLastCol
-                                            ? 'border-r border-slate-200/80 dark:border-slate-800/80'
-                                            : ''
-                                    } ${col.className || ''}`}
+                                    className={`${cellPaddingClass} ${col.className || ''}`}
                                 >
                                     <div
                                         className={`flex ${

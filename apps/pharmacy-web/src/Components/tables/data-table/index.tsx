@@ -17,6 +17,7 @@ export default function DataTable<T extends Record<string, any>>(
     const {
         columns,
         searchPlaceholder = 'Search...',
+        searchPlaceholders,
         onDeleteSelected,
         keyExtractor = (item: any) => item.id,
         actions,
@@ -44,8 +45,8 @@ export default function DataTable<T extends Record<string, any>>(
     } = props;
 
     const showCheckbox = selectable && !hideCheckbox;
-    const rowHeightClass = compact ? 'min-h-[34px]' : 'min-h-[46px]';
-    const cellPaddingClass = compact ? 'px-2.5 py-1.5' : 'px-3.5 py-2.5';
+    const rowHeightClass = compact ? 'min-h-[34px] xl:min-h-[38px]' : 'min-h-[44px] xl:min-h-[48px]';
+    const cellPaddingClass = compact ? 'px-2.5 py-1.5 xl:px-3 xl:py-1.5' : 'px-3.5 py-2 xl:px-4 xl:py-2.5';
 
     const state = useDataTableState(props);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -135,6 +136,7 @@ export default function DataTable<T extends Record<string, any>>(
                     search={state.search}
                     setSearch={state.setSearch}
                     searchPlaceholder={searchPlaceholder}
+                    searchPlaceholders={searchPlaceholders}
                     hideFilter={hideFilter}
                     showFilters={state.showFilters}
                     setShowFilters={state.setShowFilters}

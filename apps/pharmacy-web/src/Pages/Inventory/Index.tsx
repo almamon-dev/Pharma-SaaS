@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import {
  AlertTriangle,
@@ -33,6 +33,7 @@ import {
  Column,
  EmptyState,
  TableActionMenu,
+ TablePagination,
 } from '@/Components/tables';
 import { BatchAdjustModal } from '@/Components/inventory/BatchAdjustModal';
 import {
@@ -50,6 +51,16 @@ import { formatCurrency } from '@/lib/format';
 
 interface InventoryProps {
  medicines: MedicineRow[];
+ pagination?: {
+ total: number;
+ from: number;
+ to: number;
+ per_page: number;
+ current_page: number;
+ last_page: number;
+ prev_page_url: string | null;
+ next_page_url: string | null;
+ };
  categories: Array<{ id: number; name: string }>;
  suppliers: Array<{ id: number; name: string }>;
  branches: BranchFilterOption[];
@@ -58,6 +69,7 @@ interface InventoryProps {
  filter: string;
  category_id: string;
  branch_id?: string;
+ per_page?: number;
  };
  activeBranchName?: string | null;
  tabCounts?: {
@@ -169,6 +181,7 @@ const EMPTY_CREATE_FORM: MedicineFormValues & {
 
 export default function InventoryIndex({
  medicines,
+ pagination,
  categories,
  suppliers,
  branches = [],
@@ -182,6 +195,7 @@ export default function InventoryIndex({
  const canEdit = Boolean(tenant?.canEditInventory ?? tenant?.canManageInventory);
  const canAdjust = Boolean(tenant?.canAdjustInventory ?? canEdit);
 
+ const [searchQuery, setSearchQuery] = useState(filters.q || '');
  const [selectedFilter, setSelectedFilter] = useState(
  filters.filter || 'all'
  );
@@ -257,18 +271,34 @@ export default function InventoryIndex({
  const applyServerFilters = (
  nextFilter = selectedFilter,
  nextCategory = selectedCategory,
- nextBranch = selectedBranchId
+ nextBranch = selectedBranchId,
+ nextSearch = searchQuery,
+ nextPerPage = pagination?.per_page ?? filters.per_page ?? 15
  ) => {
  router.get(
  route('inventory.index', undefined, false),
  {
+ q: nextSearch.trim() || undefined,
  filter: nextFilter !== 'all' ? nextFilter : undefined,
  category_id: nextCategory || undefined,
  branch_id: nextBranch || undefined,
+ per_page: nextPerPage,
  },
  { preserveState: true, replace: true }
  );
  };
+
+ const searchMountedRef = useRef(false);
+ useEffect(() => {
+ if (!searchMountedRef.current) {
+ searchMountedRef.current = true;
+ return;
+ }
+ const timer = setTimeout(() => {
+ applyServerFilters(selectedFilter, selectedCategory, selectedBranchId, searchQuery);
+ }, 350);
+ return () => clearTimeout(timer);
+ }, [searchQuery]);
 
  const openEditModal = (med: MedicineRow) => {
  setEditingMedicine(med);
@@ -603,21 +633,21 @@ export default function InventoryIndex({
  render: (med) => (
  <div className="flex items-center gap-1.5 whitespace-nowrap">
  <span
- className={`text-[11.5px] font-bold ${
+ className={`text-[13px] xl:text-[14px] font-semibold ${
  med.is_active
- ? 'text-slate-900 dark:text-slate-200'
+ ? 'text-slate-900 dark:text-slate-100'
  : 'text-slate-400 line-through'
  }`}
  >
  {med.name}
  </span>
  {med.strength && (
- <span className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300">
+ <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300">
  {med.strength}
  </span>
  )}
  {med.requires_prescription && (
- <span className="text-[9.5px] font-extrabold text-[#0E5F3F] px-1 py-0.2 rounded-[2px] bg-[#EAF5F0] dark:bg-emerald-950/40 border border-[#0E5F3F]/25 dark:border-emerald-900">
+ <span className="text-[11px] font-bold text-[#0E5F3F] px-1.5 py-0.5 rounded-[2px] bg-[#EAF5F0] dark:bg-emerald-950/40 border border-[#0E5F3F]/25 dark:border-emerald-900">
  Rx
  </span>
  )}
@@ -637,7 +667,7 @@ export default function InventoryIndex({
  }`;
  return (
  <span
- className="block max-w-[220px] truncate text-[11.5px] font-bold text-slate-900 dark:text-slate-200"
+ className="block max-w-[220px] xl:max-w-[340px] 2xl:max-w-none truncate text-[13px] font-medium text-slate-800 dark:text-slate-200"
  title={summary}
  >
  {summary}
@@ -650,7 +680,7 @@ export default function InventoryIndex({
  label: 'Category',
  sortable: true,
  render: (med) => (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200">
  {med.category_name}
  </span>
  ),
@@ -661,29 +691,29 @@ export default function InventoryIndex({
  sortable: true,
  className: 'text-right',
  render: (med) => (
- <div className="inline-flex flex-col items-end whitespace-nowrap">
+ <div className="inline-flex flex-col lg:flex-row lg:items-center items-end gap-0.5 lg:gap-1.5 whitespace-nowrap">
  <div className="inline-flex items-center gap-1.5">
  <span
- className={`text-[11.5px] font-bold tabular-nums ${
+ className={`text-[13px] xl:text-[14px] font-semibold tabular-nums ${
  med.is_low_stock
  ? 'text-rose-600 dark:text-rose-400'
- : 'text-slate-900 dark:text-slate-200'
+ : 'text-slate-900 dark:text-slate-100'
  }`}
  >
  {med.available_stock} {med.unit}
  </span>
  {med.is_low_stock ? (
- <span className="text-[9.5px] font-semibold text-rose-600 dark:text-rose-400">
+ <span className="text-[12px] font-medium text-rose-600 dark:text-rose-400">
  (Min {med.reorder_level})
  </span>
  ) : (
- <span className="text-[9.5px] font-medium text-slate-500 dark:text-slate-400">
+ <span className="text-[12px] font-normal text-slate-600 dark:text-slate-400">
  · {med.batch_count}b
  </span>
  )}
  </div>
  {Boolean(med.expired_stock && med.expired_stock > 0) && (
- <span className="text-[9.5px] font-bold text-rose-600">
+ <span className="text-[12px] font-semibold text-rose-600">
  +{med.expired_stock} expired
  </span>
  )}
@@ -697,7 +727,7 @@ export default function InventoryIndex({
  render: (med) =>
  med.nearest_expiry ? (
  <div className="inline-flex items-center gap-2 whitespace-nowrap">
- <span className="tabular-nums text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="tabular-nums text-[13px] font-medium text-slate-800 dark:text-slate-200">
  {med.nearest_expiry}
  </span>
  {med.days_to_expiry !== null &&
@@ -709,7 +739,7 @@ export default function InventoryIndex({
  ? 'rose'
  : 'amber'
  }
- className="text-[9.5px] font-semibold"
+ className="text-[12px] font-semibold"
  >
  {med.days_to_expiry < 0
  ? 'Expired'
@@ -718,7 +748,7 @@ export default function InventoryIndex({
  )}
  </div>
  ) : (
- <span className="text-slate-400 text-[11.5px] font-medium">—</span>
+ <span className="text-slate-400 text-[13px] font-medium">—</span>
  ),
  },
  {
@@ -735,11 +765,11 @@ export default function InventoryIndex({
  : undefined
  }
  >
- <span className="text-[11.5px] font-bold tabular-nums text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] xl:text-[14px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">
  {formatCurrency(med.default_selling_price, currency)}
  </span>
  {med.units_per_box > 1 && med.box_selling_price ? (
- <span className="text-[9.5px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
+ <span className="text-[12px] font-medium text-slate-600 dark:text-slate-400 tabular-nums">
  / {formatCurrency(med.box_selling_price, currency)}
  </span>
  ) : null}
@@ -942,12 +972,22 @@ export default function InventoryIndex({
  />
  </div>
 
+ <div className="bg-white dark:bg-[#12161c] rounded-[2px] border border-slate-200 dark:border-slate-800 overflow-hidden">
  <DataTable
  tableId="pharmacy-inventory"
  data={medicines}
  columns={columns}
  headerTabs={headerTabs}
  filterContent={filterContent}
+ hidePagination={Boolean(pagination)}
+ searchValue={searchQuery}
+ onSearchChange={setSearchQuery}
+ searchPlaceholders={[
+ 'Search 33,000+ medicines by brand name...',
+ 'Search by generic name or manufacturer...',
+ 'Scan barcode or search SKU (e.g. BD-000001)...',
+ 'Search across branches...',
+ ]}
  searchPlaceholder="Search by brand name, generic, SKU, or barcode..."
  selectable={false}
  hideCheckbox={true}
@@ -1008,6 +1048,23 @@ export default function InventoryIndex({
  />
  }
  />
+ {pagination && (
+ <TablePagination
+ total={pagination.total}
+ fromIdx={pagination.from}
+ toIdx={pagination.to}
+ perPage={pagination.per_page}
+ currentPage={pagination.current_page}
+ totalPages={pagination.last_page}
+ onPerPageChange={(val) => applyServerFilters(selectedFilter, selectedCategory, selectedBranchId, searchQuery, val)}
+ onPrevPage={() => pagination.prev_page_url && router.visit(pagination.prev_page_url, { preserveState: true })}
+ onNextPage={() => pagination.next_page_url && router.visit(pagination.next_page_url, { preserveState: true })}
+ hasPrev={Boolean(pagination.prev_page_url)}
+ hasNext={Boolean(pagination.next_page_url)}
+ variant="table"
+ />
+ )}
+ </div>
  </div>
 
  <BrtaFormModal

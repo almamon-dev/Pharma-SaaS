@@ -1,6 +1,10 @@
 import React from 'react';
 import { Search, X } from 'lucide-react';
 import { Column } from './dataTableTypes';
+import {
+    AnimatedSearchInput,
+    buildSearchPhrases,
+} from '@/Components/ui/AnimatedSearchInput';
 import TableFilter from '@/Components/tables/table-filter';
 import TableColumnToggle from '@/Components/tables/table-column-toggle';
 import TableSortDropdown from '@/Components/tables/table-sort-dropdown';
@@ -104,12 +108,8 @@ export function DataTableGridToolbar<T = any>({
 
                     <div className="flex items-center gap-1.5 shrink-0 justify-end flex-wrap sm:flex-nowrap">
                         {isSearchOpen ? (
-                            <div className="relative flex items-center">
-                                <Search
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10"
-                                    size={13}
-                                />
-                                <input
+                            <div className="relative flex items-center w-[170px] sm:w-[260px]">
+                                <AnimatedSearchInput
                                     type="text"
                                     autoFocus
                                     value={search}
@@ -118,20 +118,24 @@ export function DataTableGridToolbar<T = any>({
                                         if (e.key === 'Escape' && !search)
                                             setIsSearchOpen(false);
                                     }}
-                                    placeholder={searchPlaceholder}
-                                    className="h-[32px] w-[150px] sm:w-[240px] pl-8 pr-7 border border-[#0E5F3F]/80 dark:border-[#0E5F3F]/80 rounded-[2px] text-[12px] font-medium bg-slate-50/50 dark:bg-[#1e2329] text-slate-900 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none shadow-none"
+                                    placeholders={buildSearchPhrases(searchPlaceholder)}
+                                    icon={<Search size={13} />}
+                                    wrapperClassName="h-[32px] rounded-[4px]"
+                                    className="h-[32px] rounded-[4px] text-[12px] pl-8 pr-7"
+                                    rightIcon={
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSearch('');
+                                                setIsSearchOpen(false);
+                                            }}
+                                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                            title="Close search"
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    }
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSearch('');
-                                        setIsSearchOpen(false);
-                                    }}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                                    title="Close search"
-                                >
-                                    <X size={13} />
-                                </button>
                             </div>
                         ) : (
                             <button

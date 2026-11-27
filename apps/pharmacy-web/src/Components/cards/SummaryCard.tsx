@@ -50,7 +50,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
     const content = (
         <div
             className={cn(
-                'bg-white dark:bg-[#12161c] rounded-[2px] p-3 sm:p-3.5 border border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex flex-col justify-between h-full shadow-none',
+                'bg-white dark:bg-[#12161c] rounded-[2px] p-3 sm:p-3.5 border border-slate-200/90 dark:border-slate-800 flex flex-col justify-between h-full shadow-none',
                 onClick && 'cursor-pointer',
                 isLast && 'lg:col-span-1',
                 className

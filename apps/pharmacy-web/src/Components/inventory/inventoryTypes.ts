@@ -117,3 +117,42 @@ export function generateEan13Preview(): string {
     return `${base}${checkDigit}`;
 }
 
+export interface MedicineSearchOption {
+    id: number;
+    name: string;
+    generic_name?: string | null;
+    sku: string;
+    unit: string;
+    units_per_box: number;
+    default_purchase_price: number;
+    default_selling_price: number;
+}
+
+/**
+ * Triggers a browser CSV download for inventory tables without duplicating escaping logic.
+ */
+export function downloadCsv(
+    filename: string,
+    headers: string[],
+    rows: Array<Array<string | number | null | undefined>>
+): void {
+    const escape = (val: string | number | null | undefined) => {
+        const str = val === null || val === undefined ? '' : String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+    };
+    const csv = [
+        headers.map(escape).join(','),
+        ...rows.map((row) => row.map(escape).join(',')),
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+

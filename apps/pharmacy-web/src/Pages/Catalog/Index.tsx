@@ -28,7 +28,7 @@ import { Input } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import { BrtaField, BrtaFormGrid, BrtaFormModal, brtaInputClass } from '@/Components/ui/BrtaForm';
 import { MetricCard } from '@/Components/cards/MetricCard';
-import { DataTable, Column, EmptyState, TableActionMenu } from '@/Components/tables';
+import { DataTable, Column, EmptyState, TableActionMenu, TablePagination } from '@/Components/tables';
 import { BarcodeSvg } from '@/Components/BarcodeSvg';
 import { formatCurrency } from '@/lib/format';
 import { SharedPageProps } from '@/types';
@@ -114,6 +114,13 @@ interface Props extends SharedPageProps {
  companies: CompanyItem[];
  generics: GenericItem[];
  branches: BranchItem[];
+ productStats?: {
+ all: number;
+ medicine: number;
+ non_medicine: number;
+ active: number;
+ inactive: number;
+ };
  planLimit: {
  allowed: boolean;
  used: number;
@@ -130,6 +137,7 @@ export default function CatalogIndex({
  companies: initialCompanies,
  generics: initialGenerics,
  branches,
+ productStats,
  planLimit,
  canImport,
  canExport,
@@ -146,7 +154,15 @@ export default function CatalogIndex({
  // Products state
  const [products, setProducts] = useState<ProductItem[]>([]);
  const [loadingProducts, setLoadingProducts] = useState(false);
- const [searchQuery] = useState('');
+ const [searchQuery, setSearchQuery] = useState('');
+ const [currentPage, setCurrentPage] = useState(1);
+ const [perPage, setPerPage] = useState(15);
+ const [paginationMeta, setPaginationMeta] = useState({
+ total: productStats?.all ?? 0,
+ from: 0,
+ to: 0,
+ lastPage: 1,
+ });
  const [filterType, setFilterType] = useState('');
  const [filterCategory, setFilterCategory] = useState('');
  const [filterCompany, setFilterCompany] = useState('');
@@ -248,32 +264,29 @@ export default function CatalogIndex({
  })),
  });
 
- // Fetch products with debounced search
- const fetchProducts = async (q = searchQuery) => {
+ // Fetch products with server-side pagination & search
+ const fetchProducts = async (q = searchQuery, page = currentPage, pageSize = perPage) => {
  setLoadingProducts(true);
  try {
- if (q.trim() !== '') {
  const params = new URLSearchParams({
- q,
- ...(filterType ? { type: filterType } : {}),
- limit: '50',
- });
- const res = await fetch(`/api/catalog/products/search?${params.toString()}`);
- const data = await res.json();
- setProducts(data.data || []);
- } else {
- const params = new URLSearchParams({
+ ...(q.trim() !== '' ? { q: q.trim() } : {}),
  ...(filterType ? { type: filterType } : {}),
  ...(filterCategory ? { category_id: filterCategory } : {}),
  ...(filterCompany ? { company_id: filterCompany } : {}),
  ...(filterGeneric ? { generic_id: filterGeneric } : {}),
  ...(filterStatus !== '' ? { is_active: filterStatus } : {}),
- per_page: '100',
+ page: String(page),
+ per_page: String(pageSize),
  });
  const res = await fetch(`/api/catalog/products?${params.toString()}`);
  const data = await res.json();
  setProducts(data.data || []);
- }
+ setPaginationMeta({
+ total: Number(data.total ?? (data.data?.length || 0)),
+ from: Number(data.from ?? 0),
+ to: Number(data.to ?? 0),
+ lastPage: Math.max(1, Number(data.last_page ?? 1)),
+ });
  } catch (e) {
  console.error('Failed to load products', e);
  } finally {
@@ -283,10 +296,10 @@ export default function CatalogIndex({
 
  useEffect(() => {
  const timer = setTimeout(() => {
- fetchProducts(searchQuery);
+ fetchProducts(searchQuery, currentPage, perPage);
  }, 200);
  return () => clearTimeout(timer);
- }, [searchQuery, filterType, filterCategory, filterCompany, filterGeneric, filterStatus]);
+ }, [searchQuery, currentPage, perPage, filterType, filterCategory, filterCompany, filterGeneric, filterStatus]);
 
  const [activeProductTab, setActiveProductTab] = useState<'all' | 'medicine' | 'non_medicine' | 'active' | 'inactive'>('all');
 
@@ -309,7 +322,7 @@ export default function CatalogIndex({
  label: isBn ? 'এসকেইউ' : 'SKU',
  sortable: true,
  render: (p) => (
- <span className="tabular-nums font-bold text-[#0E5F3F] text-[11.5px]">
+ <span className="tabular-nums font-semibold text-[#0E5F3F] text-[13px] xl:text-[14px]">
  {p.sku || '—'}
  </span>
  ),
@@ -324,7 +337,7 @@ export default function CatalogIndex({
  <BarcodeSvg value={primary.barcode} compact />
  </div>
  ) : (
- <span className="text-[11.5px] font-medium text-slate-400">—</span>
+ <span className="text-[12px] font-medium text-slate-400">—</span>
  );
  },
  },
@@ -333,22 +346,23 @@ export default function CatalogIndex({
  label: isBn ? 'ওষুধ / পণ্যের নাম' : 'Medicine / Product',
  sortable: true,
  render: (p) => (
- <div>
- <div className="font-bold text-slate-900 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap">
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">{p.name}</span>
+ <div className="flex flex-col lg:flex-row lg:items-center gap-0.5 lg:gap-2 whitespace-nowrap">
+ <div className="text-slate-900 dark:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+ <span className="text-[13px] xl:text-[14px] font-semibold text-slate-900 dark:text-slate-100">{p.name}</span>
  {p.strength && (
- <span className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300">
+ <span className="text-[12px] xl:text-[13px] font-medium text-slate-600 dark:text-slate-300">
  {p.strength}
  </span>
  )}
  {p.is_controlled && (
- <span className="text-[9.5px] font-extrabold text-[#0E5F3F] px-1 py-0.2 rounded-[2px] bg-[#EAF5F0] dark:bg-emerald-950/40 border border-[#0E5F3F]/25 dark:border-emerald-900">
+ <span className="text-[11px] font-bold text-[#0E5F3F] px-1.5 py-0.5 rounded-[2px] bg-[#EAF5F0] dark:bg-emerald-950/40 border border-[#0E5F3F]/25 dark:border-emerald-900">
  Rx
  </span>
  )}
  </div>
  {p.name_bn && (
- <div className="text-[9.5px] text-slate-500 dark:text-slate-400 font-bengali mt-0.5">
+ <div className="text-[12px] text-slate-500 dark:text-slate-400 font-bengali leading-snug">
+ <span className="hidden lg:inline text-slate-300 mr-1">·</span>
  {p.name_bn}
  </div>
  )}
@@ -365,7 +379,7 @@ export default function CatalogIndex({
  }`;
  return (
  <span
- className="block max-w-[220px] truncate text-[11.5px] font-bold text-slate-900 dark:text-slate-200"
+ className="block max-w-[220px] xl:max-w-[340px] 2xl:max-w-none truncate text-[13px] font-medium text-slate-800 dark:text-slate-200"
  title={summary}
  >
  {summary || '—'}
@@ -378,7 +392,7 @@ export default function CatalogIndex({
  label: isBn ? 'ক্যাটাগরি' : 'Category',
  sortable: true,
  render: (p) => (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200">
  {p.category?.name || '—'}
  </span>
  ),
@@ -388,12 +402,12 @@ export default function CatalogIndex({
  label: isBn ? 'ধরন' : 'Type / Form',
  sortable: true,
  render: (p) => (
- <div className="flex flex-col items-start gap-0.5">
- <Badge variant={p.type === 'medicine' ? 'sky' : 'neutral'} className="text-[9.5px]">
+ <div className="flex flex-col lg:flex-row lg:items-center items-start gap-1 lg:gap-1.5 whitespace-nowrap">
+ <Badge variant={p.type === 'medicine' ? 'sky' : 'neutral'}>
  {p.type === 'medicine' ? (isBn ? 'ওষুধ' : 'Medicine') : (isBn ? 'অন্যান্য' : 'Item')}
  </Badge>
  {p.dosage_form && (
- <span className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300 capitalize">
+ <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300 capitalize">
  {p.dosage_form}
  </span>
  )}
@@ -404,7 +418,7 @@ export default function CatalogIndex({
  id: 'base_unit',
  label: isBn ? 'ইউনিট' : 'Base Unit',
  render: (p) => (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200">
  {p.base_unit}
  </span>
  ),
@@ -418,12 +432,12 @@ export default function CatalogIndex({
  const mrp = Number(p.mrp ?? 0);
  const sale = Number(p.selling_price ?? 0) || mrp;
  return (
- <div className="inline-flex flex-col items-end whitespace-nowrap tabular-nums">
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <div className="inline-flex flex-col lg:flex-row lg:items-baseline items-end gap-0.5 lg:gap-1.5 whitespace-nowrap tabular-nums">
+ <span className="text-[13px] xl:text-[14px] font-semibold text-slate-900 dark:text-slate-100">
  {sale > 0 ? formatCurrency(sale, currency) : '—'}
  </span>
  {mrp > 0 && (
- <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+ <span className="text-[12px] font-normal text-slate-500 dark:text-slate-400">
  MRP {formatCurrency(mrp, currency)}
  </span>
  )}
@@ -436,7 +450,7 @@ export default function CatalogIndex({
  label: isBn ? 'স্ট্যাটাস' : 'Status',
  sortable: true,
  render: (p) => (
- <Badge variant={p.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+ <Badge variant={p.is_active ? 'success' : 'neutral'}>
  {p.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
  </Badge>
  ),
@@ -453,7 +467,7 @@ export default function CatalogIndex({
  label: isBn ? 'ক্যাটাগরির নাম' : 'Category Name',
  sortable: true,
  render: (c) => (
- <div style={{ paddingLeft: `${c.depth * 16}px` }} className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200 flex items-center">
+ <div style={{ paddingLeft: `${c.depth * 16}px` }} className="text-[13px] font-semibold text-slate-900 dark:text-slate-200 flex items-center">
  {c.depth > 0 && <span className="text-slate-400 dark:text-slate-500 mr-1.5 tabular-nums">└─</span>}
  <span>{c.name}</span>
  </div>
@@ -463,7 +477,7 @@ export default function CatalogIndex({
  id: 'name_bn',
  label: isBn ? 'বাংলা নাম' : 'Bengali Name',
  render: (c) => (
- <span className="text-slate-500 dark:text-slate-400 font-bengali text-[11.5px] font-bold">
+ <span className="text-slate-600 dark:text-slate-400 font-bengali text-[12.5px] font-medium">
  {c.name_bn || '—'}
  </span>
  ),
@@ -472,7 +486,7 @@ export default function CatalogIndex({
  id: 'depth',
  label: isBn ? 'লেভেল / ডেপথ' : 'Depth',
  render: (c) => (
- <Badge variant="slate"className="text-[9.5px]">
+ <Badge variant="slate">
  Level {c.depth + 1}
  </Badge>
  ),
@@ -483,7 +497,7 @@ export default function CatalogIndex({
  render: (c) => {
  const parent = initialCategories.find((p) => p.id === c.parent_id);
  return (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
  {parent?.name || 'Root'}
  </span>
  );
@@ -494,7 +508,7 @@ export default function CatalogIndex({
  label: isBn ? 'স্ট্যাটাস' : 'Status',
  sortable: true,
  render: (c) => (
- <Badge variant={c.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+ <Badge variant={c.is_active ? 'success' : 'neutral'}>
  {c.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
  </Badge>
  ),
@@ -511,7 +525,7 @@ export default function CatalogIndex({
  label: isBn ? 'কোম্পানির নাম' : 'Company Name',
  sortable: true,
  render: (c) => (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-200">
  {c.name}
  </span>
  ),
@@ -520,7 +534,7 @@ export default function CatalogIndex({
  id: 'name_bn',
  label: isBn ? 'বাংলা নাম' : 'Bengali Name',
  render: (c) => (
- <span className="text-slate-500 dark:text-slate-400 font-bengali text-[11.5px] font-bold">
+ <span className="text-slate-600 dark:text-slate-400 font-bengali text-[12.5px] font-medium">
  {c.name_bn || '—'}
  </span>
  ),
@@ -530,7 +544,7 @@ export default function CatalogIndex({
  label: isBn ? 'স্ট্যাটাস' : 'Status',
  sortable: true,
  render: (c) => (
- <Badge variant={c.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+ <Badge variant={c.is_active ? 'success' : 'neutral'}>
  {c.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
  </Badge>
  ),
@@ -547,7 +561,7 @@ export default function CatalogIndex({
  label: isBn ? 'জেনেরিক নাম' : 'Generic Name',
  sortable: true,
  render: (g) => (
- <span className="text-[11.5px] font-bold text-slate-900 dark:text-slate-200">
+ <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-200">
  {g.name}
  </span>
  ),
@@ -557,7 +571,7 @@ export default function CatalogIndex({
  label: isBn ? 'স্ট্যাটাস' : 'Status',
  sortable: true,
  render: (g) => (
- <Badge variant={g.is_active ? 'success' : 'neutral'} className="text-[9.5px]">
+ <Badge variant={g.is_active ? 'success' : 'neutral'}>
  {g.is_active ? (isBn ? 'সক্রিয়' : 'Active') : (isBn ? 'নিষ্ক্রিয়' : 'Inactive')}
  </Badge>
  ),
@@ -570,26 +584,26 @@ export default function CatalogIndex({
  const productHeaderTabs = (
  <div className="flex items-center gap-1.5 sm:gap-3 overflow-x-auto hide-scrollbar mb-[-1px]">
  {[
- { key: 'all', label: isBn ? 'সকল পণ্য' : 'All Products', count: products.length },
+ { key: 'all', label: isBn ? 'সকল পণ্য' : 'All Products', count: productStats?.all ?? paginationMeta.total },
  {
  key: 'medicine',
  label: isBn ? 'ওষুধ' : 'Medicines',
- count: products.filter((p) => p.type === 'medicine').length,
+ count: productStats?.medicine ?? products.filter((p) => p.type === 'medicine').length,
  },
  {
  key: 'non_medicine',
  label: isBn ? 'অন্যান্য পণ্য' : 'Non-Medicine',
- count: products.filter((p) => p.type !== 'medicine').length,
+ count: productStats?.non_medicine ?? products.filter((p) => p.type !== 'medicine').length,
  },
  {
  key: 'active',
  label: isBn ? 'সক্রিয়' : 'Active',
- count: products.filter((p) => p.is_active).length,
+ count: productStats?.active ?? products.filter((p) => p.is_active).length,
  },
  {
  key: 'inactive',
  label: isBn ? 'নিষ্ক্রিয়' : 'Inactive',
- count: products.filter((p) => !p.is_active).length,
+ count: productStats?.inactive ?? products.filter((p) => !p.is_active).length,
  },
  ].map((tab) => {
  const isActive = activeProductTab === tab.key;
@@ -599,6 +613,7 @@ export default function CatalogIndex({
  type="button"
  onClick={() => {
  setActiveProductTab(tab.key as any);
+ setCurrentPage(1);
  if (tab.key === 'all') {
  setFilterType('');
  setFilterStatus('');
@@ -1155,7 +1170,7 @@ export default function CatalogIndex({
 
  {/* TAB 1: Products */}
  {activeTab === 'products' && (
- <div className="space-y-4">
+ <div className="bg-white dark:bg-[#12161c] rounded-[2px] border border-slate-200 dark:border-slate-800 overflow-hidden">
  <DataTable
  tableId="catalog-products-table"
  data={enrichedProducts}
@@ -1163,6 +1178,27 @@ export default function CatalogIndex({
  isLoading={loadingProducts}
  headerTabs={productHeaderTabs}
  filterContent={productFilterContent}
+ hidePagination={true}
+ searchValue={searchQuery}
+ onSearchChange={(val) => {
+ setSearchQuery(val);
+ setCurrentPage(1);
+ }}
+ searchPlaceholders={
+ isBn
+ ? [
+ 'ওষুধ বা পণ্যের নাম দিয়ে খুঁজুন...',
+ 'জেনেরিক নাম (যেমন Paracetamol)...',
+ 'কোম্পানির নাম বা SKU দিয়ে সার্চ...',
+ '৩৩,৭০০+ ওষুধ থেকে তাৎক্ষণিক খুঁজুন...',
+ ]
+ : [
+ 'Search 33,700+ medicines by brand name...',
+ 'Search by generic molecule (e.g. Omeprazole)...',
+ 'Search by manufacturer or SKU...',
+ 'Search by dosage form or strength...',
+ ]
+ }
  searchPlaceholder={
  isBn
  ?"নাম, জেনেরিক বা বারকোড দিয়ে সার্চ..."
@@ -1172,7 +1208,7 @@ export default function CatalogIndex({
  hideCheckbox={true}
  compact={true}
  syncUrlParams={false}
- onRefresh={() => fetchProducts()}
+ onRefresh={() => fetchProducts(searchQuery, currentPage, perPage)}
  isRefreshing={loadingProducts}
  actions={(p) => (
  <TableActionMenu
@@ -1255,6 +1291,23 @@ export default function CatalogIndex({
  }
  />
  }
+ />
+ <TablePagination
+ total={paginationMeta.total}
+ fromIdx={paginationMeta.from}
+ toIdx={paginationMeta.to}
+ perPage={perPage}
+ currentPage={currentPage}
+ totalPages={paginationMeta.lastPage}
+ onPerPageChange={(val) => {
+ setPerPage(val);
+ setCurrentPage(1);
+ }}
+ onPrevPage={() => setCurrentPage((p) => Math.max(1, p - 1))}
+ onNextPage={() => setCurrentPage((p) => Math.min(paginationMeta.lastPage, p + 1))}
+ hasPrev={currentPage > 1}
+ hasNext={currentPage < paginationMeta.lastPage}
+ variant="table"
  />
  </div>
  )}

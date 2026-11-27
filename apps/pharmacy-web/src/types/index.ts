@@ -158,6 +158,8 @@ export interface TenantSharedData {
     features?: TenantFeatureItem[];
     branches: BranchItem[];
     tenants: TenantMembership[];
+    accountingMode?: 'simple' | 'advanced';
+    batchAlertCount?: number;
 }
 
 export interface DomainTenantBanner {

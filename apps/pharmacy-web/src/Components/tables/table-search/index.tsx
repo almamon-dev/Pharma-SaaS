@@ -1,9 +1,14 @@
 import { Search } from 'lucide-react';
+import {
+    AnimatedSearchInput,
+    buildSearchPhrases,
+} from '@/Components/ui/AnimatedSearchInput';
 
 export interface TableSearchProps {
     value: string;
     onChange: (value: string) => void;
     placeholder?: string;
+    placeholders?: string[];
     className?: string;
 }
 
@@ -11,20 +16,24 @@ export default function TableSearch({
     value,
     onChange,
     placeholder = 'Search...',
+    placeholders,
     className = '',
 }: TableSearchProps) {
+    const resolvedPhrases = placeholders ?? buildSearchPhrases(placeholder);
+
     return (
         <div className={`relative w-full sm:w-[320px] max-w-full ${className}`}>
-            <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6d7175] dark:text-slate-400 pointer-events-none z-10"
-                size={14}
-            />
-            <input
+            <AnimatedSearchInput
                 type="text"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
-                className="w-full h-[32px] pl-9 pr-3 border border-slate-200/80 dark:border-slate-700/60 rounded-[2px] text-[12px] font-medium bg-slate-50/50 dark:bg-[#1e2329] text-slate-900 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-[#0E5F3F] dark:focus:border-[#0E5F3F] focus:ring-0 transition-colors shadow-none"
+                placeholders={resolvedPhrases}
+                icon={<Search size={14} />}
+                wrapperClassName="h-[32px] rounded-[4px]"
+                className="h-[32px] rounded-[4px] text-[12.5px] pl-9 pr-3"
+                typingSpeedMs={65}
+                deletingSpeedMs={32}
+                pauseMs={2000}
             />
         </div>
     );

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Button } from '@/Components/ui/Button';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { DataTable, Column, EmptyState } from '@/Components/tables';
 import PharmacistMobileNav from './components/PharmacistMobileNav';
 import { ExpiringBatchItem, PharmacistBranchContext } from './types';
@@ -133,13 +134,18 @@ export default function PharmacistStockExpiry({
                         </p>
                     </div>
                     <div className="relative w-full md:w-[300px]">
-                        <Search className="w-4 h-4 text-[#666666] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
+                        <AnimatedSearchInput
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search medicine, generic or batch..."
-                            className="w-full h-[36px] pl-9 pr-3 rounded-[2px] border border-[#CCCCCC] dark:border-slate-700 bg-white dark:bg-[#181d25] text-[13px] text-[#333333] dark:text-slate-100 focus:outline-none focus:border-[#0E5F3F]"
+                            placeholders={[
+                                'Search by medicine name...',
+                                'Search by generic...',
+                                'Search by batch #...',
+                            ]}
+                            icon={<Search className="w-4 h-4" />}
+                            wrapperClassName="h-[36px] rounded-[4px]"
+                            className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-3"
                         />
                     </div>
                 </div>

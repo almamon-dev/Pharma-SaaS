@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Catalog\Providers;
 
+use App\Modules\Catalog\Commands\ImportOnlineBangladeshMedicinesCommand;
 use App\Modules\Catalog\Commands\SeedCatalogLoadTestCommand;
 use App\Modules\Catalog\Contracts\ProductReferenceChecker;
 use App\Modules\Catalog\Contracts\StockInfoProvider;
@@ -24,6 +25,7 @@ final class CatalogServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 SeedCatalogLoadTestCommand::class,
+                ImportOnlineBangladeshMedicinesCommand::class,
             ]);
         }
     }

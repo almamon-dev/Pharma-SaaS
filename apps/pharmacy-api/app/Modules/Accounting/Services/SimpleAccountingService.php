@@ -45,11 +45,15 @@ class SimpleAccountingService
             throw new DomainException('Amount must be greater than zero.');
         }
 
-        /** @var SimpleCategory $category */
+        /** @var SimpleCategory|null $category */
         $category = SimpleCategory::query()
             ->where('kind', $kind)
             ->where('is_active', true)
-            ->findOrFail($data['category_id']);
+            ->find($data['category_id']);
+
+        if (! $category) {
+            throw new DomainException('Selected category was not found or inactive.');
+        }
 
         $settings = AccountingSetting::query()->firstOrFail();
         $paymentAccountId = $this->resolvePaymentAccountId($settings, (string) ($data['payment_channel'] ?? 'cash'));
@@ -126,6 +130,45 @@ class SimpleAccountingService
                 ],
             ],
         ], $actor);
+    }
+
+    /**
+     * Atomically record multiple Simple Mode Income and/or Expense entries inside a single DB transaction.
+     *
+     * @param  array<int, array{
+     *   kind: 'income'|'expense',
+     *   category_id: int,
+     *   amount_paisa: int,
+     *   payment_channel: 'cash'|'bank'|'wallet',
+     *   date?: string|null,
+     *   note?: string|null,
+     *   party_name?: string|null
+     * }>  $items
+     * @return array<int, Voucher>
+     */
+    public function recordMultipleSimpleEntries(array $items, int $branchId, string $defaultDate, User $actor): array
+    {
+        if ($items === []) {
+            throw new DomainException('At least one entry row is required.');
+        }
+
+        return DB::transaction(function () use ($items, $branchId, $defaultDate, $actor): array {
+            $vouchers = [];
+            foreach ($items as $item) {
+                $vouchers[] = $this->recordSimpleEntry([
+                    'kind' => $item['kind'],
+                    'category_id' => (int) $item['category_id'],
+                    'amount_paisa' => (int) $item['amount_paisa'],
+                    'payment_channel' => $item['payment_channel'],
+                    'branch_id' => $branchId,
+                    'date' => ! empty($item['date']) ? (string) $item['date'] : $defaultDate,
+                    'party_name' => $item['party_name'] ?? null,
+                    'note' => $item['note'] ?? null,
+                ], $actor);
+            }
+
+            return $vouchers;
+        });
     }
 
     /**

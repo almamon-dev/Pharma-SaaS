@@ -551,5 +551,65 @@ class AccountingPhase1Test extends TestCase
             $this->assertNull($withoutProfit['month_cogs_paisa']);
         });
     }
+
+    public function test_multi_simple_entries_post_atomically_and_rollback_on_invalid_row(): void
+    {
+        app(CurrentTenant::class)->run($this->tenantA, function (): void {
+            $catInc = SimpleCategory::query()->where('code', 'medicine_sales')->firstOrFail();
+            $catExp = SimpleCategory::query()->where('code', 'electricity')->firstOrFail();
+            $simple = app(SimpleAccountingService::class);
+            $today = now()->toDateString();
+
+            $vouchers = $simple->recordMultipleSimpleEntries([
+                [
+                    'kind' => 'income',
+                    'category_id' => $catInc->id,
+                    'amount_paisa' => 500000, // ৳5,000
+                    'payment_channel' => 'cash',
+                    'party_name' => 'Walk-in Batch',
+                    'note' => 'Shift A counter',
+                ],
+                [
+                    'kind' => 'expense',
+                    'category_id' => $catExp->id,
+                    'amount_paisa' => 120000, // ৳1,200
+                    'payment_channel' => 'wallet',
+                    'party_name' => 'DESCO',
+                    'note' => 'Utility bill',
+                ],
+            ], $this->branchA1->id, $today, $this->ownerA);
+
+            $this->assertCount(2, $vouchers);
+            $this->assertSame(2, Voucher::query()->count());
+
+            $summary = $simple->dashboardSummary($this->tenantA->id, $this->branchA1->id, true);
+            $this->assertSame(500000, $summary['today_income_paisa']);
+            $this->assertSame(120000, $summary['today_expense_paisa']);
+
+            // If a later row fails, earlier row in the same batch must roll back
+            $rolledBack = false;
+            try {
+                $simple->recordMultipleSimpleEntries([
+                    [
+                        'kind' => 'income',
+                        'category_id' => $catInc->id,
+                        'amount_paisa' => 90000,
+                        'payment_channel' => 'cash',
+                    ],
+                    [
+                        'kind' => 'expense',
+                        'category_id' => 999999,
+                        'amount_paisa' => 50000,
+                        'payment_channel' => 'cash',
+                    ],
+                ], $this->branchA1->id, $today, $this->ownerA);
+            } catch (DomainException) {
+                $rolledBack = true;
+            }
+
+            $this->assertTrue($rolledBack, 'Invalid row inside multi-entry batch should throw DomainException.');
+            $this->assertSame(2, Voucher::query()->count(), 'Partial multi-entry rows must not persist.');
+        });
+    }
 }
 

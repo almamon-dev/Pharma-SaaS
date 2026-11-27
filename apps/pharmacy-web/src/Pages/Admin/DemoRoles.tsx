@@ -4,6 +4,7 @@ import {
     CheckCircle2,
     Edit,
     RotateCcw,
+    Search,
     Shield,
     Sparkles,
     UserCog,
@@ -11,7 +12,7 @@ import {
 import { AppLayout } from '@/Layouts/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/Card';
 import { Button } from '@/Components/ui/Button';
-import { Input } from '@/Components/ui/Input';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { StatusDot } from '@/Components/ui/StatusDot';
 import {
     BrtaField,
@@ -150,10 +151,17 @@ export default function AdminDemoRoles({ roles }: AdminDemoRolesProps) {
                 {/* Search Bar */}
                 <Card>
                     <CardContent className="p-3">
-                        <Input
-                            placeholder="Search demo role by title or key..."
+                        <AnimatedSearchInput
+                            type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
+                            placeholders={[
+                                'Search demo role by title...',
+                                'Search by role key (e.g. pharmacist, cashier)...',
+                            ]}
+                            icon={<Search className="h-3.5 w-3.5" />}
+                            wrapperClassName="h-[36px] rounded-[4px]"
+                            className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-3"
                         />
                     </CardContent>
                 </Card>

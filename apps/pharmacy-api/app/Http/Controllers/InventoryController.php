@@ -36,8 +36,77 @@ class InventoryController extends Controller
         $search = trim((string) $request->query('q', ''));
         $filter = (string) $request->query('filter', 'all');
         $categoryId = $request->query('category_id');
+        $requestedPerPage = (int) $request->query('per_page', 15);
+        $perPage = in_array($requestedPerPage, [10, 15, 25, 30, 50, 100], true) ? $requestedPerPage : 15;
 
-        $allMedicines = Medicine::query()
+        $today = now()->startOfDay();
+        $todayStr = $today->toDateString();
+        $day30Str = now()->addDays(30)->toDateString();
+        $day60Str = now()->addDays(60)->toDateString();
+        $day90Str = now()->addDays(90)->toDateString();
+        $canViewCost = $request->user()->isSuperAdmin() || $request->user()->hasPermission('cost_price.view');
+
+        $branchSqlCond = $branchFilterId !== null ? ' AND mb.branch_id = '.(int) $branchFilterId : '';
+        $sellableSumSubquery = "(SELECT COALESCE(SUM(mb.quantity_available), 0) FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.status = 'active' AND mb.quantity_available > 0 AND mb.expiry_date >= '{$todayStr}'{$branchSqlCond})";
+
+        $expiredBatchSubquery = "EXISTS (SELECT 1 FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.quantity_available > 0 AND (mb.expiry_date < '{$todayStr}' OR mb.status = 'expired') AND mb.status NOT IN ('damaged', 'disposed'){$branchSqlCond})";
+
+        $expiringWithin = fn (string $cutoff): string => "EXISTS (SELECT 1 FROM medicine_batches mb WHERE mb.medicine_id = medicines.id AND mb.status = 'active' AND mb.quantity_available > 0 AND mb.expiry_date >= '{$todayStr}' AND mb.expiry_date <= '{$cutoff}'{$branchSqlCond})";
+
+        // Fast SQL aggregate counts & valuations (handles 33,000+ SKUs cleanly)
+        $activeCount = Medicine::query()->where('is_active', true)->count();
+        $archivedCount = Medicine::query()->where('is_active', false)->count();
+        $lowStockCount = Medicine::query()
+            ->where('is_active', true)
+            ->whereRaw("{$sellableSumSubquery} <= medicines.reorder_level")
+            ->count();
+        $expiring30Count = Medicine::query()->where('is_active', true)->whereRaw($expiringWithin($day30Str))->count();
+        $expiring90Count = Medicine::query()->where('is_active', true)->whereRaw($expiringWithin($day90Str))->count();
+        $expiredCount = Medicine::query()->whereRaw($expiredBatchSubquery)->count();
+
+        $sellableBatchesJoin = MedicineBatch::query()
+            ->join('medicines', 'medicines.id', '=', 'medicine_batches.medicine_id')
+            ->where('medicines.is_active', true)
+            ->where('medicine_batches.status', BatchStatus::ACTIVE->value)
+            ->where('medicine_batches.quantity_available', '>', 0)
+            ->whereDate('medicine_batches.expiry_date', '>=', $todayStr)
+            ->when($branchFilterId !== null, fn ($q) => $q->where('medicine_batches.branch_id', $branchFilterId));
+
+        $totalSellableUnits = (int) (clone $sellableBatchesJoin)->sum('medicine_batches.quantity_available');
+        $purchaseValuation = $canViewCost
+            ? (float) ((clone $sellableBatchesJoin)->selectRaw('COALESCE(SUM(medicine_batches.quantity_available * medicine_batches.purchase_price), 0) as total')->value('total'))
+            : 0.0;
+        $retailValuation = (float) ((clone $sellableBatchesJoin)
+            ->selectRaw('COALESCE(SUM(medicine_batches.quantity_available * COALESCE(NULLIF(medicine_batches.selling_price, 0), medicines.default_selling_price)), 0) as total')
+            ->value('total'));
+
+        $batchStatsQuery = MedicineBatch::query()
+            ->when($branchFilterId !== null, fn ($q) => $q->where('branch_id', $branchFilterId));
+
+        $expiredBatchCount = (clone $batchStatsQuery)
+            ->where('quantity_available', '>', 0)
+            ->whereDate('expiry_date', '<', $todayStr)
+            ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
+            ->count();
+
+        $expiredValuation = $canViewCost
+            ? (float) ((clone $batchStatsQuery)
+                ->where('quantity_available', '>', 0)
+                ->whereDate('expiry_date', '<', $todayStr)
+                ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
+                ->selectRaw('COALESCE(SUM(quantity_available * purchase_price), 0) as total')
+                ->value('total'))
+            : 0.0;
+
+        $expiring60Count = (clone $batchStatsQuery)
+            ->where('status', BatchStatus::ACTIVE->value)
+            ->where('quantity_available', '>', 0)
+            ->whereDate('expiry_date', '>=', $todayStr)
+            ->whereDate('expiry_date', '<=', $day60Str)
+            ->count();
+
+        // Main paginated query (stocked items ordered first, searchable across all 33k+ SKUs)
+        $query = Medicine::query()
             ->with([
                 'category:id,name',
                 'batches' => function ($query) use ($branchFilterId): void {
@@ -47,23 +116,33 @@ class InventoryController extends Controller
                     $query->orderBy('expiry_date');
                 },
             ])
-            ->when($search !== '', function ($query) use ($search): void {
+            ->when($search !== '', function ($q) use ($search): void {
                 $needle = mb_strtolower($search);
-                $query->where(function ($sub) use ($needle): void {
+                $q->where(function ($sub) use ($needle): void {
                     $sub->whereRaw('LOWER(name) LIKE ?', ["%{$needle}%"])
                         ->orWhereRaw('LOWER(COALESCE(generic_name, \'\')) LIKE ?', ["%{$needle}%"])
+                        ->orWhereRaw('LOWER(COALESCE(manufacturer, \'\')) LIKE ?', ["%{$needle}%"])
                         ->orWhereRaw('LOWER(sku) LIKE ?', ["%{$needle}%"])
                         ->orWhereRaw('LOWER(COALESCE(barcode, \'\')) LIKE ?', ["%{$needle}%"]);
                 });
             })
-            ->when($categoryId, fn ($query) => $query->where('category_id', (int) $categoryId))
-            ->orderBy('name')
-            ->get();
+            ->when($categoryId, fn ($q) => $q->where('category_id', (int) $categoryId));
 
-        $today = now()->startOfDay();
-        $canViewCost = $request->user()->isSuperAdmin() || $request->user()->hasPermission('cost_price.view');
+        match ($filter) {
+            'low_stock' => $query->where('is_active', true)->whereRaw("{$sellableSumSubquery} <= medicines.reorder_level"),
+            'expiring' => $query->where('is_active', true)->whereRaw($expiringWithin($day30Str)),
+            'expiring_90' => $query->where('is_active', true)->whereRaw($expiringWithin($day90Str)),
+            'expired' => $query->whereRaw($expiredBatchSubquery),
+            'archived' => $query->where('is_active', false),
+            default => $query->where('is_active', true),
+        };
 
-        $mappedAll = $allMedicines->map(function (Medicine $medicine) use ($today, $canViewCost): array {
+        $paginated = $query
+            ->orderByRaw("{$sellableSumSubquery} DESC, medicines.name ASC")
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $mappedMedicines = collect($paginated->items())->map(function (Medicine $medicine) use ($today, $canViewCost): array {
             $batches = $medicine->batches;
 
             $sellableBatches = $batches->filter(
@@ -129,47 +208,20 @@ class InventoryController extends Controller
                 'stock_retail_value' => round($retailVal, 2),
                 'expired_stock_value' => $canViewCost ? round($expiredVal, 2) : null,
             ];
-        });
-
-        $activeCatalog = $mappedAll->where('is_active', true)->values();
-        $archivedCatalog = $mappedAll->where('is_active', false)->values();
-
-        $lowStockItems = $activeCatalog->where('is_low_stock', true)->values();
-        $expiring30Items = $activeCatalog->filter(
-            fn (array $item): bool => $item['days_to_expiry'] !== null && $item['days_to_expiry'] >= 0 && $item['days_to_expiry'] <= 30
-        )->values();
-        $expiring90Items = $activeCatalog->filter(
-            fn (array $item): bool => $item['days_to_expiry'] !== null && $item['days_to_expiry'] >= 0 && $item['days_to_expiry'] <= 90
-        )->values();
-        $expiredItems = $mappedAll->where('expired_stock', '>', 0)->values();
-
-        $filteredMedicines = match ($filter) {
-            'low_stock' => $lowStockItems,
-            'expiring' => $expiring30Items,
-            'expiring_90' => $expiring90Items,
-            'expired' => $expiredItems,
-            'archived' => $archivedCatalog,
-            default => $activeCatalog,
-        };
-
-        $batchStatsQuery = MedicineBatch::query()
-            ->when($branchFilterId !== null, fn ($q) => $q->where('branch_id', $branchFilterId));
-
-        $expiredBatchCount = (clone $batchStatsQuery)
-            ->where('quantity_available', '>', 0)
-            ->whereDate('expiry_date', '<', today()->toDateString())
-            ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
-            ->count();
-
-        $expiring60Count = (clone $batchStatsQuery)
-            ->where('status', BatchStatus::ACTIVE->value)
-            ->where('quantity_available', '>', 0)
-            ->whereDate('expiry_date', '>=', today()->toDateString())
-            ->whereDate('expiry_date', '<=', now()->addDays(60)->toDateString())
-            ->count();
+        })->values();
 
         return Inertia::render('Inventory/Index', [
-            'medicines' => $filteredMedicines->values(),
+            'medicines' => $mappedMedicines,
+            'pagination' => [
+                'total' => $paginated->total(),
+                'from' => $paginated->firstItem() ?? 0,
+                'to' => $paginated->lastItem() ?? 0,
+                'per_page' => $paginated->perPage(),
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'prev_page_url' => $paginated->previousPageUrl(),
+                'next_page_url' => $paginated->nextPageUrl(),
+            ],
             'categories' => MedicineCategory::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'suppliers' => Supplier::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'branches' => $branchScope['branches'],
@@ -178,28 +230,29 @@ class InventoryController extends Controller
                 'filter' => $filter,
                 'category_id' => $categoryId ? (string) $categoryId : '',
                 'branch_id' => $branchScope['selectedBranchId'],
+                'per_page' => $perPage,
             ],
             'activeBranchName' => $branchScope['scopeLabel'],
             'tabCounts' => [
-                'all' => $activeCatalog->count(),
-                'low_stock' => $lowStockItems->count(),
-                'expiring' => $expiring30Items->count(),
-                'expiring_90' => $expiring90Items->count(),
-                'expired' => $expiredItems->count(),
-                'archived' => $archivedCatalog->count(),
+                'all' => $activeCount,
+                'low_stock' => $lowStockCount,
+                'expiring' => $expiring30Count,
+                'expiring_90' => $expiring90Count,
+                'expired' => $expiredCount,
+                'archived' => $archivedCount,
             ],
             'metrics' => [
-                'totalSkus' => $activeCatalog->count(),
-                'totalSellableUnits' => (int) $activeCatalog->sum('available_stock'),
-                'lowStockCount' => $lowStockItems->count(),
-                'expiring30Count' => $expiring30Items->count(),
+                'totalSkus' => $activeCount,
+                'totalSellableUnits' => $totalSellableUnits,
+                'lowStockCount' => $lowStockCount,
+                'expiring30Count' => $expiring30Count,
                 'expiring60Count' => $expiring60Count,
-                'expiring90Count' => $expiring90Items->count(),
+                'expiring90Count' => $expiring90Count,
                 'expiredBatchCount' => $expiredBatchCount,
-                'purchaseValuation' => round((float) $activeCatalog->sum('stock_purchase_value'), 2),
-                'retailValuation' => round((float) $activeCatalog->sum('stock_retail_value'), 2),
-                'expiredValuation' => round((float) $mappedAll->sum('expired_stock_value'), 2),
-                'archivedCount' => $archivedCatalog->count(),
+                'purchaseValuation' => round($purchaseValuation, 2),
+                'retailValuation' => round($retailValuation, 2),
+                'expiredValuation' => round($expiredValuation, 2),
+                'archivedCount' => $archivedCount,
             ],
         ]);
     }
@@ -219,6 +272,7 @@ class InventoryController extends Controller
         $canViewCost = $request->user()->isSuperAdmin() || $request->user()->hasPermission('cost_price.view');
 
         $summary = [
+            'allCount' => (clone $baseQuery)->count(),
             'activeBatches' => (clone $baseQuery)->sellable()->count(),
             'expiring30' => (clone $baseQuery)->sellable()->whereDate('expiry_date', '<=', now()->addDays(30)->toDateString())->count(),
             'expiring60' => (clone $baseQuery)->sellable()->whereDate('expiry_date', '<=', now()->addDays(60)->toDateString())->count(),
@@ -228,6 +282,8 @@ class InventoryController extends Controller
                 ->whereDate('expiry_date', '<', today()->toDateString())
                 ->whereNotIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])
                 ->count(),
+            'damagedDisposedCount' => (clone $baseQuery)->whereIn('status', [BatchStatus::DAMAGED->value, BatchStatus::DISPOSED->value])->count(),
+            'depletedCount' => (clone $baseQuery)->where('status', BatchStatus::DEPLETED->value)->count(),
             'expiredLossValue' => $canViewCost ? round((float) ((clone $baseQuery)
                 ->where('quantity_available', '>', 0)
                 ->whereDate('expiry_date', '<', today()->toDateString())
@@ -276,8 +332,17 @@ class InventoryController extends Controller
         $today = now()->startOfDay();
         $requestedPerPage = (int) $request->query('per_page', 10);
         $perPage = in_array($requestedPerPage, [10, 15, 30, 50, 100], true) ? $requestedPerPage : 10;
+        $sort = (string) $request->query('sort', 'expiry_date');
+        $dir = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        match ($sort) {
+            'batch_number' => $query->orderBy('batch_number', $dir),
+            'quantity_available' => $query->orderBy('quantity_available', $dir),
+            'stock_cost_value' => $query->orderByRaw("(quantity_available * purchase_price) {$dir}"),
+            default => $query->orderBy('expiry_date', $dir),
+        };
+
         $paginated = $query
-            ->orderBy('expiry_date')
             ->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString()
@@ -331,6 +396,8 @@ class InventoryController extends Controller
                 'branch_id' => $branchScope['selectedBranchId'],
                 'supplier_id' => $supplierId ? (string) $supplierId : '',
                 'per_page' => $perPage,
+                'sort' => $sort,
+                'dir' => $dir,
             ],
         ]);
     }
@@ -374,15 +441,23 @@ class InventoryController extends Controller
 
         $requestedPerPage = (int) $request->query('per_page', 10);
         $perPage = in_array($requestedPerPage, [10, 15, 30, 50, 100], true) ? $requestedPerPage : 10;
+        $sort = (string) $request->query('sort', 'occurred_at');
+        $dir = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
-        $movements = $filteredQuery
-            ->with([
-                'medicine:id,name,sku,unit,deleted_at',
-                'branch:id,name,code',
-                'batch:id,batch_number,expiry_date',
-                'user:id,name',
-            ])
-            ->orderByDesc('occurred_at')
+        $movementsQuery = $filteredQuery->with([
+            'medicine:id,name,sku,unit,deleted_at',
+            'branch:id,name,code',
+            'batch:id,batch_number,expiry_date',
+            'user:id,name',
+        ]);
+
+        match ($sort) {
+            'quantity_change' => $movementsQuery->orderBy('quantity_change', $dir),
+            'total_cost' => $movementsQuery->orderBy('total_cost', $dir),
+            default => $movementsQuery->orderBy('occurred_at', $dir),
+        };
+
+        $movements = $movementsQuery
             ->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString()
@@ -426,7 +501,41 @@ class InventoryController extends Controller
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
                 'per_page' => $perPage,
+                'sort' => $sort,
+                'dir' => $dir,
             ],
+        ]);
+    }
+
+    public function searchMedicines(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+
+        $medicines = Medicine::query()
+            ->where('is_active', true)
+            ->when($q !== '', function ($query) use ($q): void {
+                $needle = mb_strtolower($q);
+                $query->where(function ($sub) use ($needle): void {
+                    $sub->whereRaw('LOWER(name) LIKE ?', ["%{$needle}%"])
+                        ->orWhereRaw('LOWER(COALESCE(generic_name, \'\')) LIKE ?', ["%{$needle}%"])
+                        ->orWhereRaw('LOWER(sku) LIKE ?', ["%{$needle}%"]);
+                });
+            })
+            ->orderBy('name')
+            ->limit(15)
+            ->get([
+                'id',
+                'name',
+                'generic_name',
+                'sku',
+                'unit',
+                'units_per_box',
+                'default_purchase_price',
+                'default_selling_price',
+            ]);
+
+        return response()->json([
+            'medicines' => $medicines,
         ]);
     }
 

@@ -18,6 +18,7 @@ interface DataTableToolbarSectionProps<T = any> {
     search: string;
     setSearch: (val: string) => void;
     searchPlaceholder: string;
+    searchPlaceholders?: string[];
     hideFilter?: boolean;
     showFilters: boolean;
     setShowFilters: (val: boolean | ((prev: boolean) => boolean)) => void;
@@ -48,6 +49,7 @@ export function DataTableToolbarSection<T = any>({
     search,
     setSearch,
     searchPlaceholder,
+    searchPlaceholders,
     hideFilter,
     showFilters,
     setShowFilters,
@@ -86,6 +88,7 @@ export function DataTableToolbarSection<T = any>({
                         value={search}
                         onChange={setSearch}
                         placeholder={searchPlaceholder}
+                        placeholders={searchPlaceholders}
                     />
                     <div className="flex items-center gap-1.5">
                         {!hideFilter && (

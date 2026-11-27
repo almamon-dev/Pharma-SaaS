@@ -15,6 +15,9 @@ export interface DataTableProps<T = any> {
     data: T[];
     columns: Column<T>[];
     searchPlaceholder?: string;
+    searchPlaceholders?: string[];
+    searchValue?: string;
+    onSearchChange?: (value: string) => void;
     onDeleteSelected?: (selectedIds: (number | string)[]) => void;
     keyExtractor?: (item: T) => number | string;
     actions?: (item: T) => React.ReactNode;

@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowDownLeft,
     ArrowUpRight,
     Building2,
+    Copy,
     Landmark,
+    Layers,
     Plus,
     RotateCcw,
+    Trash2,
     TrendingUp,
     Users,
     Wallet,
@@ -31,6 +34,23 @@ import {
     formatPaisa,
     useAccountingLang,
 } from './types';
+
+interface MultiEntryRow {
+    key: string;
+    kind: 'income' | 'expense';
+    category_id: string;
+    amount: string;
+    payment_channel: 'cash' | 'bank' | 'wallet';
+    party_name: string;
+    note: string;
+}
+
+function parseAmountToPaisa(raw: string): number {
+    const cleaned = raw.replace(/,/g, '').trim();
+    if (!/^\d+(?:\.\d{1,2})?$/.test(cleaned)) return 0;
+    const val = Number(cleaned);
+    return Number.isFinite(val) && val > 0 ? Math.round(val * 100) : 0;
+}
 
 interface SimpleDashboardProps {
     settings: AccountingSettingsData;
@@ -81,6 +101,125 @@ export default function SimpleDashboard({
 
     const [reverseTarget, setReverseTarget] = useState<PlainVoucherItem | null>(null);
     const [reverseReason, setReverseReason] = useState('');
+
+    const makeMultiRow = (
+        kind: 'income' | 'expense' = 'expense',
+        seed?: Partial<MultiEntryRow>
+    ): MultiEntryRow => {
+        const firstCat = categories.find((c) => c.kind === kind);
+        return {
+            key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            kind,
+            category_id: seed?.category_id ?? (firstCat ? String(firstCat.id) : ''),
+            amount: seed?.amount ?? '',
+            payment_channel: seed?.payment_channel ?? 'cash',
+            party_name: seed?.party_name ?? '',
+            note: seed?.note ?? '',
+        };
+    };
+
+    const [multiModalOpen, setMultiModalOpen] = useState(false);
+    const [multiDate, setMultiDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [multiBranchId, setMultiBranchId] = useState<string>(
+        String(selectedBranchId ?? branches[0]?.id ?? '')
+    );
+    const [multiRows, setMultiRows] = useState<MultiEntryRow[]>([]);
+
+    const openMultiModal = () => {
+        setMultiDate(new Date().toISOString().slice(0, 10));
+        setMultiBranchId(String(selectedBranchId ?? branches[0]?.id ?? ''));
+        setMultiRows([makeMultiRow('expense'), makeMultiRow('expense')]);
+        setMultiModalOpen(true);
+    };
+
+    useEffect(() => {
+        if (
+            permissions.expense_create &&
+            typeof window !== 'undefined' &&
+            window.location.search.includes('multi=1')
+        ) {
+            openMultiModal();
+        }
+    }, [permissions.expense_create]);
+
+    const addMultiRow = (kind: 'income' | 'expense' = 'expense') => {
+        setMultiRows((prev) => (prev.length >= 50 ? prev : [...prev, makeMultiRow(kind)]));
+    };
+
+    const duplicateMultiRow = (index: number) => {
+        setMultiRows((prev) => {
+            if (prev.length >= 50) return prev;
+            const source = prev[index];
+            if (!source) return prev;
+            const clone = makeMultiRow(source.kind, { ...source });
+            return [...prev.slice(0, index + 1), clone, ...prev.slice(index + 1)];
+        });
+    };
+
+    const removeMultiRow = (key: string) => {
+        setMultiRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
+    };
+
+    const updateMultiRow = (key: string, patch: Partial<MultiEntryRow>) => {
+        setMultiRows((prev) =>
+            prev.map((row) => {
+                if (row.key !== key) return row;
+                const next = { ...row, ...patch };
+                if (patch.kind && patch.kind !== row.kind) {
+                    const firstCat = categories.find((c) => c.kind === patch.kind);
+                    next.category_id = firstCat ? String(firstCat.id) : '';
+                }
+                return next;
+            })
+        );
+    };
+
+    const multiTotals = multiRows.reduce(
+        (acc, row) => {
+            const paisa = parseAmountToPaisa(row.amount);
+            if (paisa > 0 && row.category_id) {
+                acc.validCount += 1;
+            }
+            if (row.kind === 'income') {
+                acc.incomePaisa += paisa;
+            } else {
+                acc.expensePaisa += paisa;
+            }
+            return acc;
+        },
+        { validCount: 0, incomePaisa: 0, expensePaisa: 0 }
+    );
+
+    const canSubmitMulti =
+        multiRows.length > 0 &&
+        multiRows.every((row) => parseAmountToPaisa(row.amount) > 0 && Boolean(row.category_id));
+
+    const handleSubmitMultiEntries = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!canSubmitMulti || submitting) return;
+        setSubmitting(true);
+
+        router.post(
+            route('accounting.simple.entries.bulk'),
+            {
+                date: multiDate,
+                branch_id: multiBranchId || null,
+                entries: multiRows.map((row) => ({
+                    kind: row.kind,
+                    category_id: Number(row.category_id),
+                    amount: row.amount.trim(),
+                    payment_channel: row.payment_channel,
+                    party_name: row.party_name.trim() || null,
+                    note: row.note.trim() || null,
+                })),
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => setMultiModalOpen(false),
+                onFinish: () => setSubmitting(false),
+            }
+        );
+    };
 
     const openEntryModal = (kind: 'income' | 'expense') => {
         const firstCat = categories.find((c) => c.kind === kind);
@@ -196,6 +335,10 @@ export default function SimpleDashboard({
                                 <Button size="sm" variant="destructive" onClick={() => openEntryModal('expense')}>
                                     <Plus className="w-4 h-4 mr-1" />
                                     {isBn ? 'খরচ যোগ করুন' : 'Add expense'}
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={openMultiModal}>
+                                    <Layers className="w-4 h-4 mr-1" />
+                                    {isBn ? 'একাধিক এন্ট্রি' : 'Multi entry'}
                                 </Button>
                             </>
                         )}
@@ -637,6 +780,264 @@ export default function SimpleDashboard({
                         minLength={4}
                     />
                 </BrtaField>
+            </BrtaFormModal>
+
+            {/* Multi-Entry Batch Modal */}
+            <BrtaFormModal
+                open={multiModalOpen}
+                onClose={() => setMultiModalOpen(false)}
+                onSubmit={handleSubmitMultiEntries}
+                title={isBn ? 'একাধিক আয়-ব্যয় এন্ট্রি' : 'Multi-Entry Batch Posting'}
+                subtitle={
+                    isBn
+                        ? 'একসাথে একাধিক আয় ও খরচের হিসাব যোগ করুন — সবগুলো একসাথে ব্যালেন্সড ভাউচার হিসেবে সেভ হবে।'
+                        : 'Enter multiple income and expense lines together — all rows post atomically as balanced vouchers.'
+                }
+                icon={<Layers className="h-4 w-4 text-[#337AB7]" />}
+                maxWidth="4xl"
+                footerProps={{
+                    cancelLabel: isBn ? 'বাতিল' : 'Cancel',
+                    submitLabel: isBn
+                        ? `${multiRows.length}টি এন্ট্রি সংরক্ষণ করুন`
+                        : `Save ${multiRows.length} Entries`,
+                    submitting,
+                }}
+            >
+                <div className="space-y-3">
+                    {Object.entries(errors).some(([k]) => k.startsWith('entries') || k === 'date' || k === 'branch_id') && (
+                        <div className="px-3 py-2 text-[12px] bg-[#FDF2F2] dark:bg-red-950/30 border border-[#E7B5B3] dark:border-red-800 rounded-[2px] text-[#B91C1C] dark:text-red-300">
+                            {Object.entries(errors)
+                                .filter(([k]) => k.startsWith('entries') || k === 'date' || k === 'branch_id')
+                                .map(([, msg]) => msg)
+                                .join(' • ')}
+                        </div>
+                    )}
+
+                    {/* Top Controls: Shared Date, Branch & Quick Add Row Buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 p-2.5 bg-[#F8FAF7] dark:bg-slate-900/60 border border-[#E2E7E0] dark:border-slate-800 rounded-[2px]">
+                        <div className="flex flex-wrap items-end gap-3">
+                            <div>
+                                <label className="block text-[11px] font-semibold text-[#555555] dark:text-slate-400 mb-1">
+                                    {isBn ? 'তারিখ' : 'Date'} *
+                                </label>
+                                <input
+                                    type="date"
+                                    value={multiDate}
+                                    onChange={(e) => setMultiDate(e.target.value)}
+                                    className={`${brtaInputClass} h-[32px] text-[12px]`}
+                                    required
+                                />
+                            </div>
+                            {permissions.all_branches && branches.length > 0 && (
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-[#555555] dark:text-slate-400 mb-1">
+                                        {isBn ? 'শাখা' : 'Branch'} *
+                                    </label>
+                                    <select
+                                        value={multiBranchId}
+                                        onChange={(e) => setMultiBranchId(e.target.value)}
+                                        className={`${brtaInputClass} h-[32px] text-[12px]`}
+                                    >
+                                        {branches.map((b) => (
+                                            <option key={b.id} value={b.id}>
+                                                {b.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="default"
+                                onClick={() => addMultiRow('income')}
+                                disabled={multiRows.length >= 50}
+                            >
+                                <Plus className="w-3.5 h-3.5 mr-1" />
+                                {isBn ? 'আয়ের সারি' : 'Income row'}
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => addMultiRow('expense')}
+                                disabled={multiRows.length >= 50}
+                            >
+                                <Plus className="w-3.5 h-3.5 mr-1" />
+                                {isBn ? 'খরচের সারি' : 'Expense row'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Dynamic Multi-Row Table */}
+                    <div className="overflow-x-auto border border-[#D5DBD3] dark:border-slate-800 rounded-[2px]">
+                        <table className="w-full text-[12px] border-collapse">
+                            <thead className="bg-[#F4F6F3] dark:bg-slate-900 text-[#444444] dark:text-slate-300 border-b border-[#D5DBD3] dark:border-slate-800">
+                                <tr>
+                                    <th className="py-2 px-2 text-center w-8">#</th>
+                                    <th className="py-2 px-2 text-left w-[104px]">{isBn ? 'ধরন' : 'Type'}</th>
+                                    <th className="py-2 px-2 text-left min-w-[155px]">{isBn ? 'খাত / ক্যাটাগরি' : 'Category'}</th>
+                                    <th className="py-2 px-2 text-left w-[112px]">{isBn ? 'পরিমাণ (৳)' : 'Amount (৳)'}</th>
+                                    <th className="py-2 px-2 text-left w-[112px]">{isBn ? 'মাধ্যম' : 'Channel'}</th>
+                                    <th className="py-2 px-2 text-left w-[125px]">{isBn ? 'ব্যক্তি / প্রতিষ্ঠান' : 'Party'}</th>
+                                    <th className="py-2 px-2 text-left min-w-[130px]">{isBn ? 'নোট' : 'Note'}</th>
+                                    <th className="py-2 px-2 text-right w-[68px]">{isBn ? 'অ্যাকশন' : 'Action'}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#ECEFEA] dark:divide-slate-800 bg-white dark:bg-[#12161c]">
+                                {multiRows.map((row, idx) => {
+                                    const rowCategories = categories.filter((c) => c.kind === row.kind);
+                                    return (
+                                        <tr key={row.key} className="hover:bg-[#FAFBF9] dark:hover:bg-slate-900/40">
+                                            <td className="py-1.5 px-2 text-center font-mono text-[#666666] dark:text-slate-400">
+                                                {idx + 1}
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <select
+                                                    value={row.kind}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, {
+                                                            kind: e.target.value as 'income' | 'expense',
+                                                        })
+                                                    }
+                                                    className={`${brtaInputClass} h-[30px] px-1.5 text-[12px] font-semibold ${
+                                                        row.kind === 'income'
+                                                            ? 'text-[#0E5F3F] dark:text-emerald-400'
+                                                            : 'text-[#C9302C] dark:text-rose-400'
+                                                    }`}
+                                                >
+                                                    <option value="income">{isBn ? 'আয় (+)' : 'Income (+)'}</option>
+                                                    <option value="expense">{isBn ? 'খরচ (-)' : 'Expense (-)'}</option>
+                                                </select>
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <select
+                                                    value={row.category_id}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, { category_id: e.target.value })
+                                                    }
+                                                    className={`${brtaInputClass} h-[30px] px-1.5 text-[12px]`}
+                                                    required
+                                                >
+                                                    <option value="">
+                                                        {isBn ? 'ক্যাটাগরি নির্বাচন' : 'Select category'}
+                                                    </option>
+                                                    {rowCategories.map((c) => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {isBn ? c.name_bn : c.name_en}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={row.amount}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, { amount: e.target.value })
+                                                    }
+                                                    placeholder="0.00"
+                                                    className={`${brtaInputClass} h-[30px] px-2 text-[12px] font-mono text-right`}
+                                                    required
+                                                />
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <select
+                                                    value={row.payment_channel}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, {
+                                                            payment_channel: e.target.value as
+                                                                | 'cash'
+                                                                | 'bank'
+                                                                | 'wallet',
+                                                        })
+                                                    }
+                                                    className={`${brtaInputClass} h-[30px] px-1.5 text-[12px]`}
+                                                >
+                                                    <option value="cash">{isBn ? 'নগদ ক্যাশ' : 'Cash'}</option>
+                                                    <option value="bank">{isBn ? 'ব্যাংক' : 'Bank'}</option>
+                                                    <option value="wallet">{isBn ? 'বিকাশ / নগদ' : 'bKash / Nagad'}</option>
+                                                </select>
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <input
+                                                    type="text"
+                                                    value={row.party_name}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, { party_name: e.target.value })
+                                                    }
+                                                    placeholder={isBn ? 'যেমন: ডেসকো' : 'Party'}
+                                                    className={`${brtaInputClass} h-[30px] px-2 text-[12px]`}
+                                                    maxLength={120}
+                                                />
+                                            </td>
+                                            <td className="py-1.5 px-1.5">
+                                                <input
+                                                    type="text"
+                                                    value={row.note}
+                                                    onChange={(e) =>
+                                                        updateMultiRow(row.key, { note: e.target.value })
+                                                    }
+                                                    placeholder={isBn ? 'সংক্ষিপ্ত বিবরণ' : 'Short note'}
+                                                    className={`${brtaInputClass} h-[30px] px-2 text-[12px]`}
+                                                    maxLength={300}
+                                                />
+                                            </td>
+                                            <td className="py-1.5 px-1.5 text-right whitespace-nowrap">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => duplicateMultiRow(idx)}
+                                                    title={isBn ? 'কপি করুন' : 'Duplicate row'}
+                                                    className="inline-flex items-center justify-center w-6 h-6 rounded-[2px] text-[#337AB7] hover:bg-[#337AB7]/10 mr-1 cursor-pointer"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeMultiRow(row.key)}
+                                                    disabled={multiRows.length <= 1}
+                                                    title={isBn ? 'মুছুন' : 'Remove row'}
+                                                    className="inline-flex items-center justify-center w-6 h-6 rounded-[2px] text-[#D9534F] hover:bg-[#D9534F]/10 disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Summary Strip */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-[#F8FAF7] dark:bg-slate-900/60 border border-[#E2E7E0] dark:border-slate-800 rounded-[2px] text-[12px]">
+                        <div className="text-[#555555] dark:text-slate-400">
+                            {isBn ? 'মোট সারি:' : 'Rows:'}{' '}
+                            <span className="font-mono font-semibold text-[#222222] dark:text-white">
+                                {multiRows.length}
+                            </span>{' '}
+                            <span className="text-[11px] text-[#777777] dark:text-slate-400">
+                                ({isBn ? 'প্রস্তুত:' : 'Ready:'} {multiTotals.validCount}/{multiRows.length})
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 font-mono">
+                            <span className="text-[#0E5F3F] dark:text-emerald-400 font-semibold">
+                                {isBn ? 'আয়:' : 'Income:'} +{formatPaisa(multiTotals.incomePaisa)}
+                            </span>
+                            <span className="text-[#C9302C] dark:text-rose-400 font-semibold">
+                                {isBn ? 'খরচ:' : 'Expense:'} -{formatPaisa(multiTotals.expensePaisa)}
+                            </span>
+                            <span className="font-bold text-[#222222] dark:text-white">
+                                {isBn ? 'নিট:' : 'Net:'}{' '}
+                                {formatPaisa(multiTotals.incomePaisa - multiTotals.expensePaisa)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </BrtaFormModal>
         </AppLayout>
     );

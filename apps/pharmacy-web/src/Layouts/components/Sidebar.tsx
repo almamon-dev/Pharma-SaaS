@@ -201,6 +201,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           active: route().current('inventory.batches'),
                           icon: Boxes,
                           locked: !hasFeature('batch_expiry'),
+                          badge:
+                              hasFeature('batch_expiry') && (tenant?.batchAlertCount ?? 0) > 0
+                                  ? tenant?.batchAlertCount
+                                  : undefined,
                       },
                       {
                           category: 'Inventory & Stock',
@@ -540,71 +544,215 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   ]
                 : []),
             ...inventoryEntries,
-            ...(hasPerm('accounting.view')
-                ? [
-                      {
-                          category: 'Accounting',
-                          name: 'Accounting Overview',
-                          href: toPath('accounting.dashboard'),
-                          active:
-                              route().current('accounting.dashboard') ||
-                              route().current('accounting.overview'),
-                          icon: Wallet,
-                      },
-                      {
-                          category: 'Accounting',
-                          name: 'Vouchers & Journal',
-                          href: toPath('accounting.vouchers.index'),
-                          active:
-                              route().current('accounting.vouchers.*') ||
-                              route().current('accounting.journal.*') ||
-                              route().current('accounting.operations.*'),
-                          icon: ReceiptText,
-                      },
-                      {
-                          category: 'Accounting',
-                          name: 'Parties & Ageing',
-                          href: toPath('accounting.parties.index'),
-                          active: route().current('accounting.parties.*'),
-                          icon: Contact2,
-                      },
-                      {
-                          category: 'Accounting',
-                          name: 'Books & Bank Recon',
-                          href: toPath('accounting.day-book'),
-                          active:
-                              route().current('accounting.day-book') ||
-                              route().current('accounting.cash-book') ||
-                              route().current('accounting.bank-book') ||
-                              route().current('accounting.bank-reconciliation.*') ||
-                              route().current('accounting.ledger'),
-                          icon: FileSpreadsheet,
-                      },
-                      {
-                          category: 'Accounting',
-                          name: 'Financial Statements',
-                          href: toPath('accounting.simple-pnl'),
-                          active:
-                              route().current('accounting.simple-pnl') ||
-                              route().current('accounting.trial-balance') ||
-                              route().current('accounting.balance-sheet') ||
-                              route().current('accounting.extra-reports*') ||
-                              route().current('accounting.vat-summary'),
-                          icon: Layers,
-                      },
-                      {
-                          category: 'Accounting',
-                          name: 'Accounting Settings',
-                          href: toPath('accounting.settings.index'),
-                          active:
-                              route().current('accounting.settings.*') ||
-                              route().current('accounting.accounts.*') ||
-                              route().current('accounting.periods.*') ||
-                              route().current('accounting.posting-errors.*'),
-                          icon: Settings,
-                      },
-                  ]
-                : []),
+            ...(() => {
+                if (!hasPerm('accounting.view')) return [];
+
+                const isAccountingAdvanced = tenant?.accountingMode === 'advanced';
+                const search = typeof window !== 'undefined' ? window.location.search : '';
+                const isMultiQuery = search.includes('multi=1');
+
+                const accountingGroups: Array<SidebarGroupItem & { category: string }> = [
+                    {
+                        category: 'Accounting',
+                        group: 'Overview & Entry',
+                        icon: Wallet,
+                        items: [
+                            ...(isAccountingAdvanced && hasPerm('accounting.reports.view')
+                                ? [
+                                      {
+                                          name: 'Overview',
+                                          href: toPath('accounting.overview'),
+                                          active: route().current('accounting.overview'),
+                                      },
+                                  ]
+                                : []),
+                            {
+                                name: isAccountingAdvanced ? 'Quick Entry' : 'Dashboard',
+                                href: isAccountingAdvanced
+                                    ? `${toPath('accounting.dashboard')}?simple=1`
+                                    : toPath('accounting.dashboard'),
+                                active: route().current('accounting.dashboard') && !isMultiQuery,
+                            },
+                            ...(hasPerm('accounting.expense.create')
+                                ? [
+                                      {
+                                          name: 'Multi Entry',
+                                          href: `${toPath('accounting.dashboard')}?simple=1&multi=1`,
+                                          active: route().current('accounting.dashboard') && isMultiQuery,
+                                      },
+                                  ]
+                                : []),
+                        ],
+                    },
+                    {
+                        category: 'Accounting',
+                        group: 'Vouchers & Journal',
+                        icon: ReceiptText,
+                        items: [
+                            {
+                                name: 'Vouchers',
+                                href: toPath('accounting.vouchers.index'),
+                                active: route().current('accounting.vouchers.*'),
+                            },
+                            ...(isAccountingAdvanced && hasPerm('accounting.journal.create')
+                                ? [
+                                      {
+                                          name: 'Journal',
+                                          href: toPath('accounting.journal.index'),
+                                          active: route().current('accounting.journal.*'),
+                                      },
+                                  ]
+                                : []),
+                            ...(isAccountingAdvanced && hasPerm('accounting.voucher.create')
+                                ? [
+                                      {
+                                          name: 'Payroll & Stock',
+                                          href: toPath('accounting.operations.index'),
+                                          active: route().current('accounting.operations.*'),
+                                      },
+                                  ]
+                                : []),
+                        ],
+                    },
+                    {
+                        category: 'Accounting',
+                        group: 'Books & Parties',
+                        icon: FileSpreadsheet,
+                        items: [
+                            ...(hasPerm('accounting.reports.view')
+                                ? [
+                                      {
+                                          name: 'Parties & Ageing',
+                                          href: toPath('accounting.parties.index'),
+                                          active: route().current('accounting.parties.*'),
+                                      },
+                                      ...(isAccountingAdvanced
+                                          ? [
+                                                {
+                                                    name: 'Ledger',
+                                                    href: toPath('accounting.ledger'),
+                                                    active: route().current('accounting.ledger'),
+                                                },
+                                            ]
+                                          : []),
+                                      {
+                                          name: 'Day Book',
+                                          href: toPath('accounting.day-book'),
+                                          active: route().current('accounting.day-book'),
+                                      },
+                                      {
+                                          name: 'Cash Book',
+                                          href: toPath('accounting.cash-book'),
+                                          active: route().current('accounting.cash-book'),
+                                      },
+                                      {
+                                          name: 'Bank Book',
+                                          href: toPath('accounting.bank-book'),
+                                          active: route().current('accounting.bank-book'),
+                                      },
+                                      ...(isAccountingAdvanced
+                                          ? [
+                                                {
+                                                    name: 'Bank Recon',
+                                                    href: toPath('accounting.bank-reconciliation.index'),
+                                                    active: route().current('accounting.bank-reconciliation.*'),
+                                                },
+                                            ]
+                                          : []),
+                                  ]
+                                : []),
+                        ],
+                    },
+                    {
+                        category: 'Accounting',
+                        group: 'Financial Reports',
+                        icon: Layers,
+                        items: [
+                            ...(hasPerm('accounting.reports.view')
+                                ? [
+                                      {
+                                          name: 'Profit & Loss (P&L)',
+                                          href: toPath('accounting.simple-pnl'),
+                                          active: route().current('accounting.simple-pnl'),
+                                      },
+                                      ...(isAccountingAdvanced
+                                          ? [
+                                                {
+                                                    name: 'Trial Balance',
+                                                    href: toPath('accounting.trial-balance'),
+                                                    active: route().current('accounting.trial-balance'),
+                                                },
+                                                {
+                                                    name: 'Balance Sheet',
+                                                    href: toPath('accounting.balance-sheet'),
+                                                    active: route().current('accounting.balance-sheet'),
+                                                },
+                                            ]
+                                          : []),
+                                      {
+                                          name: 'Cash Flow & Reports',
+                                          href: toPath('accounting.extra-reports'),
+                                          active: route().current('accounting.extra-reports*'),
+                                      },
+                                      {
+                                          name: 'VAT Summary',
+                                          href: toPath('accounting.vat-summary'),
+                                          active: route().current('accounting.vat-summary'),
+                                      },
+                                  ]
+                                : []),
+                        ],
+                    },
+                    {
+                        category: 'Accounting',
+                        group: 'Accounting Setup',
+                        icon: Settings,
+                        items: [
+                            ...(isAccountingAdvanced && (hasPerm('accounting.coa.manage') || hasPerm('accounting.view'))
+                                ? [
+                                      {
+                                          name: 'Chart of Accounts',
+                                          href: toPath('accounting.accounts.index'),
+                                          active: route().current('accounting.accounts.*'),
+                                      },
+                                  ]
+                                : []),
+                            ...(isAccountingAdvanced &&
+                            (hasPerm('accounting.period.close') ||
+                                hasPerm('accounting.period.reopen') ||
+                                hasPerm('accounting.view'))
+                                ? [
+                                      {
+                                          name: 'Fiscal Periods',
+                                          href: toPath('accounting.periods.index'),
+                                          active: route().current('accounting.periods.*'),
+                                      },
+                                  ]
+                                : []),
+                            ...(isAccountingAdvanced && hasPerm('accounting.voucher.post')
+                                ? [
+                                      {
+                                          name: 'Posting Errors',
+                                          href: toPath('accounting.posting-errors.index'),
+                                          active: route().current('accounting.posting-errors.*'),
+                                      },
+                                  ]
+                                : []),
+                            ...(hasPerm('accounting.settings.manage') || hasPerm('accounting.view')
+                                ? [
+                                      {
+                                          name: 'Settings',
+                                          href: toPath('accounting.settings.index'),
+                                          active: route().current('accounting.settings.*'),
+                                      },
+                                  ]
+                                : []),
+                        ],
+                    },
+                ];
+
+                return accountingGroups.filter((g) => g.items.length > 0);
+            })(),
             ...crmEntries,
             ...organizationEntries,
             ...(isSubscriberAdmin

@@ -23,6 +23,9 @@ export function useDataTableState<T extends Record<string, any>>({
     defaultWrapCells = false,
     onWrapCellsChange,
     skeletonCount,
+    hidePagination = false,
+    searchValue,
+    onSearchChange,
 }: DataTableProps<T>) {
     const [internalWrapCells, setInternalWrapCells] = useState<boolean>(() =>
         getSavedWrapCells(tableId, defaultWrapCells)
@@ -83,7 +86,19 @@ export function useDataTableState<T extends Record<string, any>>({
         [viewMode, perPage]
     );
 
-    const [search, setSearch] = useState('');
+    const [internalSearch, setInternalSearch] = useState('');
+    const isControlledSearch = typeof onSearchChange === 'function';
+    const search = isControlledSearch ? (searchValue ?? '') : internalSearch;
+    const setSearch = useCallback(
+        (val: string) => {
+            if (onSearchChange) {
+                onSearchChange(val);
+            } else {
+                setInternalSearch(val);
+            }
+        },
+        [onSearchChange]
+    );
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
@@ -143,7 +158,7 @@ export function useDataTableState<T extends Record<string, any>>({
     } = useDataTableColumns(columns);
 
     const filteredData = useMemo(() => {
-        if (!search) return data;
+        if (!search || isControlledSearch) return data;
         const q = search.toLowerCase();
         return data.filter((item) =>
             Object.values(item).some((val) =>
@@ -152,7 +167,7 @@ export function useDataTableState<T extends Record<string, any>>({
                     .includes(q)
             )
         );
-    }, [data, search]);
+    }, [data, search, isControlledSearch]);
 
     const sortedData = useMemo(
         () => sortTableData(filteredData, sortKey, sortDir),
@@ -166,10 +181,9 @@ export function useDataTableState<T extends Record<string, any>>({
     const validCurrentPage =
         totalPages > 0 ? Math.min(Math.max(1, currentPage), totalPages) : 1;
     const startIndex = (validCurrentPage - 1) * activePerPage;
-    const paginatedData = sortedData.slice(
-        startIndex,
-        startIndex + activePerPage
-    );
+    const paginatedData = hidePagination
+        ? sortedData
+        : sortedData.slice(startIndex, startIndex + activePerPage);
     const effectiveSkeletonCount =
         skeletonCount ?? (paginatedData.length > 0 ? paginatedData.length : 4);
 

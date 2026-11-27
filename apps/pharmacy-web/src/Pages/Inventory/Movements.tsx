@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
  ArrowDownRight,
@@ -6,13 +6,16 @@ import {
  ArrowUpRight,
  Boxes,
  DollarSign,
+ Download,
  History,
+ RefreshCw,
  Search,
 } from 'lucide-react';
 import { AppLayout } from '@/Layouts/AppLayout';
 import { MetricCard } from '@/Components/cards/MetricCard';
 import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
+import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { Select } from '@/Components/ui/Select';
 import { Badge, BadgeVariant } from '@/Components/ui/Badge';
 import { DataTable, Column, EmptyState, TablePagination } from '@/Components/tables';
@@ -20,6 +23,7 @@ import {
  BranchFilterOption,
  PaginatedData,
  StockMovementRow,
+ downloadCsv,
 } from '@/Components/inventory/inventoryTypes';
 import { SharedPageProps } from '@/types';
 import { formatCurrency } from '@/lib/format';
@@ -42,8 +46,18 @@ interface MovementsPageProps {
  date_from: string;
  date_to: string;
  per_page?: number;
+ sort?: string;
+ dir?: string;
  };
 }
+
+const sortOptions = [
+ { id: 'occurred_at:desc', value: 'occurred_at:desc', name: 'Newest First' },
+ { id: 'occurred_at:asc', value: 'occurred_at:asc', name: 'Oldest First' },
+ { id: 'quantity_change:desc', value: 'quantity_change:desc', name: 'Qty: Highest (+)' },
+ { id: 'quantity_change:asc', value: 'quantity_change:asc', name: 'Qty: Highest (-)' },
+ { id: 'total_cost:desc', value: 'total_cost:desc', name: 'Cost Impact: High' },
+];
 
 function movementBadgeVariant(type: string, qtyChange: number): BadgeVariant {
  if (type === 'damage' || type === 'expiry_disposal') return 'rose';
@@ -69,8 +83,18 @@ export default function InventoryMovements({
  const [branchId, setBranchId] = useState(filters.branch_id || 'all');
  const [dateFrom, setDateFrom] = useState(filters.date_from || '');
  const [dateTo, setDateTo] = useState(filters.date_to || '');
+ const [sortVal, setSortVal] = useState(`${filters.sort || 'occurred_at'}:${filters.dir || 'desc'}`);
+ const [refreshing, setRefreshing] = useState(false);
+ const [autoLive, setAutoLive] = useState(false);
+
+ const mountedRef = useRef(false);
 
  const applyFilters = (overrides?: Partial<typeof filters>) => {
+ const nextSortPair = (overrides?.sort && overrides?.dir
+ ? `${overrides.sort}:${overrides.dir}`
+ : sortVal
+ ).split(':');
+
  const next = {
  q: overrides?.q ?? search,
  movement_type: overrides?.movement_type ?? movementType,
@@ -78,6 +102,8 @@ export default function InventoryMovements({
  date_from: overrides?.date_from ?? dateFrom,
  date_to: overrides?.date_to ?? dateTo,
  per_page: overrides?.per_page ?? movements.per_page ?? filters.per_page ?? 10,
+ sort: overrides?.sort ?? nextSortPair[0] ?? 'occurred_at',
+ dir: overrides?.dir ?? nextSortPair[1] ?? 'desc',
  };
 
  router.get(
@@ -89,8 +115,83 @@ export default function InventoryMovements({
  date_from: next.date_from || undefined,
  date_to: next.date_to || undefined,
  per_page: next.per_page,
+ sort: next.sort !== 'occurred_at' ? next.sort : undefined,
+ dir: next.dir !== 'desc' ? next.dir : undefined,
  },
  { preserveState: true, replace: true }
+ );
+ };
+
+ // Dynamic debounced search
+ useEffect(() => {
+ if (!mountedRef.current) {
+ mountedRef.current = true;
+ return;
+ }
+ const timer = window.setTimeout(() => {
+ applyFilters({ q: search });
+ }, 300);
+ return () => window.clearTimeout(timer);
+ }, [search]);
+
+ // Optional live 30s auto-refresh
+ useEffect(() => {
+ if (!autoLive) return;
+ const interval = window.setInterval(() => {
+ router.reload({ only: ['movements', 'summary'] });
+ }, 30000);
+ return () => window.clearInterval(interval);
+ }, [autoLive]);
+
+ const applyDatePreset = (preset: 'today' | '7d' | 'month' | 'all') => {
+ const now = new Date();
+ const to = now.toISOString().slice(0, 10);
+ let from = '';
+ let nextTo = to;
+ if (preset === 'today') {
+ from = to;
+ } else if (preset === '7d') {
+ const d = new Date(now);
+ d.setDate(d.getDate() - 6);
+ from = d.toISOString().slice(0, 10);
+ } else if (preset === 'month') {
+ from = `${to.slice(0, 8)}01`;
+ } else {
+ from = '';
+ nextTo = '';
+ }
+ setDateFrom(from);
+ setDateTo(nextTo);
+ applyFilters({ date_from: from, date_to: nextTo });
+ };
+
+ const handleRefresh = () => {
+ setRefreshing(true);
+ router.reload({
+ only: ['movements', 'summary'],
+ onFinish: () => setRefreshing(false),
+ });
+ };
+
+ const handleExportCsv = () => {
+ downloadCsv(
+ `stock-movements-${new Date().toISOString().slice(0, 10)}.csv`,
+ ['Occurred At', 'Medicine', 'SKU', 'Batch #', 'Branch', 'Type', 'Qty Change', 'Unit', 'Before', 'After', 'Cost Impact', 'Reason', 'Actor'],
+ movements.data.map((m) => [
+ m.occurred_at,
+ m.medicine_name,
+ m.medicine_sku,
+ m.batch_number,
+ m.branch_code || m.branch_name,
+ m.movement_label,
+ m.quantity_change,
+ m.unit,
+ m.balance_before,
+ m.balance_after,
+ m.total_cost,
+ m.reason,
+ m.user_name,
+ ])
  );
  };
 
@@ -118,15 +219,33 @@ export default function InventoryMovements({
  subtitle={`Immutable per-batch inventory trail for every sale, restock, adjustment & disposal · Scope: ${activeBranchName}`}
  actions={
  <div className="flex flex-wrap items-center gap-2">
+ <Button
+ type="button"
+ variant={autoLive ? 'primary' : 'outline'}
+ size="sm"
+ onClick={() => setAutoLive((v) => !v)}
+ title="Auto-refresh every 30 seconds"
+ >
+ <span className={`h-2 w-2 rounded-full ${autoLive ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
+ {autoLive ? 'Live: ON' : 'Live 30s'}
+ </Button>
+ <Button type="button" variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+ <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+ Refresh
+ </Button>
+ <Button type="button" variant="outline" size="sm" onClick={handleExportCsv} disabled={movements.data.length === 0}>
+ <Download className="h-3.5 w-3.5" />
+ CSV
+ </Button>
  <Link href={route('inventory.index')}>
- <Button variant="outline"size="sm">
- <ArrowLeft className="h-3.5 w-3.5"/>
+ <Button variant="outline" size="sm">
+ <ArrowLeft className="h-3.5 w-3.5" />
  Catalog
  </Button>
  </Link>
  <Link href={route('inventory.batches')}>
- <Button variant="outline"size="sm">
- <Boxes className="h-3.5 w-3.5"/>
+ <Button variant="outline" size="sm">
+ <Boxes className="h-3.5 w-3.5" />
  Batches
  </Button>
  </Link>
@@ -168,20 +287,72 @@ export default function InventoryMovements({
  </div>
 
  <div className="bg-white dark:bg-[#12161c] rounded-[2px] border border-slate-200 dark:border-slate-800">
+ {/* Quick Presets Bar */}
+ <div className="px-3.5 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+ <div className="flex flex-wrap items-center gap-1.5">
+ <span className="text-[11px] font-semibold text-slate-500 mr-1">Quick Range:</span>
+ <Button type="button" variant="outline" size="sm" onClick={() => applyDatePreset('today')}>
+ Today
+ </Button>
+ <Button type="button" variant="outline" size="sm" onClick={() => applyDatePreset('7d')}>
+ Last 7d
+ </Button>
+ <Button type="button" variant="outline" size="sm" onClick={() => applyDatePreset('month')}>
+ This Month
+ </Button>
+ <Button type="button" variant="outline" size="sm" onClick={() => applyDatePreset('all')}>
+ All Time
+ </Button>
+ </div>
+ {(search || movementType || dateFrom || dateTo || sortVal !== 'occurred_at:desc') && (
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ onClick={() => {
+ setSearch('');
+ setMovementType('');
+ setDateFrom('');
+ setDateTo('');
+ setSortVal('occurred_at:desc');
+ applyFilters({
+ q: '',
+ movement_type: '',
+ date_from: '',
+ date_to: '',
+ sort: 'occurred_at',
+ dir: 'desc',
+ });
+ }}
+ >
+ Reset Filters
+ </Button>
+ )}
+ </div>
+
  <form
  onSubmit={(e) => {
  e.preventDefault();
  applyFilters();
  }}
- className="p-3.5 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end"
+ className="p-3.5 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-end"
  >
  <div className="lg:col-span-2">
- <Input
- label="Search Medicine, Batch or Reason"
- placeholder="Medicine, SKU, batch #, invoice..."
+ <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+ Search Medicine, Batch or Reason
+ </label>
+ <AnimatedSearchInput
+ type="text"
  value={search}
  onChange={(e) => setSearch(e.target.value)}
- icon={<Search className="h-3.5 w-3.5"/>}
+ placeholders={[
+ 'Search by medicine name...',
+ 'Search by SKU or batch #...',
+ 'Search by invoice or reason...',
+ ]}
+ icon={<Search className="h-3.5 w-3.5" />}
+ wrapperClassName="h-[36px] rounded-[4px]"
+ className="h-[36px] rounded-[4px] text-[13px] pl-9 pr-3"
  />
  </div>
  <Select
@@ -206,20 +377,40 @@ export default function InventoryMovements({
  applyFilters({ movement_type: next });
  }}
  />
+ <Select
+ label="Sort By"
+ size="md"
+ value={sortVal}
+ options={sortOptions}
+ onChange={(e) => {
+ const next = String(e.target.value);
+ setSortVal(next);
+ const [sort, dir] = next.split(':');
+ applyFilters({ sort, dir });
+ }}
+ />
  <Input
  label="From Date"
  type="date"
  value={dateFrom}
- onChange={(e) => setDateFrom(e.target.value)}
+ onChange={(e) => {
+ const next = e.target.value;
+ setDateFrom(next);
+ applyFilters({ date_from: next });
+ }}
  />
  <div className="flex items-end gap-2">
  <Input
  label="To Date"
  type="date"
  value={dateTo}
- onChange={(e) => setDateTo(e.target.value)}
+ onChange={(e) => {
+ const next = e.target.value;
+ setDateTo(next);
+ applyFilters({ date_to: next });
+ }}
  />
- <Button type="submit"variant="primary"size="md"className="shrink-0">
+ <Button type="submit" variant="primary" size="md" className="shrink-0">
  Filter
  </Button>
  </div>
@@ -247,7 +438,17 @@ export default function InventoryMovements({
  {row.medicine_name}
  </div>
  <div className="text-[10px] font-mono text-slate-400">
- {row.medicine_sku} · Batch {row.batch_number}
+ {row.medicine_sku} ·{' '}
+ {row.batch_number && row.batch_number !== '—' ? (
+ <Link
+ href={route('inventory.batches', { q: row.batch_number })}
+ className="text-[#0E5F3F] dark:text-emerald-400 hover:underline font-semibold"
+ >
+ Batch {row.batch_number}
+ </Link>
+ ) : (
+ 'No batch'
+ )}
  </div>
  </div>
  ),
