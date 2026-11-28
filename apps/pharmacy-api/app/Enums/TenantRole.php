@@ -7,21 +7,32 @@ use App\Models\Role;
 enum TenantRole: string
 {
     case ADMIN = 'admin';
+    case CO_ADMIN = 'co_admin';
     case MANAGER = 'manager';
     case PHARMACIST = 'pharmacist';
-    case CASHIER = 'cashier';
     case SALESMAN = 'salesman';
+    case CASHIER = 'cashier';
     case INVENTORY_CLERK = 'inventory_clerk';
 
     public const PERMISSION_CATALOG = [
+        'dashboard.view' => 'View Role Operational Dashboard',
+        'dashboard.view_profit' => 'View Gross Profit & Cost Margins',
+        'approvals.manage' => 'Review & Approve Discounts, Returns & Vouchers',
         'pos.sell' => 'Operate POS Terminal & Checkout',
+        'product.view' => 'View Master Medicine Catalog & Pricing',
+        'product.manage' => 'Manage Master Product Catalog & Pricing',
         'inventory.view' => 'View Medicine Catalog & Batches',
         'inventory.manage' => 'Add & Replenish Stock Batches',
         'inventory.adjust' => 'Adjust Stock, Record Damage & Dispose Expired',
         'crm.view' => 'View Customers & Suppliers',
         'crm.manage' => 'Manage Customers, Allergies & Suppliers',
+        'branch.manage' => 'Manage Assigned Pharmacy Branches',
         'branches.manage' => 'Create & Toggle Pharmacy Branches',
+        'user.manage' => 'Create & Manage Staff Accounts',
+        'role.manage' => 'Configure Staff Roles & Permission Matrix',
         'team.manage' => 'Manage Employees & Assign Roles',
+        'audit.view' => 'View Workspace & Role Activity Logs',
+        'billing.manage' => 'Manage Subscription Plans & Billing',
         'settings.manage' => 'Edit Business Compliance & Preferences',
 
         // Cash Counter & Cash Register
@@ -74,11 +85,12 @@ enum TenantRole: string
     public function label(): string
     {
         return match ($this) {
-            self::ADMIN => 'Business Admin (Owner)',
+            self::ADMIN => 'Super Admin (Business Owner)',
+            self::CO_ADMIN => 'Admin (Operations Head)',
             self::MANAGER => 'Branch Manager',
-            self::PHARMACIST => 'Licensed Pharmacist',
-            self::CASHIER => 'POS Cashier',
-            self::SALESMAN => 'Pharmacy Salesman',
+            self::PHARMACIST => 'Pharmacist',
+            self::SALESMAN => 'Salesman',
+            self::CASHIER => 'Cashier',
             self::INVENTORY_CLERK => 'Inventory & Supply Clerk',
         };
     }
@@ -86,11 +98,12 @@ enum TenantRole: string
     public function description(): string
     {
         return match ($this) {
-            self::ADMIN => 'Full business authority across subscription, businesses/tenants, branches, CRM, team & billing.',
-            self::MANAGER => 'Manages branch operations, inventory, counter assignments, CRM directory, and branch team members.',
-            self::PHARMACIST => 'Dispenses prescriptions, verifies orders, manages FEFO stock intake, and reviews patient allergies.',
-            self::CASHIER => 'Operates counter terminal, accepts assigned orders, processes multi-channel payments, and prints invoices.',
-            self::SALESMAN => 'Creates customer medicine orders, selects batches, uploads prescriptions, and submits for automated counter routing.',
+            self::ADMIN => 'Full company-wide authority across all branches, gross profit, master catalog, financials, audit logs, and SaaS billing.',
+            self::CO_ADMIN => 'Delegated operations head across assigned branches, approvals, counter monitoring, staff management, and operational reports (no profit/billing).',
+            self::MANAGER => 'Heads a specific branch: manages branch approvals, sales orders, live counters, stock & expiry, branch staff, and branch reports.',
+            self::PHARMACIST => 'Verifies prescriptions (Rx), tracks dispensed medicines, manages FEFO batches, stock adjustments, supplier purchases & returns.',
+            self::SALESMAN => 'Creates sales orders routed to cashiers, tracks own orders, manages customers & dues, and monitors daily sales targets.',
+            self::CASHIER => 'Operates cashier station, collects pending order payments, bills walk-in POS customers, and reconciles register shifts.',
             self::INVENTORY_CLERK => 'Handles supplier procurement, medicine stock batches, and expiry alerts.',
         };
     }
@@ -102,7 +115,33 @@ enum TenantRole: string
     {
         return match ($this) {
             self::ADMIN => array_keys(self::PERMISSION_CATALOG),
+            self::CO_ADMIN => [
+                'dashboard.view',
+                'approvals.manage',
+                'branch.manage',
+                'branches.manage',
+                'user.manage',
+                'role.manage',
+                'team.manage',
+                'audit.view',
+                'product.view',
+                'inventory.view',
+                'crm.view',
+                'cash_counters.view',
+                'cash_counters.assign_cashier',
+                'cash_counters.activate',
+                'cash_counters.view_all_branches',
+                'cash_register.reconcile',
+                'sales_orders.view_all',
+                'sales_orders.reassign',
+                'payments.view',
+                'accounting.view',
+                'accounting.voucher.approve',
+                'accounting.reports.view',
+            ],
             self::MANAGER => [
+                'dashboard.view',
+                'approvals.manage',
                 'pos.sell',
                 'product.view',
                 'product.manage',
@@ -112,20 +151,19 @@ enum TenantRole: string
                 'inventory.adjust',
                 'crm.view',
                 'crm.manage',
-                'branches.manage',
+                'user.manage',
                 'team.manage',
-                'settings.manage',
+                'audit.view',
                 'cash_counters.view',
                 'cash_counters.create',
                 'cash_counters.edit',
-                'cash_counters.delete',
                 'cash_counters.assign_cashier',
                 'cash_counters.activate',
-                'cash_counters.view_all_branches',
                 'cash_register.open',
                 'cash_register.close',
                 'cash_register.reconcile',
                 'sales_orders.create',
+                'sales_orders.view_own',
                 'sales_orders.view_all',
                 'sales_orders.reassign',
                 'sales_orders.process',
@@ -133,8 +171,12 @@ enum TenantRole: string
                 'payments.view',
                 'invoices.create',
                 'invoices.print',
+                'accounting.view',
+                'accounting.voucher.approve',
+                'accounting.reports.view',
             ],
             self::PHARMACIST => [
+                'dashboard.view',
                 'pos.sell',
                 'product.view',
                 'barcode.print',
@@ -150,12 +192,15 @@ enum TenantRole: string
                 'invoices.print',
             ],
             self::CASHIER => [
+                'dashboard.view',
                 'pos.sell',
                 'product.view',
                 'crm.view',
                 'cash_counters.view',
                 'cash_register.open',
                 'cash_register.close',
+                'cash_register.cash_in',
+                'cash_register.cash_out',
                 'cash_register.reconcile',
                 'sales_orders.view_assigned',
                 'sales_orders.process',
@@ -165,13 +210,16 @@ enum TenantRole: string
                 'invoices.print',
             ],
             self::SALESMAN => [
+                'dashboard.view',
                 'product.view',
                 'inventory.view',
                 'crm.view',
+                'crm.manage',
                 'sales_orders.create',
                 'sales_orders.view_own',
                 'sales_orders.submit',
                 'sales_orders.cancel',
+                'payments.receive',
             ],
             self::INVENTORY_CLERK => [
                 'product.view',
@@ -251,7 +299,7 @@ enum TenantRole: string
     {
         $builtIn = array_values(array_filter(
             self::cases(),
-            fn (self $case) => $includeAdmin || $case !== self::ADMIN
+            fn (self $case) => ($includeAdmin || $case !== self::ADMIN) && $case !== self::INVENTORY_CLERK
         ));
 
         $result = array_map(

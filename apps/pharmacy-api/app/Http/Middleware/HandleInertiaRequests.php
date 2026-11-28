@@ -209,7 +209,8 @@ class HandleInertiaRequests extends Middleware
                 'role' => null,
                 'roles' => [],
                 'permissions' => [],
-                'roleLabel' => $user->isSubscriberAdmin() ? 'Business Admin (Owner)' : 'Staff',
+                'isOwner' => $user->isSubscriberAdmin(),
+                'roleLabel' => $user->isSubscriberAdmin() ? 'Super Admin (Business Owner)' : 'Staff',
                 'canManageOrganization' => $user->isSubscriberAdmin(),
                 'canManageInventory' => false,
                 'canEditInventory' => false,
@@ -222,6 +223,7 @@ class HandleInertiaRequests extends Middleware
                 'tenants' => [],
                 'accountingMode' => 'simple',
                 'batchAlertCount' => 0,
+                'pendingApprovalsCount' => 0,
             ];
         }
 
@@ -249,12 +251,29 @@ class HandleInertiaRequests extends Middleware
         })->all();
         $features = $tenant->featureCatalogStatus();
 
-        $branches = Branch::withoutGlobalScope(TenantScope::class)
+        $isBusinessOwner = (bool) ($context->isOwner() || $user->isSubscriberAdmin());
+        $primaryRole = $context->role() ?? ($context->roles()[0] ?? null);
+        $isCoAdmin = ! $isBusinessOwner && in_array($primaryRole, ['co_admin', 'admin'], true);
+
+        $branchesQuery = Branch::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
             ->where('is_active', true)
             ->orderByDesc('is_head_office')
-            ->orderBy('name')
-            ->get(['id', 'name', 'code', 'city', 'is_head_office']);
+            ->orderBy('name');
+
+        if ($isCoAdmin && ! $user->access_all_branches) {
+            $assignedBranchIds = \Illuminate\Support\Facades\DB::table('user_branches')
+                ->where('user_id', $user->id)
+                ->pluck('branch_id')
+                ->all();
+            if (! empty($assignedBranchIds)) {
+                $branchesQuery->whereIn('id', $assignedBranchIds);
+            }
+        } elseif (! $isBusinessOwner && ! $isCoAdmin && ! $user->access_all_branches && $context->branchId()) {
+            $branchesQuery->where('id', $context->branchId());
+        }
+
+        $branches = $branchesQuery->get(['id', 'name', 'code', 'city', 'is_head_office']);
 
         $tenantsQuery = $user->tenants()
             ->with('domains')
@@ -338,7 +357,10 @@ class HandleInertiaRequests extends Middleware
             'role' => $primaryRole,
             'roles' => $roles,
             'permissions' => $permissions,
-            'roleLabel' => $roleLabel,
+            'isOwner' => $isBusinessOwner,
+            'roleLabel' => $isBusinessOwner
+                ? 'Super Admin (Business Owner)'
+                : ($isCoAdmin ? 'Admin (Operations Head)' : $roleLabel),
             'canManageOrganization' => $context->hasPermission('branches.manage', 'team.manage', 'settings.manage'),
             'canManageInventory' => $context->hasPermission('inventory.manage', 'inventory.view', 'inventory.adjust'),
             'canEditInventory' => $context->hasPermission('inventory.manage'),
@@ -378,6 +400,14 @@ class HandleInertiaRequests extends Middleware
                 }
 
                 return 0;
+            })(),
+            'pendingApprovalsCount' => (function () use ($tenant, $context, $isBusinessOwner, $isCoAdmin, $primaryRole): int {
+                if (! $isBusinessOwner && ! $isCoAdmin && $primaryRole !== 'manager') {
+                    return 0;
+                }
+                $scopedBranch = ($isBusinessOwner || $isCoAdmin) ? null : $context->branchId();
+
+                return \App\Http\Controllers\ApprovalsController::pendingCountFor($tenant->id, $scopedBranch);
             })(),
         ];
     }

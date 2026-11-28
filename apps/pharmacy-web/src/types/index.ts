@@ -146,6 +146,7 @@ export interface TenantSharedData {
     role: string | null;
     roles: string[];
     permissions: string[];
+    isOwner?: boolean;
     roleLabel: string | null;
     canManageOrganization: boolean;
     canManageInventory: boolean;
@@ -160,6 +161,7 @@ export interface TenantSharedData {
     tenants: TenantMembership[];
     accountingMode?: 'simple' | 'advanced';
     batchAlertCount?: number;
+    pendingApprovalsCount?: number;
 }
 
 export interface DomainTenantBanner {

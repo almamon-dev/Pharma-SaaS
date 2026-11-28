@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, LucideIcon } from 'lucide-react';
+import { AlertCircle, CheckCircle2, LucideIcon, Maximize2, Minimize2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import { Header } from './components/Header';
 import { PageHeader, PageHeaderBreadcrumb } from '@/Components/ui/PageHeader';
+import { BrtaFormModal } from '@/Components/ui/BrtaForm';
 import { SharedPageProps } from '@/types';
 import { cn } from '@/lib/cn';
 
@@ -15,8 +16,11 @@ interface AppLayoutProps {
     breadcrumbs?: PageHeaderBreadcrumb[];
     actions?: React.ReactNode;
     hidePageHeader?: boolean;
-    /** Hide sidebar, header, banners and footer for a distraction-free full-width workspace. */
-    focusMode?: boolean;
+    /**
+     * Enables a "Full Screen" toggle that hides sidebar, header, banners and footer.
+     * The value is used as the localStorage key so each page remembers its own preference.
+     */
+    focusModeKey?: string;
     children: React.ReactNode;
 }
 
@@ -30,7 +34,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     breadcrumbs,
     actions,
     hidePageHeader = false,
-    focusMode = false,
+    focusModeKey,
     children,
 }) => {
     const { auth, flash, subscription, tenant } =
@@ -61,6 +65,48 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             return next;
         });
     };
+    const focusStorageKey = focusModeKey ? `focusMode.${focusModeKey}` : null;
+    const [focusMode, setFocusMode] = useState<boolean>(
+        () =>
+            focusStorageKey !== null &&
+            typeof window !== 'undefined' &&
+            window.localStorage.getItem(focusStorageKey) === '1'
+    );
+    const [focusConfirmOpen, setFocusConfirmOpen] = useState(false);
+    const toggleFocusMode = () => {
+        if (!focusStorageKey) return;
+        setFocusMode((prev) => {
+            const next = !prev;
+            window.localStorage.setItem(focusStorageKey, next ? '1' : '0');
+            return next;
+        });
+    };
+    const focusToggleButton = focusStorageKey ? (
+        <button
+            type="button"
+            onClick={() => setFocusConfirmOpen(true)}
+            title={focusMode ? 'Exit full screen (show sidebar & header)' : 'Full screen (hide sidebar & header)'}
+            className={cn(
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-[2px] border text-[12px] font-semibold transition-colors cursor-pointer shrink-0',
+                focusMode
+                    ? 'border-[#0E5F3F] bg-[#0E5F3F] text-white hover:bg-[#0b4d33]'
+                    : 'border-[#CCCCCC] dark:border-slate-700 bg-white dark:bg-[#1e2329] text-[#333333] dark:text-slate-200 hover:border-[#0E5F3F] hover:text-[#0E5F3F]'
+            )}
+        >
+            {focusMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {focusMode ? 'Exit Full Screen' : 'Full Screen'}
+        </button>
+    ) : null;
+    const headerActions =
+        focusToggleButton && actions ? (
+            <div className="flex flex-wrap items-center gap-2">
+                {focusToggleButton}
+                {actions}
+            </div>
+        ) : (
+            focusToggleButton ?? actions
+        );
+
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
 
@@ -79,8 +125,43 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }, []);
 
     return (
-        <div className="flex h-screen bg-[#EAECE9] dark:bg-[#12161c] overflow-hidden font-sans text-[#333333] dark:text-slate-100">
+        <div data-focus-mode={focusMode ? 'true' : undefined} className="flex h-screen bg-[#EAECE9] dark:bg-[#12161c] overflow-hidden font-sans text-[#333333] dark:text-slate-100">
             {title && <Head title={title} />}
+
+            {focusMode && focusStorageKey && (
+                <button
+                    type="button"
+                    onClick={() => setFocusConfirmOpen(true)}
+                    title="Exit full screen"
+                    aria-label="Exit full screen"
+                    className="fixed top-1 right-1 z-40 h-6 w-6 flex items-center justify-center rounded-[2px] text-slate-500 opacity-15 hover:opacity-100 hover:bg-white hover:text-[#0E5F3F] hover:shadow dark:hover:bg-[#1e2329] transition-opacity cursor-pointer"
+                >
+                    <Minimize2 className="h-3.5 w-3.5" />
+                </button>
+            )}
+
+            <BrtaFormModal
+                open={focusConfirmOpen}
+                onClose={() => setFocusConfirmOpen(false)}
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    toggleFocusMode();
+                    setFocusConfirmOpen(false);
+                }}
+                maxWidth="md"
+                icon={focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                title={focusMode ? 'Exit Full Screen?' : 'Switch to Full Screen?'}
+                footerProps={{
+                    cancelLabel: 'Cancel',
+                    submitLabel: focusMode ? 'Yes, Exit Full Screen' : 'Yes, Full Screen',
+                }}
+            >
+                <p className="text-[13px] text-[#444444] dark:text-slate-300">
+                    {focusMode
+                        ? 'Are you sure you want to exit full screen? The sidebar and header will be shown again.'
+                        : 'Are you sure you want to switch to full screen? The sidebar and header will be hidden.'}
+                </p>
+            </BrtaFormModal>
 
             {!focusMode && isSidebarOpen && (
                 <div
@@ -110,10 +191,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 <main
                     className={cn(
                         'flex-1 overflow-y-auto overflow-x-hidden flex flex-col',
-                        focusMode ? 'p-2 md:p-3' : 'p-4 md:p-6'
+                        focusMode ? 'p-2 md:p-3 lg:overflow-hidden' : 'p-4 md:p-6'
                     )}
                 >
-                    <div className="flex-1 min-w-0 w-full">
+                    <div className={cn('flex-1 min-w-0 w-full', focusMode && 'flex flex-col lg:min-h-0')}>
                         {(flash?.success || flash?.error) && (
                             <div
                                 className={cn(
@@ -196,14 +277,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {!focusMode && !hidePageHeader && (subtitle || actions) && (
+                        {!focusMode && !hidePageHeader && (subtitle || headerActions) && (
                             <PageHeader
                                 title={title}
                                 description={subtitle}
                                 icon={icon}
                                 badge={badge}
                                 breadcrumbs={breadcrumbs}
-                                actions={actions}
+                                actions={headerActions}
                             />
                         )}
 

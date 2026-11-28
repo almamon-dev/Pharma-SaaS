@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\SuperAdminController;
+use App\Http\Controllers\ApprovalsController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Billing\FeatureAccessController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PharmacistPortalController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\PrescriptionScanController;
 use App\Http\Controllers\SalesOrderController;
 use App\Http\Controllers\SalesPortalController;
 use App\Http\Controllers\SettingsController;
@@ -92,6 +94,20 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/branch/switch', [TenantSwitchController::class, 'switchBranch'])->name('branch.switch');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    // Unified Approvals Center (Super Admin, Co-Admin & Branch Manager)
+    Route::get('/approvals', [ApprovalsController::class, 'index'])
+        ->middleware('tenant.role:approvals.manage,discount.manage,admin,co_admin,manager')
+        ->name('approvals.index');
+    Route::post('/approvals/discounts/{sale}/decide', [ApprovalsController::class, 'decideDiscount'])
+        ->middleware('tenant.role:approvals.manage,discount.manage,admin,co_admin,manager')
+        ->name('approvals.discounts.decide');
+    Route::post('/approvals/returns/{saleReturn}/decide', [ApprovalsController::class, 'decideReturn'])
+        ->middleware('tenant.role:approvals.manage,sale.return,admin,co_admin,manager')
+        ->name('approvals.returns.decide');
+    Route::post('/approvals/vouchers/{voucher}/decide', [ApprovalsController::class, 'decideVoucher'])
+        ->middleware('tenant.role:approvals.manage,accounting.voucher.approve,admin,co_admin,manager')
+        ->name('approvals.vouchers.decide');
     Route::get('/billing/features', [FeatureAccessController::class, 'index'])->name('billing.features');
     Route::get('/feature-access', [FeatureAccessController::class, 'index'])->name('billing.features.alias');
     Route::get('/features', [SubscriptionController::class, 'features'])->name('features.index');
@@ -102,6 +118,10 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::post('/pos/checkout', [PosController::class, 'checkout'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,pharmacist,cashier'])
         ->name('pos.checkout');
+
+    Route::post('/sales/scan-document', [PrescriptionScanController::class, 'scan'])
+        ->middleware(['feature:pos', 'tenant.role:pos.sell,sales_orders.create,admin,manager,pharmacist,cashier,salesman'])
+        ->name('sales.scan-document');
 
     Route::get('/counters', [CounterController::class, 'index'])
         ->middleware(['feature:pos', 'tenant.role:pos.sell,admin,manager,cashier'])
@@ -156,13 +176,13 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->middleware(['feature:pos', 'tenant.role:admin,manager'])
         ->name('counters.unassign-cashier');
     Route::get('/counters/monitoring', [CounterController::class, 'monitoring'])
-        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->middleware(['feature:pos', 'tenant.role:cash_counters.view,cash_counters.view_all_branches,admin,co_admin,manager'])
         ->name('counters.monitoring');
     Route::post('/counters/orders/{sale}/reassign', [CounterController::class, 'reassign'])
-        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.reassign,admin,co_admin,manager'])
         ->name('counters.orders.reassign');
     Route::post('/counters/retry-unassigned', [CounterController::class, 'retryUnassigned'])
-        ->middleware(['feature:pos', 'tenant.role:admin,manager'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.reassign,admin,co_admin,manager'])
         ->name('counters.retry-unassigned');
 
     // Salesman Order Management & Dynamic Routing
@@ -185,7 +205,7 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->middleware(['feature:pos', 'tenant.role:sales_orders.create,admin,manager,salesman'])
         ->name('sales.orders.store');
     Route::get('/sales/orders/my-orders', [SalesOrderController::class, 'myOrders'])
-        ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,admin,manager,salesman'])
+        ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,sales_orders.view_all,admin,co_admin,manager,salesman'])
         ->name('sales.orders.my-orders');
     Route::get('/sales/orders/{sale}/track', [SalesOrderController::class, 'track'])
         ->middleware(['feature:pos', 'tenant.role:sales_orders.view_own,sales_orders.create,admin,manager,salesman,cashier'])
@@ -438,7 +458,7 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->name('inventory.batches.store');
     Route::post('/inventory/batches/{batchId}/adjust', [InventoryController::class, 'adjustBatch'])
         ->whereNumber('batchId')
-        ->middleware(['feature:inventory', 'tenant.role:inventory.adjust,admin'])
+        ->middleware(['feature:inventory', 'tenant.role:inventory.adjust,stock.adjust,admin,manager,pharmacist'])
         ->name('inventory.batches.adjust');
     Route::post('/inventory/batches/{batchId}/transfer', [InventoryController::class, 'transferBatch'])
         ->whereNumber('batchId')
@@ -446,23 +466,23 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
         ->name('inventory.batches.transfer');
 
     Route::get('/branches', [BranchController::class, 'index'])
-        ->middleware('feature:branches')
+        ->middleware(['feature:branches', 'tenant.role:branch.manage,branches.manage,admin,co_admin'])
         ->name('branches.index');
     Route::post('/branches', [BranchController::class, 'store'])
-        ->middleware(['feature:branches', 'tenant.role:branch.manage,admin,manager'])
+        ->middleware(['feature:branches', 'tenant.role:branch.manage,branches.manage,admin,co_admin'])
         ->name('branches.store');
     Route::patch('/branches/{branch}/toggle', [BranchController::class, 'toggleStatus'])
-        ->middleware(['feature:branches', 'tenant.role:branch.manage,admin,manager'])
+        ->middleware(['feature:branches', 'tenant.role:branch.manage,branches.manage,admin,co_admin'])
         ->name('branches.toggle');
 
     Route::get('/team', [TeamController::class, 'index'])
-        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,role.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,role.manage,audit.view,admin,co_admin,manager'])
         ->name('team.index');
     Route::post('/team', [TeamController::class, 'store'])
-        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,co_admin,manager'])
         ->name('team.store');
     Route::put('/team/memberships/{membership}', [TeamController::class, 'updateMembership'])
-        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,manager'])
+        ->middleware(['feature:team_rbac', 'tenant.role:user.manage,admin,co_admin,manager'])
         ->name('team.memberships.update');
     Route::post('/team/roles', [TeamController::class, 'storeRole'])
         ->middleware(['feature:team_rbac', 'tenant.role:role.manage,admin'])
@@ -498,6 +518,25 @@ Route::middleware(['auth', 'subscription.active', 'tenant', 'subscription.writab
     Route::put('/crm/customers/{customer}', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'updateCustomer'])
         ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager,pharmacist'])
         ->name('crm.customers.update');
+    Route::get('/crm/customers/{customer}/profile', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'customerProfile'])
+        ->middleware(['feature:crm', 'tenant.role:crm.view,crm.manage,admin,manager,pharmacist,cashier,salesman'])
+        ->name('crm.customers.profile');
+    Route::post('/crm/customers/{customer}/collect-due', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'collectDue'])
+        ->middleware(['feature:crm', 'tenant.role:crm.manage,payments.receive,admin,manager,cashier,salesman'])
+        ->name('crm.customers.collect-due');
+
+    Route::get('/crm/followups', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'followups'])
+        ->middleware(['feature:crm', 'tenant.role:crm.view,crm.manage,admin,manager,pharmacist,cashier,salesman'])
+        ->name('crm.followups');
+    Route::post('/crm/followups', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'storeFollowup'])
+        ->middleware(['feature:crm', 'tenant.role:crm.manage,crm.view,admin,manager,pharmacist,salesman'])
+        ->name('crm.followups.store');
+    Route::patch('/crm/followups/{followup}/status', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'updateFollowupStatus'])
+        ->middleware(['feature:crm', 'tenant.role:crm.manage,crm.view,admin,manager,pharmacist,salesman'])
+        ->name('crm.followups.status');
+    Route::delete('/crm/followups/{followup}', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'destroyFollowup'])
+        ->middleware(['feature:crm', 'tenant.role:crm.manage,admin,manager'])
+        ->name('crm.followups.destroy');
 
     Route::get('/crm/suppliers', [\App\Modules\CRM\Interfaces\Http\CrmHttpController::class, 'suppliers'])
         ->middleware(['feature:crm', 'tenant.role:crm.view,crm.manage,admin,manager,inventory_clerk,pharmacist'])

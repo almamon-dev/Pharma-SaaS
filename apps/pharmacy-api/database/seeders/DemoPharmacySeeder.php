@@ -68,6 +68,20 @@ class DemoPharmacySeeder extends Seeder
             ]
         );
 
+        $coAdmin = User::query()->updateOrCreate(
+            ['email' => 'coadmin@pharmacore.test'],
+            [
+                'name' => 'Farhanul Kabir',
+                'phone' => '+880 1711-000120',
+                'password' => Hash::make('password'),
+                'account_type' => 'staff',
+                'subscriber_id' => $admin->id,
+                'access_all_branches' => false,
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]
+        );
+
         $manager = User::query()->updateOrCreate(
             ['email' => 'manager@pharmacore.test'],
             [
@@ -214,11 +228,19 @@ class DemoPharmacySeeder extends Seeder
                 'is_active' => true,
                 'joined_at' => now()->subMonths(4),
             ],
-            $manager->id => [
+            $coAdmin->id => [
                 'branch_id' => null,
                 'is_owner' => false,
+                'role' => TenantRole::CO_ADMIN->value,
+                'roles' => json_encode([TenantRole::CO_ADMIN->value]),
+                'is_active' => true,
+                'joined_at' => now()->subMonths(3),
+            ],
+            $manager->id => [
+                'branch_id' => $bananiBranch->id,
+                'is_owner' => false,
                 'role' => TenantRole::MANAGER->value,
-                'roles' => json_encode([TenantRole::MANAGER->value, 'crm_specialist']),
+                'roles' => json_encode([TenantRole::MANAGER->value]),
                 'is_active' => true,
                 'joined_at' => now()->subMonths(3),
             ],
@@ -226,25 +248,17 @@ class DemoPharmacySeeder extends Seeder
                 'branch_id' => $bananiBranch->id,
                 'is_owner' => false,
                 'role' => TenantRole::PHARMACIST->value,
-                'roles' => json_encode([TenantRole::PHARMACIST->value, TenantRole::INVENTORY_CLERK->value]),
+                'roles' => json_encode([TenantRole::PHARMACIST->value]),
                 'is_active' => true,
                 'joined_at' => now()->subMonths(2),
             ],
             $cashier->id => [
-                'branch_id' => $dhanmondiBranch->id,
+                'branch_id' => $bananiBranch->id,
                 'is_owner' => false,
                 'role' => TenantRole::CASHIER->value,
                 'roles' => json_encode([TenantRole::CASHIER->value]),
                 'is_active' => true,
                 'joined_at' => now()->subWeeks(3),
-            ],
-            $clerk->id => [
-                'branch_id' => $bananiBranch->id,
-                'is_owner' => false,
-                'role' => TenantRole::INVENTORY_CLERK->value,
-                'roles' => json_encode([TenantRole::INVENTORY_CLERK->value]),
-                'is_active' => true,
-                'joined_at' => now()->subMonth(),
             ],
             $salesman->id => [
                 'branch_id' => $bananiBranch->id,
@@ -254,6 +268,13 @@ class DemoPharmacySeeder extends Seeder
                 'is_active' => true,
                 'joined_at' => now()->subMonth(),
             ],
+        ]);
+
+        // Assign Co-Admin to Banani & Dhanmondi branches
+        \Illuminate\Support\Facades\DB::table('user_branches')->where('user_id', $coAdmin->id)->delete();
+        \Illuminate\Support\Facades\DB::table('user_branches')->insert([
+            ['user_id' => $coAdmin->id, 'branch_id' => $bananiBranch->id, 'created_at' => now(), 'updated_at' => now()],
+            ['user_id' => $coAdmin->id, 'branch_id' => $dhanmondiBranch->id, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         // Tenant 2 under same Subscriber Admin 1: CarePlus Medico Hub
@@ -311,6 +332,7 @@ class DemoPharmacySeeder extends Seeder
 
         // Set current tenant defaults for Admin 1 & Team
         $admin->update(['current_tenant_id' => $greenlife->id]);
+        $coAdmin->update(['current_tenant_id' => $greenlife->id]);
         $manager->update(['current_tenant_id' => $greenlife->id]);
         $pharmacist->update(['current_tenant_id' => $greenlife->id]);
         $cashier->update(['current_tenant_id' => $greenlife->id]);
@@ -358,13 +380,17 @@ class DemoPharmacySeeder extends Seeder
         RbacPermissionCatalogSeeder::seedRolesForTenant($careplus);
 
         $ownerRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'owner')->first();
+        $coAdminRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'co_admin')->first();
         $managerRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'manager')->first();
         $pharmacistRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'pharmacist')->first();
+        $salesmanRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'salesman')->first();
         $cashierRole = Role::withoutGlobalScopes()->where('tenant_id', $greenlife->id)->where('slug', 'cashier')->first();
 
         $admin->update(['role_id' => $ownerRole?->id]);
+        $coAdmin->update(['role_id' => $coAdminRole?->id]);
         $manager->update(['role_id' => $managerRole?->id]);
         $pharmacist->update(['role_id' => $pharmacistRole?->id]);
+        $salesman->update(['role_id' => $salesmanRole?->id]);
         $cashier->update(['role_id' => $cashierRole?->id]);
 
         // 3. Independent Second Subscriber Admin (Metro Health Pharma)
@@ -760,18 +786,94 @@ class DemoPharmacySeeder extends Seeder
             ]);
         }
 
-        Counter::query()->updateOrCreate(
+        $c2 = Counter::query()->updateOrCreate(
             ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-02'],
             [
                 'name' => 'Cashier & Billing Station',
                 'type' => 'billing',
                 'zone' => 'Central Cash Counter',
-                'status' => 'closed',
+                'status' => 'active',
+                'current_user_id' => User::where('email', 'cashier@pharmacore.test')->value('id'),
                 'is_active' => true,
             ]
         );
 
-        Counter::query()->updateOrCreate(
+        $cashierUserId = User::where('email', 'cashier@pharmacore.test')->value('id');
+        $salesmanUserId = User::where('email', 'salesman@pharmacore.test')->value('id') ?? $user->id;
+
+        if ($cashierUserId) {
+            CounterSession::query()->firstOrCreate(
+                ['counter_id' => $c2->id, 'status' => 'open'],
+                [
+                    'tenant_id' => $tenant->id,
+                    'branch_id' => $branch->id,
+                    'user_id' => $cashierUserId,
+                    'opened_at' => now()->subHours(2),
+                    'opening_float' => 5000.00,
+                    'system_expected_cash' => 5000.00,
+                    'total_sales_amount' => 0.00,
+                    'total_transactions' => 0,
+                ]
+            );
+        }
+
+        // Seed realistic pending discount order (populates Approvals + Salesman Waiting + Cashier Queue)
+        if ($firstMed && $firstBatch && ! Sale::query()->where('order_number', 'ORD-2026-9001')->exists()) {
+            $pendingSale = Sale::query()->create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'counter_id' => $c2->id,
+                'customer_id' => $customer->id,
+                'user_id' => $salesmanUserId,
+                'salesman_id' => $salesmanUserId,
+                'order_number' => 'ORD-2026-9001',
+                'invoice_number' => 'ORD-2026-9001',
+                'order_status' => 'waiting',
+                'subtotal' => 1200.00,
+                'discount_percentage' => 15.00,
+                'discount_amount' => 180.00,
+                'discount_status' => 'pending_approval',
+                'discount_requested_by' => $salesmanUserId,
+                'tax_amount' => 0,
+                'total_amount' => 1020.00,
+                'paid_amount' => 0,
+                'due_amount' => 1020.00,
+                'payment_method' => 'cash',
+                'payment_status' => 'unpaid',
+                'notes' => 'Corporate chronic-care refill — 15% loyalty discount requested',
+                'sold_at' => now()->subMinutes(14),
+                'assigned_at' => now()->subMinutes(14),
+            ]);
+
+            SaleItem::query()->create([
+                'sale_id' => $pendingSale->id,
+                'medicine_id' => $firstMed->id,
+                'medicine_batch_id' => $firstBatch->id,
+                'quantity' => 600,
+                'unit_price' => 2.00,
+                'line_total' => 1200.00,
+            ]);
+        }
+
+        // Seed realistic pending SaleReturn for Approvals Center
+        $existingPaidSale = Sale::query()->where('invoice_number', 'INV-2026-0001')->first();
+        if ($existingPaidSale && ! \App\Models\SaleReturn::query()->where('return_number', 'RET-2026-0001')->exists()) {
+            \App\Models\SaleReturn::query()->create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'sale_id' => $existingPaidSale->id,
+                'customer_id' => $customer->id,
+                'requested_by' => $salesmanUserId,
+                'return_number' => 'RET-2026-0001',
+                'return_amount' => 60.00,
+                'reason' => 'Unopened blister strips — physician switched dosage strength',
+                'notes' => 'Verified intact cold-free packaging at Banani counter',
+                'status' => 'pending',
+                'credit_note_status' => 'pending',
+            ]);
+        }
+
+        $c3 = Counter::query()->updateOrCreate(
             ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-03'],
             [
                 'name' => 'Express & Baby Care',
@@ -781,6 +883,26 @@ class DemoPharmacySeeder extends Seeder
                 'is_active' => true,
             ]
         );
+
+        // Seed a closed shift with minor cash discrepancy for Owner dashboard alert visibility
+        if ($cashierUserId && ! CounterSession::query()->where('counter_id', $c3->id)->where('status', 'closed')->exists()) {
+            CounterSession::query()->create([
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'counter_id' => $c3->id,
+                'user_id' => $cashierUserId,
+                'status' => 'closed',
+                'opened_at' => now()->subHours(9),
+                'closed_at' => now()->subHours(3),
+                'opening_float' => 3000.00,
+                'system_expected_cash' => 8450.00,
+                'actual_closing_cash' => 8300.00,
+                'discrepancy_amount' => -150.00,
+                'total_sales_amount' => 5450.00,
+                'total_transactions' => 14,
+                'closing_notes' => 'Short by BDT 150 during rush hour shift handover — flagged for review.',
+            ]);
+        }
 
         Counter::query()->updateOrCreate(
             ['tenant_id' => $tenant->id, 'branch_id' => $branch->id, 'code' => 'C-04'],

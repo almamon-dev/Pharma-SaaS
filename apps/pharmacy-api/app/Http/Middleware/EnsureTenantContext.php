@@ -102,7 +102,22 @@ class EnsureTenantContext
             ->orderBy('id')
             ->get();
 
-        $requestedBranchId = session('active_branch_id') ?? $activeTenant->pivot?->branch_id;
+        $isOwner = $user->isOwnerOf($activeTenant);
+        $roles = $user->rolesForTenant($activeTenant);
+        $primaryRole = $roles[0] ?? null;
+
+        $assignedPivotBranchId = $activeTenant->pivot?->branch_id ? (int) $activeTenant->pivot->branch_id : null;
+        $isMultiBranchCapable = $isOwner
+            || $user->isSubscriberAdmin()
+            || (bool) $user->access_all_branches
+            || in_array($primaryRole, ['admin', 'co_admin'], true);
+
+        if (! $isMultiBranchCapable && $assignedPivotBranchId !== null) {
+            $requestedBranchId = $assignedPivotBranchId;
+        } else {
+            $requestedBranchId = session('active_branch_id') ?? $assignedPivotBranchId;
+        }
+
         $selectedBranch = $branches->firstWhere('id', $requestedBranchId)
             ?? $branches->first();
 
@@ -116,9 +131,6 @@ class EnsureTenantContext
                 'active_branch_id' => $selectedBranch?->id,
             ]);
         }
-
-        $isOwner = $user->isOwnerOf($activeTenant);
-        $roles = $user->rolesForTenant($activeTenant);
 
         app(\App\Tenancy\CurrentTenant::class)->set($activeTenant);
 

@@ -1,8 +1,9 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    BellRing,
+    Activity,
     Boxes,
+    CheckSquare,
     ClipboardCheck,
     ClipboardList,
     Contact2,
@@ -10,22 +11,20 @@ import {
     FilePlus2,
     FileSpreadsheet,
     GitBranch,
+    Home,
     Layers,
     LayoutDashboard,
     Lock,
     LogOut,
+    Monitor,
     Package,
     Pill,
-    ReceiptText,
-    RotateCcw,
-    Search,
     Settings,
-    ShieldAlert,
     ShieldCheck,
     ShoppingBag,
     ShoppingCart,
+    SlidersHorizontal,
     Sparkles,
-    Stethoscope,
     Store,
     UserCog,
     Users,
@@ -60,7 +59,8 @@ let persistedSidebarScrollTop = 0;
 const toPath = (name: string) => route(name, undefined, false);
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-    const { auth, subscription, tenant, pharmacist } = usePage<SharedPageProps>().props;
+    const { props, url } = usePage<SharedPageProps>();
+    const { auth, subscription, tenant, pharmacist } = props;
     const navScrollRef = useRef<HTMLDivElement>(null);
 
     useLayoutEffect(() => {
@@ -68,22 +68,38 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             navScrollRef.current.scrollTop = persistedSidebarScrollTop;
         }
     }, []);
+
     const user = auth?.user;
     const isSuperAdmin = Boolean(user?.is_super_admin);
     const isSubscriberAdmin = Boolean(user?.is_subscriber_admin);
+    const isBusinessOwner = Boolean(isSubscriberAdmin || tenant?.isOwner);
+    const primaryRole = tenant?.role ?? null;
     const permissions = new Set(tenant?.permissions ?? []);
-    const enabledFeatures = new Set(tenant?.enabledFeatures ?? []);
     const hasWorkspace = Boolean(tenant?.currentTenant);
     const hasSubscription = Boolean(subscription?.is_usable);
     const isWorkspaceReady = hasWorkspace && hasSubscription;
 
     const hasPerm = (...keys: string[]) =>
-        isSubscriberAdmin || keys.some((k) => permissions.has(k));
-    const hasFeature = (key: string) => enabledFeatures.has(key);
+        isBusinessOwner || keys.some((k) => permissions.has(k));
+
+    const pendingApprovalsCount = tenant?.pendingApprovalsCount ?? 0;
+    const pendingRxCount = pharmacist?.pendingRxCount ?? 0;
+    const batchAlertCount = tenant?.batchAlertCount ?? 0;
+
+    const isTeamMatrixTab = url.includes('tab=matrix');
+    const isTeamActivityTab = url.includes('tab=activity');
+    const isTeamUsersView =
+        route().current('team.index') && !isTeamMatrixTab && !isTeamActivityTab;
+    const isCashierIncomingTab = url.includes('tab=incoming');
 
     let navEntries: SidebarEntry[] = [];
+    let homeHref = toPath('dashboard');
+    let roleSubtitle =
+        tenant?.currentTenant?.name ?? 'Business Subscription';
 
     if (isSuperAdmin) {
+        homeHref = toPath('admin.dashboard');
+        roleSubtitle = 'Platform Super Admin';
         navEntries = [
             {
                 category: 'SaaS Business Owner',
@@ -129,6 +145,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             },
         ];
     } else if (!isWorkspaceReady) {
+        homeHref = toPath('plans.index');
         navEntries = [
             {
                 category: 'Activate Subscription',
@@ -170,639 +187,544 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 icon: UserCog,
             },
         ];
-    } else {
-        const inventoryEntries: SidebarEntry[] =
-            hasFeature('inventory') &&
-            hasPerm('inventory.view', 'inventory.manage', 'inventory.adjust')
-                ? [
-                      {
-                          category: 'Inventory & Stock',
-                          group: 'Catalog & Stock',
-                          icon: Package,
-                          items: [
-                              {
-                                  name: 'Product Catalog',
-                                  href: toPath('catalog.ui'),
-                                  active: route().current('catalog.*'),
-                              },
-                              {
-                                  name: 'Inventory & FEFO',
-                                  href: toPath('inventory.index'),
-                                  active: route().current('inventory.index'),
-                              },
-                              {
-                                  name: 'Batches & Expiry',
-                                  href: hasFeature('batch_expiry')
-                                      ? toPath('inventory.batches')
-                                      : toPath('plans.browse'),
-                                  active: route().current('inventory.batches'),
-                                  locked: !hasFeature('batch_expiry'),
-                                  badge:
-                                      hasFeature('batch_expiry') && (tenant?.batchAlertCount ?? 0) > 0
-                                          ? tenant?.batchAlertCount
-                                          : undefined,
-                              },
-                              {
-                                  name: 'Stock Movements',
-                                  href: hasFeature('batch_expiry')
-                                      ? toPath('inventory.movements')
-                                      : toPath('plans.browse'),
-                                  active: route().current('inventory.movements'),
-                                  locked: !hasFeature('batch_expiry'),
-                              },
-                          ],
-                      },
-                  ]
-                : [];
-
-        const crmEntries: SidebarEntry[] =
-            hasFeature('crm') && hasPerm('crm.view', 'crm.manage')
-                ? [
-                      {
-                          category: 'CRM & Partners',
-                          group: 'Patients & Partners',
-                          icon: Contact2,
-                          items: [
-                              {
-                                  name: 'Customers (Patients)',
-                                  href: toPath('crm.customers'),
-                                  active: route().current('crm.customers*'),
-                              },
-                              {
-                                  name: 'Refills & Follow-ups',
-                                  href: toPath('crm.followups'),
-                                  active: route().current('crm.followups*'),
-                              },
-                              {
-                                  name: 'Suppliers Directory',
-                                  href: toPath('crm.suppliers'),
-                                  active: route().current('crm.suppliers*'),
-                              },
-                          ],
-                      },
-                  ]
-                : [];
-
-        const hrmEntries: SidebarEntry[] = [];
-
-        const orgItems: SidebarGroupItem['items'] = [
-            ...(isSubscriberAdmin
-                ? [
-                      {
-                          name: 'Business Tenants',
-                          href: toPath('tenants.index'),
-                          active: route().current('tenants.*'),
-                      },
-                  ]
-                : []),
-            ...(isSubscriberAdmin || (hasFeature('branches') && hasPerm('branches.manage', 'branch.manage'))
-                ? [
-                      {
-                          name: 'Branches',
-                          href: toPath('branches.index'),
-                          active: route().current('branches.*'),
-                      },
-                  ]
-                : []),
-
-        ];
-
-        const organizationEntries: SidebarEntry[] = orgItems.length
-            ? [
-                  {
-                      category: 'Organization',
-                      group: 'Workspace & Team',
-                      icon: GitBranch,
-                      items: orgItems,
-                  },
-              ]
-            : [];
-
-        const canManageCounters = isSubscriberAdmin || hasPerm('branch.manage') || tenant?.role === 'admin' || tenant?.role === 'manager';
-        const isSalesmanOnly = tenant?.role === 'salesman' && !isSubscriberAdmin && !canManageCounters;
-        const isPharmacistOnly = tenant?.role === 'pharmacist' && !isSubscriberAdmin && !canManageCounters;
-        const pendingRxCount = pharmacist?.pendingRxCount ?? 0;
-
-        if (isPharmacistOnly) {
-            navEntries = [
-                {
-                    category: 'Main Menu',
-                    name: 'Dashboard',
-                    href: toPath('dashboard'),
-                    active: route().current('dashboard') || route().current('pharmacist.dashboard'),
-                    icon: LayoutDashboard,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Prescription Queue',
-                    href: toPath('pharmacist.prescriptions'),
-                    active: route().current('pharmacist.prescriptions*'),
-                    icon: ClipboardCheck,
-                    badge: pendingRxCount,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Dispensing',
-                    href: toPath('pharmacist.dispensing'),
-                    active: route().current('pharmacist.dispensing'),
-                    icon: Pill,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Medicine Search',
-                    href: toPath('pharmacist.medicine-search'),
-                    active: route().current('pharmacist.medicine-search'),
-                    icon: Search,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Patient Medication History',
-                    href: toPath('pharmacist.patient-history'),
-                    active: route().current('pharmacist.patient-history'),
-                    icon: Stethoscope,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Stock & Expiry',
-                    href: toPath('pharmacist.stock-expiry'),
-                    active: route().current('pharmacist.stock-expiry'),
-                    icon: Boxes,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Purchase Request',
-                    href: toPath('pharmacist.purchase-requests'),
-                    active: route().current('pharmacist.purchase-requests'),
-                    icon: ShoppingBag,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Returns',
-                    href: toPath('pharmacist.returns'),
-                    active: route().current('pharmacist.returns'),
-                    icon: RotateCcw,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Controlled Drugs Log',
-                    href: toPath('pharmacist.controlled-drugs'),
-                    active: route().current('pharmacist.controlled-drugs'),
-                    icon: ShieldAlert,
-                },
-                {
-                    category: 'Organization',
-                    name: 'Profile & Security',
-                    href: toPath('settings.profile'),
-                    active: route().current('settings.profile*'),
-                    icon: UserCog,
-                },
-            ];
-        } else if (isSalesmanOnly) {
-            navEntries = [
-                {
-                    category: 'Main Menu',
-                    name: 'Dashboard',
-                    href: toPath('dashboard'),
-                    active: route().current('dashboard'),
-                    icon: LayoutDashboard,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'New Sales Order',
-                    href: toPath('sales.orders.create'),
-                    active: route().current('sales.orders.create'),
-                    icon: FilePlus2,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'My Orders & Tracking',
-                    href: toPath('sales.orders.my-orders'),
-                    active: route().current('sales.orders.my-orders'),
-                    icon: ClipboardList,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'My Customers',
-                    href: toPath('crm.customers'),
-                    active: route().current('crm.customers*'),
-                    icon: Contact2,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Refills & Follow-ups',
-                    href: toPath('crm.followups'),
-                    active: route().current('crm.followups*'),
-                    icon: BellRing,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Collections & Dues',
-                    href: toPath('sales.collections.index'),
-                    active: route().current('sales.collections.*'),
-                    icon: Wallet,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Product Catalog',
-                    href: toPath('catalog.ui'),
-                    active: route().current('catalog.*'),
-                    icon: Pill,
-                },
-                {
-                    category: 'Main Menu',
-                    name: 'Returns',
-                    href: toPath('sales.returns.index'),
-                    active: route().current('sales.returns.*'),
-                    icon: RotateCcw,
-                },
-                {
-                    category: 'Account',
-                    name: 'Profile & Security',
-                    href: toPath('settings.profile'),
-                    active: route().current('settings.profile*'),
-                    icon: UserCog,
-                },
-            ];
-        } else {
-            navEntries = [
+    } else if (isBusinessOwner) {
+        // ১. Super Admin (Business Owner)
+        roleSubtitle = 'Super Admin (Owner)';
+        navEntries = [
             {
-                category: 'Main Menu',
+                category: 'Company Overview',
                 name: 'Dashboard',
                 href: toPath('dashboard'),
                 active: route().current('dashboard'),
                 icon: LayoutDashboard,
             },
-            ...(hasFeature('pos') && (hasPerm('sales_orders.create', 'sales_orders.view_own') || tenant?.role === 'salesman' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
-                ? [
-                      {
-                          category: 'Sales & Cashier',
-                          group: 'Sales Orders',
-                          icon: FilePlus2,
-                          items: [
-                              {
-                                  name: 'New Sales Order',
-                                  href: toPath('sales.orders.create'),
-                                  active: route().current('sales.orders.create'),
-                              },
-                              {
-                                  name: 'My Orders & Tracking',
-                                  href: toPath('sales.orders.my-orders'),
-                                  active: route().current('sales.orders.my-orders'),
-                              },
-                              {
-                                  name: 'Collections & Dues',
-                                  href: toPath('sales.collections.index'),
-                                  active: route().current('sales.collections.*'),
-                              },
-                              {
-                                  name: 'Returns',
-                                  href: toPath('sales.returns.index'),
-                                  active: route().current('sales.returns.*'),
-                              },
-                          ],
-                      },
-                  ]
-                : []),
-            ...(() => {
-                if (!hasFeature('pos')) return [];
-                const cashierSubItems: SidebarGroupItem['items'] = [];
-                if (hasPerm('sales_orders.process', 'payments.receive') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager') {
-                    cashierSubItems.push({
-                        name: 'Cashier Station',
-                        href: toPath('cashier.dashboard'),
-                        active: route().current('cashier.dashboard'),
-                    });
-                }
-                if ((hasPerm('pos.sell') && tenant?.role !== 'salesman') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager') {
-                    if (hasPerm('pos.sell') && tenant?.role !== 'salesman') {
-                        cashierSubItems.push({
-                            name: 'Point of Sale (Direct)',
-                            href: toPath('pos.index'),
-                            active: route().current('pos.*'),
-                        });
-                    }
-                    if (hasPerm('cash_counters.view', 'cash_register.open') || tenant?.role === 'cashier' || canManageCounters) {
-                        if (canManageCounters) {
-                            cashierSubItems.push(
-                                {
-                                    name: 'Counter Terminals',
-                                    href: toPath('counters.index'),
-                                    active: route().current('counters.index'),
-                                },
-                                {
-                                    name: 'Live Queue Monitor',
-                                    href: toPath('counters.monitoring'),
-                                    active: route().current('counters.monitoring'),
-                                }
-                            );
-                        } else {
-                            cashierSubItems.push({
-                                name: 'My Terminal Shift',
-                                href: toPath('counters.index'),
-                                active: route().current('counters.index'),
-                            });
-                        }
-                    }
-                }
-                if (!cashierSubItems.length) return [];
-                return [
-                    {
-                        category: 'Sales & Cashier',
-                        group: 'Cashier & POS',
-                        icon: ShoppingCart,
-                        items: cashierSubItems,
-                    },
-                ];
-            })(),
-            ...(canManageCounters
-                ? [
-                      {
-                          category: 'Pharmacy Clinical',
-                          group: 'Clinical Desk',
-                          icon: Stethoscope,
-                          items: [
-                              {
-                                  name: 'Pharmacist Dashboard',
-                                  href: toPath('pharmacist.dashboard'),
-                                  active: route().current('pharmacist.dashboard'),
-                              },
-                              {
-                                  name: 'Prescription Queue',
-                                  href: toPath('pharmacist.prescriptions'),
-                                  active: route().current('pharmacist.prescriptions*'),
-                                  badge: pendingRxCount,
-                              },
-                          ],
-                      },
-                  ]
-                : []),
-            ...inventoryEntries,
-            ...(() => {
-                if (!hasPerm('accounting.view')) return [];
-
-                const isAccountingAdvanced = tenant?.accountingMode === 'advanced';
-                const search = typeof window !== 'undefined' ? window.location.search : '';
-                const isMultiQuery = search.includes('multi=1');
-
-                const accountingGroups: Array<SidebarGroupItem & { category: string }> = [
-                    {
-                        category: 'Accounting',
-                        group: 'Overview & Entry',
-                        icon: Wallet,
-                        items: [
-                            ...(isAccountingAdvanced && hasPerm('accounting.reports.view')
-                                ? [
-                                      {
-                                          name: 'Overview',
-                                          href: toPath('accounting.overview'),
-                                          active: route().current('accounting.overview'),
-                                      },
-                                  ]
-                                : []),
-                            {
-                                name: isAccountingAdvanced ? 'Quick Entry' : 'Dashboard',
-                                href: isAccountingAdvanced
-                                    ? `${toPath('accounting.dashboard')}?simple=1`
-                                    : toPath('accounting.dashboard'),
-                                active: route().current('accounting.dashboard') && !isMultiQuery,
-                            },
-                            ...(hasPerm('accounting.expense.create')
-                                ? [
-                                      {
-                                          name: 'Multi Entry',
-                                          href: `${toPath('accounting.dashboard')}?simple=1&multi=1`,
-                                          active: route().current('accounting.dashboard') && isMultiQuery,
-                                      },
-                                  ]
-                                : []),
-                        ],
-                    },
-                    {
-                        category: 'Accounting',
-                        group: 'Vouchers & Journal',
-                        icon: ReceiptText,
-                        items: [
-                            {
-                                name: 'Vouchers',
-                                href: toPath('accounting.vouchers.index'),
-                                active: route().current('accounting.vouchers.*'),
-                            },
-                            ...(isAccountingAdvanced && hasPerm('accounting.journal.create')
-                                ? [
-                                      {
-                                          name: 'Journal',
-                                          href: toPath('accounting.journal.index'),
-                                          active: route().current('accounting.journal.*'),
-                                      },
-                                  ]
-                                : []),
-                            ...(isAccountingAdvanced && hasPerm('accounting.voucher.create')
-                                ? [
-                                      {
-                                          name: 'Payroll & Stock',
-                                          href: toPath('accounting.operations.index'),
-                                          active: route().current('accounting.operations.*'),
-                                      },
-                                  ]
-                                : []),
-                        ],
-                    },
-                    {
-                        category: 'Accounting',
-                        group: 'Books & Parties',
-                        icon: FileSpreadsheet,
-                        items: [
-                            ...(hasPerm('accounting.reports.view')
-                                ? [
-                                      {
-                                          name: 'Parties & Ageing',
-                                          href: toPath('accounting.parties.index'),
-                                          active: route().current('accounting.parties.*'),
-                                      },
-                                      ...(isAccountingAdvanced
-                                          ? [
-                                                {
-                                                    name: 'Ledger',
-                                                    href: toPath('accounting.ledger'),
-                                                    active: route().current('accounting.ledger'),
-                                                },
-                                            ]
-                                          : []),
-                                      {
-                                          name: 'Day Book',
-                                          href: toPath('accounting.day-book'),
-                                          active: route().current('accounting.day-book'),
-                                      },
-                                      {
-                                          name: 'Cash Book',
-                                          href: toPath('accounting.cash-book'),
-                                          active: route().current('accounting.cash-book'),
-                                      },
-                                      {
-                                          name: 'Bank Book',
-                                          href: toPath('accounting.bank-book'),
-                                          active: route().current('accounting.bank-book'),
-                                      },
-                                      ...(isAccountingAdvanced
-                                          ? [
-                                                {
-                                                    name: 'Bank Recon',
-                                                    href: toPath('accounting.bank-reconciliation.index'),
-                                                    active: route().current('accounting.bank-reconciliation.*'),
-                                                },
-                                            ]
-                                          : []),
-                                  ]
-                                : []),
-                        ],
-                    },
-                    {
-                        category: 'Accounting',
-                        group: 'Financial Reports',
-                        icon: Layers,
-                        items: [
-                            ...(hasPerm('accounting.reports.view')
-                                ? [
-                                      {
-                                          name: 'Profit & Loss (P&L)',
-                                          href: toPath('accounting.simple-pnl'),
-                                          active: route().current('accounting.simple-pnl'),
-                                      },
-                                      ...(isAccountingAdvanced
-                                          ? [
-                                                {
-                                                    name: 'Trial Balance',
-                                                    href: toPath('accounting.trial-balance'),
-                                                    active: route().current('accounting.trial-balance'),
-                                                },
-                                                {
-                                                    name: 'Balance Sheet',
-                                                    href: toPath('accounting.balance-sheet'),
-                                                    active: route().current('accounting.balance-sheet'),
-                                                },
-                                            ]
-                                          : []),
-                                      {
-                                          name: 'Cash Flow & Reports',
-                                          href: toPath('accounting.extra-reports'),
-                                          active: route().current('accounting.extra-reports*'),
-                                      },
-                                      {
-                                          name: 'VAT Summary',
-                                          href: toPath('accounting.vat-summary'),
-                                          active: route().current('accounting.vat-summary'),
-                                      },
-                                  ]
-                                : []),
-                        ],
-                    },
-                    {
-                        category: 'Accounting',
-                        group: 'Accounting Setup',
-                        icon: Settings,
-                        items: [
-                            ...(isAccountingAdvanced && (hasPerm('accounting.coa.manage') || hasPerm('accounting.view'))
-                                ? [
-                                      {
-                                          name: 'Chart of Accounts',
-                                          href: toPath('accounting.accounts.index'),
-                                          active: route().current('accounting.accounts.*'),
-                                      },
-                                  ]
-                                : []),
-                            ...(isAccountingAdvanced &&
-                            (hasPerm('accounting.period.close') ||
-                                hasPerm('accounting.period.reopen') ||
-                                hasPerm('accounting.view'))
-                                ? [
-                                      {
-                                          name: 'Fiscal Periods',
-                                          href: toPath('accounting.periods.index'),
-                                          active: route().current('accounting.periods.*'),
-                                      },
-                                  ]
-                                : []),
-                            ...(isAccountingAdvanced && hasPerm('accounting.voucher.post')
-                                ? [
-                                      {
-                                          name: 'Posting Errors',
-                                          href: toPath('accounting.posting-errors.index'),
-                                          active: route().current('accounting.posting-errors.*'),
-                                      },
-                                  ]
-                                : []),
-                            ...(hasPerm('accounting.settings.manage') || hasPerm('accounting.view')
-                                ? [
-                                      {
-                                          name: 'Settings',
-                                          href: toPath('accounting.settings.index'),
-                                          active: route().current('accounting.settings.*'),
-                                      },
-                                  ]
-                                : []),
-                        ],
-                    },
-                ];
-
-                return accountingGroups.filter((g) => g.items.length > 0);
-            })(),
-            ...crmEntries,
-            ...hrmEntries,
-            ...organizationEntries,
-            ...(isSubscriberAdmin
-                ? [
-                      {
-                          category: 'Billing & Settings',
-                          group: 'Plans & Billing',
-                          icon: CreditCard,
-                          items: [
-                              {
-                                  name: 'Feature Access',
-                                  href: toPath('features.index'),
-                                  active: route().current('features.*'),
-                              },
-                              {
-                                  name: 'Feature Pricing',
-                                  href: toPath('pricing.index'),
-                                  active: route().current('pricing.*'),
-                              },
-                              {
-                                  name: 'Browse Plans',
-                                  href: toPath('plans.index'),
-                                  active: route().current('plans.*'),
-                              },
-                              {
-                                  name: 'Billing & Subscription',
-                                  href: toPath('subscription.index'),
-                                  active: route().current('subscription.*'),
-                              },
-                          ],
-                      },
-                  ]
-                : []),
             {
-                category: 'Billing & Settings',
-                group: 'Account & Business',
+                category: 'Company Overview',
+                group: 'Organization',
+                icon: GitBranch,
+                items: [
+                    {
+                        name: 'Branches',
+                        href: toPath('branches.index'),
+                        active: route().current('branches.*'),
+                    },
+                    {
+                        name: 'Business Tenants',
+                        href: toPath('tenants.index'),
+                        active: route().current('tenants.*'),
+                    },
+                    {
+                        name: 'Counter Monitoring',
+                        href: toPath('counters.monitoring'),
+                        active: route().current('counters.monitoring'),
+                    },
+                ],
+            },
+            {
+                category: 'Company Overview',
+                group: 'Users & Roles',
+                icon: Users,
+                items: [
+                    {
+                        name: 'Admins, Managers & Staff',
+                        href: toPath('team.index'),
+                        active: isTeamUsersView,
+                    },
+                    {
+                        name: 'Role Permissions',
+                        href: `${toPath('team.index')}?tab=matrix`,
+                        active: route().current('team.index') && isTeamMatrixTab,
+                    },
+                ],
+            },
+            {
+                category: 'Company Overview',
+                name: 'Approvals',
+                href: toPath('approvals.index'),
+                active: route().current('approvals.*'),
+                icon: CheckSquare,
+                badge: pendingApprovalsCount,
+            },
+            {
+                category: 'Catalog & Finance',
+                name: 'Product Catalog',
+                href: toPath('catalog.ui'),
+                active: route().current('catalog.*'),
+                icon: Package,
+            },
+            {
+                category: 'Catalog & Finance',
+                group: 'Financial Reports',
+                icon: FileSpreadsheet,
+                items: [
+                    {
+                        name: 'Profit & Loss (P&L)',
+                        href: toPath('accounting.simple-pnl'),
+                        active: route().current('accounting.simple-pnl'),
+                    },
+                    {
+                        name: 'Cash Flow & Reports',
+                        href: toPath('accounting.extra-reports'),
+                        active: route().current('accounting.extra-reports*'),
+                    },
+                    {
+                        name: 'VAT Summary',
+                        href: toPath('accounting.vat-summary'),
+                        active: route().current('accounting.vat-summary'),
+                    },
+                    {
+                        name: 'Parties & Ageing',
+                        href: toPath('accounting.parties.index'),
+                        active: route().current('accounting.parties.*'),
+                    },
+                    {
+                        name: 'Day & Cash Book',
+                        href: toPath('accounting.dashboard'),
+                        active: route().current('accounting.dashboard'),
+                    },
+                ],
+            },
+            {
+                category: 'Governance & Billing',
+                name: 'Audit Log',
+                href: `${toPath('team.index')}?tab=activity`,
+                active: route().current('team.index') && isTeamActivityTab,
+                icon: Activity,
+            },
+            {
+                category: 'Governance & Billing',
+                group: 'Settings & Billing',
                 icon: Settings,
                 items: [
-                    ...(hasPerm('settings.manage')
-                        ? [
-                              {
-                                  name: 'Business Settings',
-                                  href: toPath('settings.business'),
-                                  active: route().current('settings.business*'),
-                              },
-                          ]
-                        : []),
                     {
-                        name: 'Profile & Security',
+                        name: 'Business Settings',
+                        href: toPath('settings.business'),
+                        active: route().current('settings.business*'),
+                    },
+                    {
+                        name: 'Subscription & Plans',
+                        href: toPath('subscription.index'),
+                        active: route().current('subscription.*'),
+                    },
+                    {
+                        name: 'Browse Plans',
+                        href: toPath('plans.index'),
+                        active: route().current('plans.*'),
+                    },
+                    {
+                        name: 'Security & Profile',
                         href: toPath('settings.profile'),
                         active: route().current('settings.profile*'),
                     },
                 ],
             },
         ];
+    } else if (primaryRole === 'co_admin' || primaryRole === 'admin') {
+        // ২. Admin (Delegated Operations Head / Co-Admin)
+        roleSubtitle = 'Admin (Operations Head)';
+        const staffSubItems: SidebarGroupItem['items'] = [];
+        if (hasPerm('user.manage', 'team.manage')) {
+            staffSubItems.push({
+                name: 'Manage Staff',
+                href: toPath('team.index'),
+                active: isTeamUsersView,
+            });
         }
+        if (hasPerm('role.manage')) {
+            staffSubItems.push({
+                name: 'Role Permissions',
+                href: `${toPath('team.index')}?tab=matrix`,
+                active: route().current('team.index') && isTeamMatrixTab,
+            });
+        }
+
+        navEntries = [
+            {
+                category: 'Operations Overview',
+                name: 'Dashboard',
+                href: toPath('dashboard'),
+                active: route().current('dashboard'),
+                icon: LayoutDashboard,
+            },
+            {
+                category: 'Operations Overview',
+                name: 'Branches',
+                href: toPath('branches.index'),
+                active: route().current('branches.*'),
+                icon: GitBranch,
+            },
+            {
+                category: 'Operations Overview',
+                name: 'Approvals',
+                href: toPath('approvals.index'),
+                active: route().current('approvals.*'),
+                icon: CheckSquare,
+                badge: pendingApprovalsCount,
+            },
+            ...(staffSubItems.length > 0
+                ? [
+                      {
+                          category: 'Operations Overview',
+                          group: 'Staff & Roles',
+                          icon: Users,
+                          items: staffSubItems,
+                      },
+                  ]
+                : []),
+            {
+                category: 'Live Operations',
+                name: 'Counter Monitoring',
+                href: toPath('counters.monitoring'),
+                active: route().current('counters.monitoring'),
+                icon: Monitor,
+            },
+            {
+                category: 'Live Operations',
+                group: 'Reports',
+                icon: FileSpreadsheet,
+                items: [
+                    {
+                        name: 'Sales & Day Book',
+                        href: toPath('accounting.day-book'),
+                        active: route().current('accounting.day-book'),
+                    },
+                    {
+                        name: 'Stock & Inventory',
+                        href: toPath('inventory.index'),
+                        active: route().current('inventory.index'),
+                    },
+                    {
+                        name: 'Expiry Report',
+                        href: toPath('inventory.batches'),
+                        active: route().current('inventory.batches'),
+                        badge: batchAlertCount > 0 ? batchAlertCount : undefined,
+                    },
+                ],
+            },
+            {
+                category: 'Governance',
+                name: 'Audit Log',
+                href: `${toPath('team.index')}?tab=activity`,
+                active: route().current('team.index') && isTeamActivityTab,
+                icon: Activity,
+            },
+            {
+                category: 'Account',
+                name: 'Profile & Security',
+                href: toPath('settings.profile'),
+                active: route().current('settings.profile*'),
+                icon: UserCog,
+            },
+        ];
+    } else if (primaryRole === 'manager') {
+        // ৩. Branch Manager (নির্দিষ্ট ব্রাঞ্চের প্রধান)
+        roleSubtitle = `${tenant?.currentBranch?.name ?? 'Branch'} Manager`;
+        navEntries = [
+            {
+                category: 'Branch Overview',
+                name: 'Dashboard',
+                href: toPath('dashboard'),
+                active: route().current('dashboard'),
+                icon: LayoutDashboard,
+            },
+            {
+                category: 'Branch Overview',
+                name: 'Approvals',
+                href: toPath('approvals.index'),
+                active: route().current('approvals.*'),
+                icon: CheckSquare,
+                badge: pendingApprovalsCount,
+            },
+            {
+                category: 'Branch Operations',
+                group: 'Sales & Orders',
+                icon: ShoppingCart,
+                items: [
+                    {
+                        name: 'Orders Tracking',
+                        href: toPath('sales.orders.my-orders'),
+                        active: route().current('sales.orders.my-orders'),
+                    },
+                    {
+                        name: 'Counters Live View',
+                        href: toPath('counters.monitoring'),
+                        active: route().current('counters.monitoring'),
+                    },
+                    {
+                        name: 'Counter Terminals',
+                        href: toPath('counters.index'),
+                        active: route().current('counters.index'),
+                    },
+                ],
+            },
+            {
+                category: 'Branch Operations',
+                group: 'Inventory & Stock',
+                icon: Package,
+                items: [
+                    {
+                        name: 'Medicines & Stock',
+                        href: toPath('inventory.index'),
+                        active: route().current('inventory.index'),
+                    },
+                    {
+                        name: 'Product Catalog',
+                        href: toPath('catalog.ui'),
+                        active: route().current('catalog.*'),
+                    },
+                    {
+                        name: 'Purchases & Suppliers',
+                        href: toPath('crm.suppliers'),
+                        active: route().current('crm.suppliers*'),
+                    },
+                    {
+                        name: 'Expiry Tracker',
+                        href: toPath('inventory.batches'),
+                        active: route().current('inventory.batches'),
+                        badge: batchAlertCount > 0 ? batchAlertCount : undefined,
+                    },
+                ],
+            },
+            {
+                category: 'Team & Analytics',
+                name: 'Branch Staff',
+                href: toPath('team.index'),
+                active: isTeamUsersView,
+                icon: Users,
+            },
+            {
+                category: 'Team & Analytics',
+                group: 'Reports',
+                icon: FileSpreadsheet,
+                items: [
+                    {
+                        name: 'Branch Sales Report',
+                        href: toPath('accounting.day-book'),
+                        active: route().current('accounting.day-book'),
+                    },
+                    {
+                        name: 'Stock Movements',
+                        href: toPath('inventory.movements'),
+                        active: route().current('inventory.movements'),
+                    },
+                ],
+            },
+            {
+                category: 'Team & Analytics',
+                name: 'Audit Log',
+                href: `${toPath('team.index')}?tab=activity`,
+                active: route().current('team.index') && isTeamActivityTab,
+                icon: Activity,
+            },
+            {
+                category: 'Account',
+                name: 'Profile & Security',
+                href: toPath('settings.profile'),
+                active: route().current('settings.profile*'),
+                icon: UserCog,
+            },
+        ];
+    } else if (primaryRole === 'pharmacist') {
+        // ৫. Pharmacist (ক্লিনিক্যাল ও ফার্মেসি স্টক)
+        homeHref = toPath('pharmacist.dashboard');
+        roleSubtitle = 'Pharmacist · Clinical & Stock';
+        navEntries = [
+            {
+                category: 'Pharmacy Today',
+                name: 'Dashboard',
+                href: toPath('pharmacist.dashboard'),
+                active:
+                    route().current('dashboard') ||
+                    route().current('pharmacist.dashboard'),
+                icon: LayoutDashboard,
+            },
+            {
+                category: 'Pharmacy Today',
+                name: 'Rx to Verify',
+                href: toPath('pharmacist.prescriptions'),
+                active: route().current('pharmacist.prescriptions*'),
+                icon: ClipboardCheck,
+                badge: pendingRxCount,
+            },
+            {
+                category: 'Pharmacy Today',
+                name: 'Dispensed Today',
+                href: toPath('pharmacist.dispensing'),
+                active: route().current('pharmacist.dispensing'),
+                icon: Pill,
+            },
+            {
+                category: 'Pharmacy Stock',
+                group: 'Medicines & Batches',
+                icon: Boxes,
+                items: [
+                    {
+                        name: 'Batches, FEFO & Expiry',
+                        href: toPath('inventory.batches'),
+                        active: route().current('inventory.batches'),
+                        badge: batchAlertCount > 0 ? batchAlertCount : undefined,
+                    },
+                    {
+                        name: 'Inventory Stock',
+                        href: toPath('inventory.index'),
+                        active: route().current('inventory.index'),
+                    },
+                    {
+                        name: 'Medicine Search',
+                        href: toPath('pharmacist.medicine-search'),
+                        active: route().current('pharmacist.medicine-search'),
+                    },
+                ],
+            },
+            {
+                category: 'Pharmacy Stock',
+                name: 'Stock Adjustment',
+                href: toPath('inventory.movements'),
+                active: route().current('inventory.movements'),
+                icon: SlidersHorizontal,
+            },
+            {
+                category: 'Pharmacy Stock',
+                group: 'Purchases & Returns',
+                icon: ShoppingBag,
+                items: [
+                    {
+                        name: 'Purchase Requests',
+                        href: toPath('pharmacist.purchase-requests'),
+                        active: route().current('pharmacist.purchase-requests'),
+                    },
+                    {
+                        name: 'Supplier & Sales Returns',
+                        href: toPath('pharmacist.returns'),
+                        active: route().current('pharmacist.returns'),
+                    },
+                    {
+                        name: 'Suppliers Directory',
+                        href: toPath('crm.suppliers'),
+                        active: route().current('crm.suppliers*'),
+                    },
+                ],
+            },
+            {
+                category: 'Clinical Reports',
+                group: 'Reports',
+                icon: FileSpreadsheet,
+                items: [
+                    {
+                        name: 'Pharmacy & Expiry Report',
+                        href: toPath('pharmacist.stock-expiry'),
+                        active: route().current('pharmacist.stock-expiry'),
+                    },
+                    {
+                        name: 'Controlled Drugs Log',
+                        href: toPath('pharmacist.controlled-drugs'),
+                        active: route().current('pharmacist.controlled-drugs'),
+                    },
+                    {
+                        name: 'Patient Medication History',
+                        href: toPath('pharmacist.patient-history'),
+                        active: route().current('pharmacist.patient-history'),
+                    },
+                ],
+            },
+            {
+                category: 'Account',
+                name: 'Profile & Security',
+                href: toPath('settings.profile'),
+                active: route().current('settings.profile*'),
+                icon: UserCog,
+            },
+        ];
+    } else if (primaryRole === 'cashier') {
+        // ৭. Cashier (POS ও পেমেন্ট কালেকশন)
+        homeHref = toPath('cashier.dashboard');
+        roleSubtitle = 'Cashier · POS & Collection';
+        navEntries = [
+            {
+                category: 'Cashier Station',
+                name: 'Home',
+                href: toPath('cashier.dashboard'),
+                active:
+                    route().current('cashier.dashboard') && !isCashierIncomingTab,
+                icon: Home,
+            },
+            {
+                category: 'Cashier Station',
+                name: 'Pending Orders',
+                href: `${toPath('cashier.dashboard')}?tab=incoming`,
+                active:
+                    route().current('cashier.dashboard') && isCashierIncomingTab,
+                icon: ClipboardList,
+            },
+            {
+                category: 'Cashier Station',
+                name: 'New Bill (Direct POS)',
+                href: toPath('pos.index'),
+                active: route().current('pos.*'),
+                icon: ShoppingCart,
+            },
+            {
+                category: 'Cashier Station',
+                name: 'My Shift',
+                href: toPath('counters.index'),
+                active: route().current('counters.index'),
+                icon: Store,
+            },
+            {
+                category: 'Account',
+                name: 'Profile & Security',
+                href: toPath('settings.profile'),
+                active: route().current('settings.profile*'),
+                icon: UserCog,
+            },
+        ];
+    } else {
+        // ৬. Salesman (অর্ডার ও কাস্টমার হ্যান্ডলিং)
+        roleSubtitle = 'Salesman · Orders & Customers';
+        navEntries = [
+            {
+                category: 'Sales Home',
+                name: 'Home',
+                href: toPath('dashboard'),
+                active: route().current('dashboard'),
+                icon: Home,
+            },
+            {
+                category: 'Sales Home',
+                name: 'New Order',
+                href: toPath('sales.orders.create'),
+                active: route().current('sales.orders.create'),
+                icon: FilePlus2,
+            },
+            {
+                category: 'Sales Home',
+                name: 'My Orders',
+                href: toPath('sales.orders.my-orders'),
+                active: route().current('sales.orders.my-orders'),
+                icon: ClipboardList,
+            },
+            {
+                category: 'Sales Home',
+                name: 'Customers',
+                href: toPath('crm.customers'),
+                active: route().current('crm.customers*'),
+                icon: Contact2,
+            },
+            {
+                category: 'Sales Home',
+                name: 'My Sales',
+                href: toPath('sales.collections.index'),
+                active: route().current('sales.collections.*'),
+                icon: Wallet,
+            },
+            {
+                category: 'Account',
+                name: 'Profile & Security',
+                href: toPath('settings.profile'),
+                active: route().current('settings.profile*'),
+                icon: UserCog,
+            },
+        ];
     }
 
     const handleLogout = () => {
@@ -819,13 +741,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         >
             <div className="h-16 flex items-center justify-between lg:justify-start px-4 sm:px-5 border-b border-slate-200/80 dark:border-slate-800/80 shrink-0 whitespace-nowrap">
                 <Link
-                    href={
-                        isSuperAdmin
-                            ? toPath('admin.dashboard')
-                            : isWorkspaceReady
-                              ? toPath('dashboard')
-                              : toPath('plans.index')
-                    }
+                    href={homeHref}
                     onClick={() => {
                         if (window.innerWidth < 1024) onClose?.();
                     }}
@@ -833,16 +749,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <BrandLogo
                         size="md"
                         showText={isOpen}
-                        subtitle={
-                            isOpen
-                                ? isSuperAdmin
-                                    ? 'Platform Super Admin'
-                                    : tenant?.role === 'pharmacist' && !isSubscriberAdmin
-                                      ? 'Logged in as Pharmacist'
-                                      : tenant?.currentTenant?.name ??
-                                        'Business Subscription'
-                                : undefined
-                        }
+                        subtitle={isOpen ? roleSubtitle : undefined}
                     />
                 </Link>
                 {isOpen && (
@@ -928,14 +835,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                     >
                                         {item.name}
                                     </span>
-                                    {isOpen && typeof item.badge === 'number' && item.badge > 0 && (
-                                        <span className="ml-auto shrink-0 inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#D9534F] text-white text-[10.5px] font-bold font-mono leading-none">
-                                            {item.badge}
-                                        </span>
-                                    )}
-                                    {!isOpen && typeof item.badge === 'number' && item.badge > 0 && (
-                                        <span className="hidden lg:inline-flex absolute top-1 right-2 w-2 h-2 rounded-full bg-[#D9534F]" />
-                                    )}
+                                    {isOpen &&
+                                        typeof item.badge === 'number' &&
+                                        item.badge > 0 && (
+                                            <span className="ml-auto shrink-0 inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#D9534F] text-white text-[10.5px] font-bold font-mono leading-none">
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                    {!isOpen &&
+                                        typeof item.badge === 'number' &&
+                                        item.badge > 0 && (
+                                            <span className="hidden lg:inline-flex absolute top-1 right-2 w-2 h-2 rounded-full bg-[#D9534F]" />
+                                        )}
                                     {isOpen && item.locked && (
                                         <span
                                             className="ml-auto shrink-0 flex items-center justify-center text-slate-400 dark:text-slate-500"

@@ -772,63 +772,463 @@ class CounterController extends Controller
      */
     public function monitoring(Request $request, TenantContext $tenantContext): Response
     {
-        $branch = $tenantContext->branch();
         $tenant = $tenantContext->tenant();
+        $user = $request->user();
+        $now = now();
 
-        $counters = Counter::query()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
+        $canViewAllBranches = $tenantContext->isOwner()
+            || $tenantContext->hasRole('admin')
+            || (bool) $user?->isSubscriberAdmin();
+
+        $period = strtolower((string) $request->query('period', 'today'));
+        if (! in_array($period, ['today', 'yesterday', '7d', 'month'], true)) {
+            $period = 'today';
+        }
+
+        [$rangeStart, $rangeEnd, $prevStart, $prevEnd, $comparisonLabel] = match ($period) {
+            'yesterday' => [
+                now()->subDay()->startOfDay(),
+                now()->subDay()->endOfDay(),
+                now()->subDays(2)->startOfDay(),
+                now()->subDays(2)->endOfDay(),
+                'vs prev day',
+            ],
+            '7d' => [
+                now()->subDays(6)->startOfDay(),
+                $now,
+                now()->subDays(13)->startOfDay(),
+                now()->subDays(7)->endOfDay(),
+                'vs prev 7d',
+            ],
+            'month' => [
+                now()->startOfMonth(),
+                $now,
+                now()->subMonthNoOverflow()->startOfMonth(),
+                now()->subMonthNoOverflow()->endOfMonth(),
+                'vs last month',
+            ],
+            default => [
+                now()->startOfDay(),
+                $now,
+                now()->subDay()->startOfDay(),
+                now()->subDay()->endOfDay(),
+                'vs yesterday',
+            ],
+        };
+
+        $allBranches = \App\Models\Branch::query()
             ->where('is_active', true)
-            ->with([
-                'currentUser:id,name',
-                'currentSession:id,counter_id,user_id,status,shift,opened_at,total_sales_amount,total_transactions',
-                'activeQueue' => fn ($q) => $q->with(['salesman:id,name', 'customer:id,name'])->latest('assigned_at'),
-            ])
-            ->get()
-            ->map(fn (Counter $c) => [
-                'id' => $c->id,
-                'code' => $c->code,
-                'name' => $c->name,
-                'type' => $c->type,
-                'location' => $c->location,
-                'status' => $c->status,
-                'max_queue_capacity' => (int) ($c->max_queue_capacity ?: 20),
-                'auto_assignment_enabled' => (bool) $c->auto_assignment_enabled,
-                'current_cashier' => $c->currentUser?->name,
-                'current_shift' => $c->currentSession?->shift,
-                'queue_count' => $c->activeQueue->count(),
-                'active_orders' => $c->activeQueue->map(fn (Sale $s) => [
-                    'id' => $s->id,
-                    'order_number' => $s->order_number,
-                    'customer_name' => $s->customer?->name ?? 'Walk-in Customer',
-                    'salesman_name' => $s->salesman?->name,
-                    'total_amount' => (float) $s->total_amount,
-                    'order_status' => $s->order_status,
-                    'assigned_at' => $s->assigned_at?->format('h:i A'),
-                    'items_count' => $s->items()->count(),
-                ]),
-            ]);
+            ->orderByDesc('is_head_office')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'is_head_office']);
 
-        $unassignedOrders = Sale::query()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
-            ->where('order_status', 'unassigned')
-            ->with(['salesman:id,name', 'customer:id,name'])
-            ->latest()
-            ->get()
-            ->map(fn (Sale $s) => [
-                'id' => $s->id,
-                'order_number' => $s->order_number,
-                'customer_name' => $s->customer?->name ?? 'Walk-in Customer',
-                'salesman_name' => $s->salesman?->name,
-                'total_amount' => (float) $s->total_amount,
-                'created_at' => $s->created_at?->format('h:i A'),
-                'items_count' => $s->items()->count(),
-            ]);
+        $requestedBranch = $request->query('branch_id');
+        if ($canViewAllBranches) {
+            if ($requestedBranch === null || $requestedBranch === '' || $requestedBranch === 'all') {
+                $selectedBranch = null;
+                $selectedBranchId = 'all';
+            } else {
+                $selectedBranch = $allBranches->firstWhere('id', (int) $requestedBranch);
+                $selectedBranchId = $selectedBranch ? $selectedBranch->id : 'all';
+            }
+        } else {
+            $selectedBranch = $tenantContext->branch() ?? $allBranches->first();
+            $selectedBranchId = $selectedBranch?->id ?? 'all';
+        }
+
+        // Build 100% dynamic All-Branches Executive Overview
+        $allBranchesOverview = null;
+        if ($canViewAllBranches) {
+            $allCounters = Counter::query()
+                ->where('is_active', true)
+                ->with(['currentUser:id,name', 'currentSession:id,counter_id,status,opened_at'])
+                ->orderBy('code')
+                ->get();
+
+            // Completed sales grouped by branch in current & previous period
+            $completedStatuses = ['completed', 'paid', 'partially_paid'];
+            $salesInPeriod = Sale::query()
+                ->whereNotNull('sold_at')
+                ->whereBetween('sold_at', [$rangeStart, $rangeEnd])
+                ->where(fn ($q) => $q->whereNull('order_status')->orWhereIn('order_status', $completedStatuses))
+                ->selectRaw('branch_id, COUNT(*) as bills_count, COALESCE(SUM(total_amount), 0) as sales_total')
+                ->groupBy('branch_id')
+                ->get()
+                ->keyBy('branch_id');
+
+            $prevSalesTotal = (float) Sale::query()
+                ->whereNotNull('sold_at')
+                ->whereBetween('sold_at', [$prevStart, $prevEnd])
+                ->where(fn ($q) => $q->whereNull('order_status')->orWhereIn('order_status', $completedStatuses))
+                ->sum('total_amount');
+
+            // Active queue orders across all branches
+            $queueOrders = Sale::query()
+                ->whereIn('order_status', ['unassigned', 'assigned', 'waiting', 'processing'])
+                ->get(['id', 'branch_id', 'counter_id', 'order_status', 'assigned_at', 'created_at']);
+
+            // Cash differences (discrepancies) from CounterSessions in period
+            $discrepancySessions = CounterSession::query()
+                ->with('counter:id,code,name')
+                ->where(function ($q) use ($rangeStart, $rangeEnd) {
+                    $q->whereBetween('closed_at', [$rangeStart, $rangeEnd])
+                        ->orWhereBetween('opened_at', [$rangeStart, $rangeEnd]);
+                })
+                ->whereNotNull('discrepancy')
+                ->where('discrepancy', '!=', 0)
+                ->latest('closed_at')
+                ->get();
+
+            // High discount bills in period (discount_percentage >= 5% or pending approval)
+            $highDiscountByCounter = Sale::query()
+                ->with('counter:id,code,name')
+                ->whereBetween('created_at', [$rangeStart, $rangeEnd])
+                ->where('order_status', '!=', 'cancelled')
+                ->where(function ($q) {
+                    $q->where('discount_percentage', '>=', 5)
+                        ->orWhere('discount_status', 'pending_approval');
+                })
+                ->selectRaw('branch_id, counter_id, COUNT(*) as bills_count, MAX(discount_percentage) as max_pct')
+                ->groupBy('branch_id', 'counter_id')
+                ->get();
+
+            // Rx medicines sold without doctor_name in period
+            $rxWithoutDoctorByBranch = \Illuminate\Support\Facades\DB::table('sales')
+                ->join('sale_items', 'sale_items.sale_id', '=', 'sales.id')
+                ->join('medicines', 'medicines.id', '=', 'sale_items.medicine_id')
+                ->where('sales.tenant_id', $tenant->id)
+                ->whereNotNull('sales.sold_at')
+                ->whereBetween('sales.sold_at', [$rangeStart, $rangeEnd])
+                ->where(function ($q) {
+                    $q->whereNull('sales.doctor_name')->orWhere('sales.doctor_name', '');
+                })
+                ->where('medicines.requires_prescription', true)
+                ->selectRaw('sales.branch_id, COUNT(DISTINCT sales.id) as rx_bills_count')
+                ->groupBy('sales.branch_id')
+                ->pluck('rx_bills_count', 'branch_id');
+
+            $alerts = [];
+            $branchRows = [];
+            $openBranchesCount = 0;
+            $totalOpenCounters = 0;
+            $totalBreakCounters = 0;
+            $totalClosedCounters = 0;
+            $totalSales = 0.0;
+            $totalBills = 0;
+            $totalCashDiff = 0.0;
+            $cashDiffBranchIds = [];
+
+            foreach ($allBranches as $b) {
+                $bCounters = $allCounters->where('branch_id', $b->id)->values();
+                $bTotalCounters = $bCounters->count();
+                $bOpenCounters = $bCounters->where('status', 'active')->count();
+                $bBreakCounters = $bCounters->where('status', 'on_break')->count();
+                $bClosedCounters = max(0, $bTotalCounters - $bOpenCounters - $bBreakCounters);
+
+                if ($bOpenCounters > 0) {
+                    $openBranchesCount++;
+                }
+
+                $totalOpenCounters += $bOpenCounters;
+                $totalBreakCounters += $bBreakCounters;
+                $totalClosedCounters += $bClosedCounters;
+
+                $saleAgg = $salesInPeriod->get($b->id);
+                $bSales = (float) ($saleAgg->sales_total ?? 0);
+                $bBills = (int) ($saleAgg->bills_count ?? 0);
+                $totalSales += $bSales;
+                $totalBills += $bBills;
+
+                $bQueueOrders = $queueOrders->where('branch_id', $b->id);
+                $bQueueCount = $bQueueOrders->count();
+                $bDelayedCount = $bQueueOrders->filter(function ($o) use ($now) {
+                    $since = $o->assigned_at ?? $o->created_at ?? $now;
+
+                    return floor($since->diffInSeconds($now, false) / 60) >= 5;
+                })->count();
+
+                $bDiscrepancies = $discrepancySessions->where('branch_id', $b->id);
+                $bCashDiff = (float) $bDiscrepancies->sum('discrepancy');
+                if (abs($bCashDiff) >= 0.01) {
+                    $totalCashDiff += $bCashDiff;
+                    $cashDiffBranchIds[$b->id] = true;
+                }
+
+                // Dynamic Alerts per branch
+                foreach ($bDiscrepancies as $ds) {
+                    $diffVal = (float) $ds->discrepancy;
+                    $absDiff = number_format(abs($diffVal), 0);
+                    $dirWord = $diffVal < 0 ? 'short' : 'over';
+                    $cLabel = $ds->counter?->name ?? $ds->counter?->code ?? 'Counter';
+                    $endedLabel = $ds->closed_at ? 'Shift ended '.$ds->closed_at->format('g:i A') : 'Active shift';
+                    $alerts[] = [
+                        'id' => 'cash-'.$ds->id,
+                        'type' => 'cash_diff',
+                        'severity' => abs($diffVal) >= 100 ? 'high' : 'medium',
+                        'branch_id' => $b->id,
+                        'branch_name' => $b->name,
+                        'title' => "{$b->name} drawer {$dirWord} by ৳{$absDiff}",
+                        'subtitle' => "{$cLabel}, {$endedLabel}",
+                    ];
+                }
+
+                foreach ($highDiscountByCounter->where('branch_id', $b->id) as $hd) {
+                    $cModel = $bCounters->firstWhere('id', $hd->counter_id);
+                    $cLabel = $cModel?->name ?? $cModel?->code ?? 'Sales Order';
+                    $cnt = (int) $hd->bills_count;
+                    $alerts[] = [
+                        'id' => "disc-{$b->id}-{$hd->counter_id}",
+                        'type' => 'discount',
+                        'severity' => $cnt >= 3 ? 'high' : 'medium',
+                        'branch_id' => $b->id,
+                        'branch_name' => $b->name,
+                        'title' => "{$b->name}: high discounts at {$cLabel}",
+                        'subtitle' => "{$cnt} bill".($cnt > 1 ? 's' : '').' (up to '.round((float) $hd->max_pct, 1).'%)',
+                    ];
+                }
+
+                if ($bQueueCount >= 3 && ($bClosedCounters + $bBreakCounters) > 0) {
+                    $closedCounter = $bCounters->first(fn ($c) => $c->status !== 'active');
+                    $closedHint = $closedCounter
+                        ? 'Open '.$closedCounter->name
+                        : ($bClosedCounters + $bBreakCounters).' counter offline';
+                    $alerts[] = [
+                        'id' => 'queue-'.$b->id,
+                        'type' => 'queue',
+                        'severity' => $bDelayedCount > 0 || $bQueueCount >= 5 ? 'high' : 'medium',
+                        'branch_id' => $b->id,
+                        'branch_name' => $b->name,
+                        'title' => "{$b->name} queue has {$bQueueCount} orders, ".($bClosedCounters + $bBreakCounters).' counter closed',
+                        'subtitle' => $closedHint,
+                    ];
+                } elseif ($bDelayedCount > 0) {
+                    $alerts[] = [
+                        'id' => 'delay-'.$b->id,
+                        'type' => 'queue',
+                        'severity' => 'high',
+                        'branch_id' => $b->id,
+                        'branch_name' => $b->name,
+                        'title' => "{$bDelayedCount} order".($bDelayedCount > 1 ? 's' : '')." waiting >5m at {$b->name}",
+                        'subtitle' => 'Reassign to an available counter',
+                    ];
+                }
+
+                $rxCount = (int) ($rxWithoutDoctorByBranch[$b->id] ?? 0);
+                if ($rxCount > 0) {
+                    $alerts[] = [
+                        'id' => 'rx-'.$b->id,
+                        'type' => 'rx',
+                        'severity' => 'medium',
+                        'branch_id' => $b->id,
+                        'branch_name' => $b->name,
+                        'title' => "{$rxCount} Rx bill".($rxCount > 1 ? 's' : '').' sold without a doctor note',
+                        'subtitle' => $b->name,
+                    ];
+                }
+
+                // Determine Branch Status Pill ('normal' | 'long_queue' | 'check')
+                if ($bCashDiff < -0.01 || $bDelayedCount > 0 || ($bQueueCount > 0 && $bOpenCounters === 0)) {
+                    $statusKey = 'check';
+                    $statusLabel = 'Check';
+                } elseif ($bQueueCount >= 4) {
+                    $statusKey = 'long_queue';
+                    $statusLabel = 'Long queue';
+                } else {
+                    $statusKey = 'normal';
+                    $statusLabel = 'Normal';
+                }
+
+                $branchRows[] = [
+                    'id' => $b->id,
+                    'code' => $b->code,
+                    'name' => $b->name,
+                    'counters_open' => $bOpenCounters,
+                    'counters_total' => $bTotalCounters,
+                    'sales' => round($bSales, 2),
+                    'bills' => $bBills,
+                    'queue' => $bQueueCount,
+                    'cash_diff' => round($bCashDiff, 2),
+                    'status' => $statusKey,
+                    'status_label' => $statusLabel,
+                ];
+            }
+
+            // Sort alerts so 'high' severity comes first
+            usort($alerts, fn ($a, $b) => ($a['severity'] === 'high' ? 0 : 1) <=> ($b['severity'] === 'high' ? 0 : 1));
+            $actionNeededCount = collect($alerts)->where('severity', 'high')->count();
+
+            // Sales comparison %
+            if ($prevSalesTotal > 0) {
+                $pctDiff = round((($totalSales - $prevSalesTotal) / $prevSalesTotal) * 100);
+                $sign = $pctDiff > 0 ? '+' : '';
+                $salesSubtitle = "{$sign}{$pctDiff}% {$comparisonLabel}";
+                $salesTrend = $pctDiff > 0 ? 'up' : ($pctDiff < 0 ? 'down' : 'flat');
+            } else {
+                $salesSubtitle = $totalSales > 0 ? "New sales {$comparisonLabel}" : "No sales {$comparisonLabel}";
+                $salesTrend = 'flat';
+            }
+
+            $maxBranchSales = max(1.0, (float) (collect($branchRows)->max('sales') ?: 1));
+            $salesByBranch = collect($branchRows)
+                ->sortByDesc('sales')
+                ->values()
+                ->map(fn ($r) => [
+                    'id' => $r['id'],
+                    'name' => $r['name'],
+                    'sales' => $r['sales'],
+                    'status' => $r['status'],
+                    'percent' => $r['sales'] > 0 ? max(6, (int) round(($r['sales'] / $maxBranchSales) * 100)) : 0,
+                ])
+                ->all();
+
+            $totalBranchesCount = $allBranches->count();
+            $totalCountersCount = $allCounters->count();
+            $offlineCounters = $totalBreakCounters + $totalClosedCounters;
+
+            $allBranchesOverview = [
+                'period_label' => match ($period) {
+                    'yesterday' => "Yesterday's sales",
+                    '7d' => '7-day sales',
+                    'month' => "This month's sales",
+                    default => "Today's sales",
+                },
+                'kpis' => [
+                    'branches_open' => $openBranchesCount,
+                    'branches_total' => $totalBranchesCount,
+                    'branches_subtitle' => $totalBranchesCount > 0 && $openBranchesCount === $totalBranchesCount
+                        ? 'All online'
+                        : ($totalBranchesCount - $openBranchesCount).' with no open counter',
+                    'counters_open' => $totalOpenCounters,
+                    'counters_total' => $totalCountersCount,
+                    'counters_subtitle' => $offlineCounters === 0
+                        ? 'All open'
+                        : ($totalBreakCounters > 0
+                            ? "{$totalBreakCounters} on break · {$totalClosedCounters} closed"
+                            : "{$totalClosedCounters} closed"),
+                    'sales_total' => round($totalSales, 2),
+                    'sales_subtitle' => $salesSubtitle,
+                    'sales_trend' => $salesTrend,
+                    'bills_count' => $totalBills,
+                    'bills_avg' => $totalBills > 0 ? round($totalSales / $totalBills) : 0,
+                    'cash_diff' => round($totalCashDiff, 2),
+                    'cash_diff_branches' => count($cashDiffBranchIds),
+                    'alerts_total' => count($alerts),
+                    'alerts_action_needed' => $actionNeededCount,
+                ],
+                'branch_rows' => $branchRows,
+                'sales_by_branch' => $salesByBranch,
+                'alerts' => $alerts,
+            ];
+        }
+
+        // Single-branch Counter & Queue detail (for drilldown or branch manager)
+        $targetBranch = $selectedBranch ?? $tenantContext->branch();
+        $counters = collect();
+        $unassignedOrders = collect();
+
+        if ($selectedBranchId !== 'all' && $targetBranch) {
+            $counters = Counter::query()
+                ->where('branch_id', $targetBranch->id)
+                ->where('is_active', true)
+                ->orderBy('code')
+                ->with([
+                    'currentUser:id,name',
+                    'currentSession:id,counter_id,user_id,status,shift,opened_at,total_sales_amount,total_transactions',
+                    'activeQueue' => fn ($q) => $q
+                        ->with(['salesman:id,name', 'customer:id,name'])
+                        ->withCount('items')
+                        ->orderByRaw("CASE WHEN order_status = 'processing' THEN 0 ELSE 1 END")
+                        ->orderBy('assigned_at')
+                        ->orderBy('id'),
+                ])
+                ->get()
+                ->map(function (Counter $c) use ($now) {
+                    $mappedOrders = $c->activeQueue->map(function (Sale $s) use ($now, $c) {
+                        $since = $s->assigned_at ?? $s->created_at ?? $now;
+                        $waitMins = (int) max(0, floor($since->diffInSeconds($now, false) / 60));
+
+                        return [
+                            'id' => $s->id,
+                            'order_number' => $s->order_number,
+                            'customer_name' => $s->customer?->name ?? 'Walk-in Customer',
+                            'salesman_name' => $s->salesman?->name,
+                            'total_amount' => (float) $s->total_amount,
+                            'order_status' => $s->order_status,
+                            'assigned_at' => $since->format('h:i A'),
+                            'waiting_minutes' => $waitMins,
+                            'is_delayed' => $waitMins >= 5,
+                            'requires_verification' => (bool) $s->requires_verification,
+                            'verification_status' => $s->verification_status,
+                            'items_count' => (int) ($s->items_count ?? 0),
+                            'counter_id' => $c->id,
+                            'counter_code' => $c->code,
+                            'counter_name' => $c->name,
+                        ];
+                    })->values();
+
+                    return [
+                        'id' => $c->id,
+                        'code' => $c->code,
+                        'name' => $c->name,
+                        'type' => $c->type,
+                        'zone' => $c->zone,
+                        'location' => $c->location,
+                        'status' => $c->status,
+                        'break_reason' => $c->current_break_reason,
+                        'max_queue_capacity' => (int) ($c->max_queue_capacity ?: 20),
+                        'auto_assignment_enabled' => (bool) $c->auto_assignment_enabled,
+                        'current_cashier' => $c->currentUser?->name,
+                        'current_shift' => $c->currentSession?->shift,
+                        'shift_opened_at' => $c->currentSession?->opened_at?->format('h:i A'),
+                        'completed_bills' => (int) ($c->currentSession?->total_transactions ?? 0),
+                        'shift_sales' => (float) ($c->currentSession?->total_sales_amount ?? 0),
+                        'queue_count' => $mappedOrders->count(),
+                        'delayed_count' => $mappedOrders->where('is_delayed', true)->count(),
+                        'max_wait_minutes' => (int) ($mappedOrders->max('waiting_minutes') ?? 0),
+                        'active_orders' => $mappedOrders,
+                    ];
+                });
+
+            $unassignedOrders = Sale::query()
+                ->where('branch_id', $targetBranch->id)
+                ->where('order_status', 'unassigned')
+                ->with(['salesman:id,name', 'customer:id,name'])
+                ->withCount('items')
+                ->oldest()
+                ->get()
+                ->map(function (Sale $s) use ($now) {
+                    $since = $s->created_at ?? $now;
+                    $waitMins = (int) max(0, floor($since->diffInSeconds($now, false) / 60));
+
+                    return [
+                        'id' => $s->id,
+                        'order_number' => $s->order_number,
+                        'customer_name' => $s->customer?->name ?? 'Walk-in Customer',
+                        'salesman_name' => $s->salesman?->name,
+                        'total_amount' => (float) $s->total_amount,
+                        'created_at' => $since->format('h:i A'),
+                        'waiting_minutes' => $waitMins,
+                        'is_delayed' => $waitMins >= 5,
+                        'items_count' => (int) ($s->items_count ?? 0),
+                    ];
+                });
+        }
 
         return Inertia::render('Counters/Monitoring', [
+            'canViewAllBranches' => $canViewAllBranches,
+            'selectedBranchId' => $selectedBranchId,
+            'period' => $period,
+            'branchesList' => $allBranches->map(fn ($b) => [
+                'id' => $b->id,
+                'code' => $b->code,
+                'name' => $b->name,
+            ])->values(),
+            'allBranchesOverview' => $allBranchesOverview,
             'counters' => $counters,
             'unassignedOrders' => $unassignedOrders,
-            'branchName' => $branch?->name,
+            'branchName' => $targetBranch?->name,
             'currency' => $tenant->currency_code ?? 'BDT',
+            'syncedAt' => $now->format('h:i:s A'),
         ]);
     }
 

@@ -5,8 +5,7 @@ import {
  Camera,
  Check,
  Clock,
- Maximize2,
- Minimize2,
+ FileUp,
  Minus,
  Pause,
  Plus,
@@ -22,12 +21,17 @@ import {
  BarcodeCameraModal,
  BarcodeScanFeedback,
 } from '@/Components/BarcodeCameraModal';
+import {
+ DocumentScanApplyPayload,
+ DocumentScanModal,
+} from '@/Components/DocumentScanModal';
 import { BarcodeSvg } from '@/Components/BarcodeSvg';
 import { Button } from '@/Components/ui/Button';
 import { Input } from '@/Components/ui/Input';
 import { AnimatedSearchInput } from '@/Components/ui/AnimatedSearchInput';
 import { Select } from '@/Components/ui/Select';
 import { StatusDot } from '@/Components/ui/StatusDot';
+import { TableScrollContainer } from '@/Components/ui/TableScrollContainer';
 import { PosReceiptData, SharedPageProps } from '@/types';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import PosReceiptModal from './components/PosReceiptModal';
@@ -196,16 +200,6 @@ export default function PosIndex({
  const currencySymbol = getCurrencySymbol(currency);
 
  const [openShiftOpen, setOpenShiftOpen] = useState(false);
- const [focusMode, setFocusMode] = useState<boolean>(() =>
- typeof window !== 'undefined' && window.localStorage.getItem('pos.focusMode') === '1'
- );
- const toggleFocusMode = () => {
- setFocusMode((prev) => {
- const next = !prev;
- window.localStorage.setItem('pos.focusMode', next ? '1' : '0');
- return next;
- });
- };
  const [takeBreakOpen, setTakeBreakOpen] = useState(false);
  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 
@@ -234,6 +228,7 @@ export default function PosIndex({
  const [discount, setDiscount] = useState('0');
  const [processing, setProcessing] = useState(false);
  const [cameraOpen, setCameraOpen] = useState(false);
+ const [pdfScanOpen, setPdfScanOpen] = useState(false);
  const [scanStatus, setScanStatus] = useState<BarcodeScanFeedback | null>(
  null
  );
@@ -705,7 +700,7 @@ export default function PosIndex({
  <AppLayout
  title="Point of Sale"
  subtitle={`${branchName ?? 'Active Branch'} · Compact list terminal & FEFO checkout`}
- focusMode={focusMode}
+ focusModeKey="pos"
  >
  {/* Break Lock Screen Overlay */}
  {activeCounter && activeCounter.status === 'on_break' && (
@@ -721,9 +716,9 @@ export default function PosIndex({
  onCloseShift={() => setCloseShiftOpen(true)}
  />
 
- <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+ <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start lg:fs:items-stretch lg:fs:grid-rows-1 lg:fs:flex-1 lg:fs:min-h-0">
  {/* Left Catalog List */}
- <div className="lg:col-span-8 min-w-0 rounded-[2px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden">
+ <div className="lg:col-span-8 min-w-0 rounded-[2px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] overflow-hidden lg:fs:flex lg:fs:flex-col lg:fs:min-h-0">
  <div className="px-3 py-2 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-[#151921] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
  <div className="flex-1 min-w-0 flex items-center gap-1.5">
  <div className="flex-1 min-w-0">
@@ -773,17 +768,15 @@ export default function PosIndex({
  <Camera className="h-3.5 w-3.5"/>
  <span className="hidden md:inline">Camera</span>
  </Button>
- <Button
+ <button
  type="button"
- size="sm"
- variant={focusMode ? 'primary' : 'outline'}
- onClick={toggleFocusMode}
- title={focusMode ? 'Exit full screen (show header & sidebar)' : 'Full screen (hide header & sidebar)'}
- className="h-[36px] px-3 shrink-0 text-[12px] font-medium"
+ onClick={() => setPdfScanOpen(true)}
+ title="Upload PDF or Prescription to auto-detect medicines"
+ className="inline-flex items-center justify-center gap-1.5 h-[36px] px-3 shrink-0 rounded-[2px] border border-[#0E5F3F]/50 bg-[#EAF5F0] text-[#0E5F3F] hover:bg-[#0E5F3F] hover:text-white hover:border-[#0E5F3F] dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-700 dark:hover:bg-[#0E5F3F] dark:hover:text-white text-[12px] font-semibold transition-colors cursor-pointer"
  >
- {focusMode ? <Minimize2 className="h-3.5 w-3.5"/> : <Maximize2 className="h-3.5 w-3.5"/>}
- <span className="hidden md:inline">{focusMode ? 'Exit Full' : 'Full Screen'}</span>
- </Button>
+ <FileUp className="h-3.5 w-3.5"/>
+ <span className="hidden sm:inline">Scan PDF</span>
+ </button>
  </div>
 
  <div className="flex items-center justify-between sm:justify-end gap-1.5 shrink-0">
@@ -841,53 +834,32 @@ export default function PosIndex({
  </div>
  )}
 
- <div className="overflow-x-auto">
- <table className="w-full text-left border-collapse">
- <thead>
- <tr className="bg-slate-50/80 dark:bg-[#151921] border-b border-slate-200/90 dark:border-slate-800 text-[9.5px] font-bold tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap select-none">
- <th className="px-1.5 py-1 w-[52px]">SKU</th>
- <th className="hidden sm:table-cell px-1 py-1 w-[48px]">Barcode</th>
- <th className="px-1.5 py-1">Medicine</th>
- <th className="hidden xl:table-cell px-1.5 py-1 w-[100px] 2xl:w-[130px]">Generic</th>
- <th className="px-1 py-1 text-right w-[56px]">
+ <TableScrollContainer
+ className={`lg:fs:flex-1 lg:fs:min-h-0 lg:fs:overflow-y-auto ${
+ filteredMedicines.length === 0 ? 'lg:fs:flex lg:fs:flex-col' : ''
+ }`}
+ >
+ <table className="w-full min-w-[640px] text-left border-collapse shrink-0">
+ <thead className="sticky top-0 z-10 bg-[#F8FAFC] dark:bg-[#161a22]">
+ <tr className="bg-[#F8FAFC] dark:bg-[#161a22] border-b border-slate-200 dark:border-slate-800 font-sans text-[12.5px] xl:text-[13px] font-semibold text-[#1e293b] dark:text-slate-100 whitespace-nowrap select-none">
+ <th className="px-3 py-2.5 h-[38px] w-[82px]">SKU</th>
+ <th className="hidden sm:table-cell px-2.5 py-2.5 h-[38px] w-[76px]">Barcode</th>
+ <th className="px-3 py-2.5 h-[38px]">Medicine</th>
+ <th className="hidden xl:table-cell px-3 py-2.5 h-[38px] w-[140px] 2xl:w-[180px]">Generic</th>
+ <th className="px-2.5 py-2.5 h-[38px] text-right w-[82px]">
  Stock
  </th>
- <th className="px-1 py-1 text-right w-[62px]">
+ <th className="px-2.5 py-2.5 h-[38px] text-right w-[90px]">
  Price
  </th>
- <th className="px-1.5 py-1 text-right w-[60px]">
+ <th className="px-3 py-2.5 h-[38px] text-right w-[88px]">
  Cart
  </th>
  </tr>
  </thead>
- <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800">
- {filteredMedicines.length === 0 ? (
- <tr>
- <td
- colSpan={7}
- className="px-4 py-14 text-center text-xs text-slate-400"
- >
- {!query.trim() ? (
- <div className="flex flex-col items-center justify-center gap-2 py-4">
- <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center text-slate-400">
- <ScanBarcode className="h-5 w-5 text-[#0E5F3F]"/>
- </div>
- <div>
- <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
- ওষুধের নাম, জেনেরিক বা বারকোড দিয়ে সার্চ করুন
- </p>
- <p className="text-[11px] text-slate-400 mt-0.5">
- Search by medicine name, generic, barcode, or SKU (F2 to focus)
- </p>
- </div>
- </div>
- ) : (
- <span>No medicines match"{query}".</span>
- )}
- </td>
- </tr>
- ) : (
- filteredMedicines.map((med) => {
+ {filteredMedicines.length > 0 && (
+ <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800 font-sans">
+ {filteredMedicines.map((med) => {
  const outOfStock =
  med.available_stock <= 0;
  const cartItem = cartById.get(med.id);
@@ -910,49 +882,49 @@ export default function PosIndex({
  : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
  }`}
  >
- <td className="px-1.5 py-1 tabular-nums text-[9.5px] font-bold text-[#0E5F3F] whitespace-nowrap">
+ <td className="px-3 py-2 tabular-nums text-[12px] font-semibold text-[#0E5F3F] whitespace-nowrap">
  {med.sku}
  </td>
- <td className="hidden sm:table-cell px-1 py-1 whitespace-nowrap">
+ <td className="hidden sm:table-cell px-2.5 py-2 whitespace-nowrap">
  <BarcodeSvg
  value={med.barcode}
  compact
- height={14}
- barWidth={0.65}
- className="[&>svg]:h-[14px] [&>svg]:max-w-[44px]"
+ height={18}
+ barWidth={0.7}
+ className="[&>svg]:h-[18px] [&>svg]:max-w-[58px]"
  />
  </td>
- <td className="px-1.5 py-1 text-[10px] min-w-0">
- <div className="flex items-baseline gap-1 min-w-0">
+ <td className="px-3 py-2 text-[13px] min-w-0">
+ <div className="flex items-baseline gap-1.5 min-w-0">
  <span
- className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[130px] xl:max-w-[155px] 2xl:max-w-[210px]"
+ className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[160px] xl:max-w-[200px] 2xl:max-w-[260px]"
  title={med.name}
  >
  {med.name}
  </span>
  {med.strength && (
- <span className="text-[8.5px] text-slate-400 shrink-0">
+ <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
  {med.strength}
  </span>
  )}
  {med.requires_prescription && (
- <span className="text-[8.5px] font-bold text-[#0E5F3F] shrink-0">
+ <span className="text-[11px] font-bold text-[#0E5F3F] shrink-0">
  Rx
  </span>
  )}
  </div>
  {med.generic_name && (
  <div
- className="xl:hidden text-[8.5px] text-slate-400 truncate max-w-[130px]"
+ className="xl:hidden text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]"
  title={med.generic_name}
  >
  {med.generic_name}
  </div>
  )}
  </td>
- <td className="hidden xl:table-cell px-1.5 py-1 text-[9.5px] text-slate-500 dark:text-slate-400">
+ <td className="hidden xl:table-cell px-3 py-2 text-[12px] text-slate-600 dark:text-slate-400">
  <span
- className="block truncate max-w-[95px] 2xl:max-w-[125px]"
+ className="block truncate max-w-[130px] 2xl:max-w-[170px]"
  title={
  med.generic_name ||
  med.dosage_form
@@ -962,7 +934,7 @@ export default function PosIndex({
  med.dosage_form}
  </span>
  </td>
- <td className="px-1 py-1 text-right text-[9.5px] whitespace-nowrap">
+ <td className="px-2.5 py-2 text-right text-[12px] whitespace-nowrap">
  {outOfStock ? (
  <StatusDot variant="rose">
  Out
@@ -979,11 +951,11 @@ export default function PosIndex({
  {
  med.available_stock
  }{' '}
- <span className="text-[8.5px] font-normal text-slate-400">{med.unit}</span>
+ <span className="text-[11px] font-normal text-slate-400">{med.unit}</span>
  </span>
  )}
  </td>
- <td className="px-1 py-1 text-right text-[10px] font-bold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap leading-tight">
+ <td className="px-2.5 py-2 text-right text-[12.5px] font-bold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap leading-snug">
  <div>
  {formatCurrency(
  med.selling_price,
@@ -992,7 +964,7 @@ export default function PosIndex({
  </div>
  {med.units_per_box > 1 &&
  med.box_selling_price && (
- <div className="text-[8px] font-normal text-slate-400">
+ <div className="text-[10.5px] font-normal text-slate-400">
  Box:{' '}
  {formatCurrency(
  med.box_selling_price,
@@ -1001,9 +973,9 @@ export default function PosIndex({
  </div>
  )}
  </td>
- <td className="px-1.5 py-1 text-right whitespace-nowrap">
+ <td className="px-3 py-2 text-right whitespace-nowrap">
  {cartQty > 0 ? (
- <div className="inline-flex items-center gap-0.5">
+ <div className="inline-flex items-center gap-1">
  <button
  type="button"
  onClick={() =>
@@ -1013,11 +985,11 @@ export default function PosIndex({
  )
  }
  aria-label={`Decrease ${med.name} quantity`}
- className="h-4.5 w-4.5 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#0E5F3F]/60 cursor-pointer"
+ className="h-6 w-6 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#0E5F3F]/60 cursor-pointer"
  >
- <Minus className="h-2 w-2"/>
+ <Minus className="h-3 w-3"/>
  </button>
- <span className="w-4 text-center text-[9.5px] font-bold tabular-nums text-[#0E5F3F]">
+ <span className="w-5 text-center text-[12px] font-bold tabular-nums text-[#0E5F3F]">
  {cartQty}
  </span>
  <button
@@ -1033,9 +1005,9 @@ export default function PosIndex({
  )
  }
  aria-label={`Increase ${med.name} quantity`}
- className="h-4.5 w-4.5 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#0E5F3F]/60 disabled:opacity-40 cursor-pointer"
+ className="h-6 w-6 rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e2329] flex items-center justify-center hover:border-[#0E5F3F]/60 disabled:opacity-40 cursor-pointer"
  >
- <Plus className="h-2 w-2"/>
+ <Plus className="h-3 w-3"/>
  </button>
  </div>
  ) : (
@@ -1053,24 +1025,54 @@ export default function PosIndex({
  onClick={() =>
  addToCart(med)
  }
- className="h-5 px-1.5 text-[9.5px] leading-none"
+ className="h-7 px-2.5 text-[11.5px] font-semibold leading-none"
  >
- <Plus className="h-2 w-2 mr-0.5"/>
+ <Plus className="h-3 w-3 mr-0.5"/>
  Add
  </Button>
  )}
  </td>
  </tr>
  );
- })
- )}
+ })}
  </tbody>
+ )}
  </table>
+
+ {filteredMedicines.length === 0 && (
+ <div className="px-4 py-14 text-center text-xs text-slate-400 lg:fs:flex-1 lg:fs:flex lg:fs:items-center lg:fs:justify-center">
+ {!query.trim() ? (
+ <div className="flex flex-col items-center justify-center gap-2.5 py-4">
+ <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center text-slate-400">
+ <ScanBarcode className="h-5 w-5 text-[#0E5F3F]"/>
  </div>
+ <div>
+ <p className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
+ ওষুধের নাম, জেনেরিক বা বারকোড দিয়ে সার্চ করুন
+ </p>
+ <p className="text-[12px] text-slate-400 mt-0.5">
+ Search by medicine name, generic, barcode, or SKU (F2 to focus)
+ </p>
+ </div>
+ <button
+ type="button"
+ onClick={() => setPdfScanOpen(true)}
+ className="mt-0.5 inline-flex items-center gap-1 text-[12px] font-semibold text-[#0E5F3F] dark:text-emerald-400 hover:text-[#0A4D33] dark:hover:text-emerald-300 underline decoration-[#0E5F3F]/45 hover:decoration-[#0E5F3F] underline-offset-4 transition-colors cursor-pointer"
+ >
+ <FileUp className="h-3.5 w-3.5"/>
+ <span>PDF / Prescription আপলোড করে অটো-অ্যাড করুন</span>
+ </button>
+ </div>
+ ) : (
+ <span className="text-[13px]">No medicines match "{query}".</span>
+ )}
+ </div>
+ )}
+ </TableScrollContainer>
  </div>
 
  {/* Right Order Register */}
- <div className="lg:col-span-4 min-w-0 rounded-[2px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] sticky top-16 overflow-hidden">
+ <div className="lg:col-span-4 min-w-0 rounded-[2px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#12161c] sticky top-16 overflow-hidden lg:fs:static lg:fs:flex lg:fs:flex-col lg:fs:min-h-0 lg:fs:overflow-y-auto">
  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-[#151921]">
  <div className="flex items-center gap-2">
  <ShoppingCart className="h-4 w-4 text-[#0E5F3F]"/>
@@ -1550,11 +1552,20 @@ export default function PosIndex({
  </div>
  </div>
 
- <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+ <div className={`max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 lg:fs:max-h-none lg:fs:flex-1 lg:fs:min-h-32 ${cart.length === 0 ? 'lg:fs:flex lg:fs:flex-col lg:fs:justify-center' : ''}`}>
  {cart.length === 0 ? (
- <div className="px-4 py-8 text-center text-xs text-slate-400">
- Select medicines from the list to add items
- to this order.
+ <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-2.5">
+ <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center">
+ <ShoppingCart className="h-5 w-5 text-[#0E5F3F]"/>
+ </div>
+ <div>
+ <p className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
+ কার্টে কোনো ওষুধ যোগ করা হয়নি
+ </p>
+ <p className="text-[11.5px] text-slate-400 mt-0.5">
+ Select medicines from the list on the left to add items to this bill.
+ </p>
+ </div>
  </div>
  ) : (
  cart.map(({ medicine, qty, saleUnit }) => {
@@ -1855,6 +1866,67 @@ export default function PosIndex({
  />
  </>
  )}
+ <DocumentScanModal
+ open={pdfScanOpen}
+ onClose={() => setPdfScanOpen(false)}
+ catalogMedicines={medicines}
+ currency={currency}
+ mode="pos"
+ onApply={(payload: DocumentScanApplyPayload) => {
+ setCart((prev) => {
+ const updated = [...prev];
+ for (const incoming of payload.items) {
+ const med: PosMedicine = incoming.medicine;
+ const maxQty = getMaxSelectableQty(med, incoming.saleUnit);
+ if (maxQty <= 0) continue;
+
+ const existingIdx = updated.findIndex(
+ (c) => c.medicine.id === med.id
+ );
+
+ if (existingIdx > -1) {
+ const cur = updated[existingIdx];
+ const curMax = getMaxSelectableQty(med, cur.saleUnit);
+ updated[existingIdx] = {
+ ...cur,
+ qty: Math.min(curMax, cur.qty + incoming.quantity),
+ };
+ } else {
+ updated.push({
+ medicine: med,
+ qty: Math.min(maxQty, incoming.quantity),
+ saleUnit: incoming.saleUnit,
+ });
+ }
+ }
+ return updated;
+ });
+
+ if (payload.attachFile) {
+ if (payload.extracted.doctor_name && !doctorName) {
+ setDoctorName(payload.extracted.doctor_name);
+ setShowRxFields(true);
+ }
+ if (payload.extracted.notes && !prescriptionNotes) {
+ setPrescriptionNotes(payload.extracted.notes);
+ setShowRxFields(true);
+ }
+ if (
+ !customerId &&
+ payload.extracted.patient_name &&
+ (!customerName || customerName === 'Walk-in Customer')
+ ) {
+ setCustomerName(payload.extracted.patient_name);
+ }
+ }
+
+ setScanStatus({
+ ok: true,
+ tone: 'success',
+ message: `PDF থেকে ${payload.items.length} টি ওষুধ বিলে যোগ করা হয়েছে`,
+ });
+ }}
+ />
  </AppLayout>
  );
 }

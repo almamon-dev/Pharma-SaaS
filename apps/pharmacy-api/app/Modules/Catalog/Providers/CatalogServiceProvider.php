@@ -24,7 +24,6 @@ final class CatalogServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                SeedCatalogLoadTestCommand::class,
                 ImportOnlineBangladeshMedicinesCommand::class,
             ]);
         }

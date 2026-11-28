@@ -135,11 +135,12 @@ class AuthenticatedSessionController extends Controller
 
         if ($email === '') {
             $email = match ($role) {
-                'pharmacist' => 'pharmacist@pharmacore.test',
-                'cashier' => 'cashier@pharmacore.test',
-                'salesman' => 'salesman@pharmacore.test',
-                'inventory_clerk', 'clerk' => 'clerk@pharmacore.test',
+                'co_admin', 'coadmin', 'operations_admin' => 'coadmin@pharmacore.test',
                 'manager' => 'manager@pharmacore.test',
+                'pharmacist' => 'pharmacist@pharmacore.test',
+                'salesman' => 'salesman@pharmacore.test',
+                'cashier' => 'cashier@pharmacore.test',
+                'inventory_clerk', 'clerk' => 'clerk@pharmacore.test',
                 default => 'admin@pharmacore.test',
             };
         }
@@ -169,12 +170,22 @@ class AuthenticatedSessionController extends Controller
             ?? Tenant::find(1);
 
         if ($tenant) {
-            $branch = Branch::withoutGlobalScope(TenantScope::class)
-                ->where('tenant_id', $tenant->id)
-                ->where('is_active', true)
-                ->orderByDesc('is_head_office')
-                ->orderBy('id')
-                ->first();
+            $pivotBranchId = $user->tenants()
+                ->where('tenants.id', $tenant->id)
+                ->first()?->pivot?->branch_id;
+
+            $branch = ($pivotBranchId
+                ? Branch::withoutGlobalScope(TenantScope::class)
+                    ->where('tenant_id', $tenant->id)
+                    ->where('is_active', true)
+                    ->find($pivotBranchId)
+                : null)
+                ?? Branch::withoutGlobalScope(TenantScope::class)
+                    ->where('tenant_id', $tenant->id)
+                    ->where('is_active', true)
+                    ->orderByDesc('is_head_office')
+                    ->orderBy('id')
+                    ->first();
 
             session([
                 'active_tenant_id' => $tenant->id,
@@ -184,17 +195,18 @@ class AuthenticatedSessionController extends Controller
 
         $targetRoute = $request->input('target');
         if (! $targetRoute) {
-            if ($role === 'cashier' && ! $request->has('email')) {
-                $targetRoute = 'pos';
-            } elseif ($role === 'salesman') {
-                $targetRoute = 'sales_orders';
-            } else {
-                $targetRoute = 'dashboard';
+            if ($role === 'cashier' || $user->email === 'cashier@pharmacore.test') {
+                return redirect()->route('cashier.dashboard');
             }
+            $targetRoute = 'dashboard';
         }
 
         if ($targetRoute === 'sales_orders') {
             return redirect()->route('sales.orders.create');
+        }
+
+        if ($targetRoute === 'cashier') {
+            return redirect()->route('cashier.dashboard');
         }
 
         return redirect()->route($targetRoute === 'pos' ? 'pos.index' : 'dashboard');

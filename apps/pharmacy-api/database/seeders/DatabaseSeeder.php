@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             DemoPharmacySeeder::class,
             CatalogModuleSeeder::class,
             RbacPermissionCatalogSeeder::class,
+            CrmDemoSeeder::class,
         ]);
 
         \App\Models\DemoRole::seedDefaults();

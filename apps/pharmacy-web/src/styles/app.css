@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
+/* Active inside AppLayout full-screen (focus) mode */
+@custom-variant fs (&:where([data-focus-mode="true"] *));
 
 @source '../../../pharmacy-api/vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../../pharmacy-api/storage/framework/views/*.php';

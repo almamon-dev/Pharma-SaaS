@@ -70,9 +70,18 @@ class TeamController extends Controller
             ->get(['key', 'name', 'module', 'action', 'description', 'is_sensitive', 'requires_feature', 'supports_scope'])
             ->groupBy('module');
 
+        $primaryRole = $tenantContext->role() ?? 'staff';
+        $isCoAdmin = ! $isOwner && in_array($primaryRole, ['co_admin', 'admin'], true);
+        $isManagerOnly = ! $isOwner && ! $isCoAdmin && $primaryRole === 'manager';
+        $managerBranchId = $isManagerOnly ? $tenantContext->branchId() : null;
+
         $users = DB::table('tenant_user')
             ->join('users', 'users.id', '=', 'tenant_user.user_id')
             ->where('tenant_user.tenant_id', $currentTenant->id)
+            ->when($managerBranchId !== null, function ($q) use ($managerBranchId): void {
+                $q->where('tenant_user.branch_id', $managerBranchId)
+                    ->where('tenant_user.is_owner', false);
+            })
             ->orderBy('users.name')
             ->select([
                 'tenant_user.id as membership_id',
@@ -161,20 +170,22 @@ class TeamController extends Controller
             ];
         });
 
-        $activityLog = AuditLog::where('tenant_id', $currentTenant->id)
-            ->whereIn('action', [
-                'team.member_added',
-                'team.member_updated',
-                'team.role_created',
-                'team.role_updated',
-                'team.role_deleted',
-                'team.override_created',
-                'team.override_deleted',
-                'team.pin_updated',
-                'team.password_reset',
-            ])
-            ->latest()
-            ->limit(30)
+        $activityLogQuery = AuditLog::where('tenant_id', $currentTenant->id)
+            ->with('user:id,name');
+
+        if ($managerBranchId !== null) {
+            $branchUserIds = $users->pluck('user_id')->all();
+            $activityLogQuery->where(function ($q) use ($branchUserIds): void {
+                $q->whereIn('user_id', $branchUserIds);
+            });
+        } elseif ($isCoAdmin) {
+            $activityLogQuery->where('action', 'NOT LIKE', 'subscription.%')
+                ->where('action', 'NOT LIKE', 'billing.%');
+        }
+
+        $activityLog = $activityLogQuery
+            ->latest('id')
+            ->limit(60)
             ->get();
 
         return Inertia::render('Team/Index', [

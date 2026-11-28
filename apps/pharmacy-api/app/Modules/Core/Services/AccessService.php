@@ -168,7 +168,7 @@ class AccessService
                     return true;
                 }
 
-                if ($membership->branch_id === null && in_array($membership->role, ['admin', 'manager'], true)) {
+                if ($membership->branch_id === null && in_array($membership->role, ['admin', 'co_admin', 'manager'], true)) {
                     $hasExplicitBranches = \Illuminate\Support\Facades\DB::table('user_branches')
                         ->where('user_id', $user->id)
                         ->exists();

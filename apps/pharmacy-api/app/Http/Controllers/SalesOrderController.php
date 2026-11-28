@@ -228,9 +228,14 @@ class SalesOrderController extends Controller
         $statusFilter = $request->query('status');
         $search = $request->query('search');
 
+        $canViewAllBranchOrders = $tenantContext->isOwner()
+            || (bool) $user?->isSubscriberAdmin()
+            || $tenantContext->hasRole(['admin', 'co_admin', 'manager'])
+            || $tenantContext->hasPermission('sales_orders.view_all');
+
         $ordersQuery = Sale::query()
             ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
-            ->where('salesman_id', $user->id)
+            ->when(! $canViewAllBranchOrders, fn ($q) => $q->where('salesman_id', $user->id))
             ->with(['counter:id,code,name', 'customer:id,name,phone', 'items.medicine:id,name,unit'])
             ->latest();
 

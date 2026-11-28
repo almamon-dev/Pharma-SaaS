@@ -698,6 +698,7 @@ export default function CashierDashboard({
  return (
  <AppLayout
  title="Cashier Station & Queue"
+ focusModeKey="cashier"
  subtitle={`${branchName ?? 'Dhanmondi 27 Care Point'} • Process incoming salesman orders, collect payments, and print invoices`}
  actions={
  <div className="flex flex-wrap items-center gap-2">
