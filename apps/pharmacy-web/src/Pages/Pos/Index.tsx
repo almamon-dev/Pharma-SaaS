@@ -5,6 +5,8 @@ import {
  Camera,
  Check,
  Clock,
+ Maximize2,
+ Minimize2,
  Minus,
  Pause,
  Plus,
@@ -194,6 +196,16 @@ export default function PosIndex({
  const currencySymbol = getCurrencySymbol(currency);
 
  const [openShiftOpen, setOpenShiftOpen] = useState(false);
+ const [focusMode, setFocusMode] = useState<boolean>(() =>
+ typeof window !== 'undefined' && window.localStorage.getItem('pos.focusMode') === '1'
+ );
+ const toggleFocusMode = () => {
+ setFocusMode((prev) => {
+ const next = !prev;
+ window.localStorage.setItem('pos.focusMode', next ? '1' : '0');
+ return next;
+ });
+ };
  const [takeBreakOpen, setTakeBreakOpen] = useState(false);
  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 
@@ -693,6 +705,7 @@ export default function PosIndex({
  <AppLayout
  title="Point of Sale"
  subtitle={`${branchName ?? 'Active Branch'} · Compact list terminal & FEFO checkout`}
+ focusMode={focusMode}
  >
  {/* Break Lock Screen Overlay */}
  {activeCounter && activeCounter.status === 'on_break' && (
@@ -759,6 +772,17 @@ export default function PosIndex({
  >
  <Camera className="h-3.5 w-3.5"/>
  <span className="hidden md:inline">Camera</span>
+ </Button>
+ <Button
+ type="button"
+ size="sm"
+ variant={focusMode ? 'primary' : 'outline'}
+ onClick={toggleFocusMode}
+ title={focusMode ? 'Exit full screen (show header & sidebar)' : 'Full screen (hide header & sidebar)'}
+ className="h-[36px] px-3 shrink-0 text-[12px] font-medium"
+ >
+ {focusMode ? <Minimize2 className="h-3.5 w-3.5"/> : <Maximize2 className="h-3.5 w-3.5"/>}
+ <span className="hidden md:inline">{focusMode ? 'Exit Full' : 'Full Screen'}</span>
  </Button>
  </div>
 

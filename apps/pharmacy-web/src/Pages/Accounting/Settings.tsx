@@ -38,7 +38,7 @@ export default function AccountingSettings({
     const [lang, toggleLang] = useAccountingLang();
     const isBn = lang === 'bn';
 
-    const [mode, setMode] = useState<'simple' | 'advanced'>(settings.mode);
+    const mode: 'simple' | 'advanced' = 'simple';
     const [fyMonth, setFyMonth] = useState(String(settings.fiscal_year_start_month));
     const [vatEnabled, setVatEnabled] = useState(settings.vat_enabled);
     const [vatRate, setVatRate] = useState(String(settings.vat_rate_percent));
@@ -95,52 +95,23 @@ export default function AccountingSettings({
                             </h1>
                             <p className="text-[11.5px] text-[#666666] dark:text-slate-400">
                                 {isBn
-                                    ? 'সিস্টেম সর্বদা ডাবল-এন্ট্রি লেজার ব্যবহার করে। Simple থেকে Advanced বা উল্টো পরিবর্তনে কোনো ডেটা হারায় না বা মাইগ্রেশন লাগে না।'
-                                    : 'The ledger is always double-entry internally. Switching Simple ↔ Advanced requires zero data migration and never deletes data.'}
+                                    ? 'সহজ আয়-ব্যয় ভিত্তিক সিঙ্গেল এন্ট্রি হিসাব।'
+                                    : 'Simple single-entry income & expense bookkeeping.'}
                             </p>
                         </div>
                     </div>
 
                     <div className="px-6 py-5 space-y-5">
-                        {/* Mode Switcher Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setMode('simple')}
-                                className={`text-left p-4 rounded-[2px] border transition-colors cursor-pointer ${
-                                    mode === 'simple'
-                                        ? 'border-[#0E5F3F] bg-[#EAF5F0]/70 dark:bg-emerald-950/25'
-                                        : 'border-[#CCCCCC] dark:border-slate-700'
-                                }`}
-                            >
-                                <div className="font-bold text-[14px] text-[#222222] dark:text-white">
-                                    {isBn ? 'সহজ মোড (Simple Mode)' : 'Simple Mode (Owner Friendly)'}
-                                </div>
-                                <p className="text-[12px] text-[#555555] dark:text-slate-400 mt-1">
-                                    {isBn
-                                        ? 'দোকান মালিকদের জন্য সহজ আয়-ব্যয় এন্ট্রি। ডেবিট/ক্রেডিট বা ব্যালেন্স শিট ছাড়াই পরিষ্কার রিপোর্ট।'
-                                        : 'Plain-language Income & Expense entry, Day Book, Cash & Bank, and Simple P&L without debit/credit jargon.'}
-                                </p>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setMode('advanced')}
-                                className={`text-left p-4 rounded-[2px] border transition-colors cursor-pointer ${
-                                    mode === 'advanced'
-                                        ? 'border-[#0E5F3F] bg-[#EAF5F0]/70 dark:bg-emerald-950/25'
-                                        : 'border-[#CCCCCC] dark:border-slate-700'
-                                }`}
-                            >
-                                <div className="font-bold text-[14px] text-[#222222] dark:text-white">
-                                    {isBn ? 'অ্যাডভান্সড মোড (ডাবল এন্ট্রি)' : 'Advanced Mode (Full Double-Entry)'}
-                                </div>
-                                <p className="text-[12px] text-[#555555] dark:text-slate-400 mt-1">
-                                    {isBn
-                                        ? 'অ্যাকাউন্ট্যান্টদের জন্য পূর্ণ চার্ট অব অ্যাকাউন্টস, ফিসকাল পিরিয়ড, জার্নাল ও ভাউচার।'
-                                        : 'Unlocks Chart of Accounts, Fiscal Period closing/reopening, Debit/Credit lines, and full accounting workspace.'}
-                                </p>
-                            </button>
+                        {/* Mode: always Simple */}
+                        <div className="p-4 rounded-[2px] border border-[#0E5F3F] bg-[#EAF5F0]/70 dark:bg-emerald-950/25">
+                            <div className="font-bold text-[14px] text-[#222222] dark:text-white">
+                                {isBn ? 'সহজ মোড (Simple Mode)' : 'Simple Mode (Owner Friendly)'}
+                            </div>
+                            <p className="text-[12px] text-[#555555] dark:text-slate-400 mt-1">
+                                {isBn
+                                    ? 'দোকান মালিকদের জন্য সহজ আয়-ব্যয় এন্ট্রি। ডেবিট/ক্রেডিট বা ব্যালেন্স শিট ছাড়াই পরিষ্কার রিপোর্ট।'
+                                    : 'Plain-language Income & Expense entry, Day Book, Cash & Bank, and Simple P&L without debit/credit jargon.'}
+                            </p>
                         </div>
 
                         <BrtaFormGrid>

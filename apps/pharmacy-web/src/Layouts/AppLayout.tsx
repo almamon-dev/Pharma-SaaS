@@ -15,6 +15,8 @@ interface AppLayoutProps {
     breadcrumbs?: PageHeaderBreadcrumb[];
     actions?: React.ReactNode;
     hidePageHeader?: boolean;
+    /** Hide sidebar, header, banners and footer for a distraction-free full-width workspace. */
+    focusMode?: boolean;
     children: React.ReactNode;
 }
 
@@ -28,6 +30,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     breadcrumbs,
     actions,
     hidePageHeader = false,
+    focusMode = false,
     children,
 }) => {
     const { auth, flash, subscription, tenant } =
@@ -79,28 +82,37 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <div className="flex h-screen bg-[#EAECE9] dark:bg-[#12161c] overflow-hidden font-sans text-[#333333] dark:text-slate-100">
             {title && <Head title={title} />}
 
-            {isSidebarOpen && (
+            {!focusMode && isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-20 lg:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
 
-            <Sidebar
-                isOpen={isSidebarOpen}
-                onClose={() => setIsSidebarOpen(false)}
-            />
+            {!focusMode && (
+                <Sidebar
+                    isOpen={isSidebarOpen}
+                    onClose={() => setIsSidebarOpen(false)}
+                />
+            )}
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Header
-                    title={title}
-                    onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-                    isProfileOpen={isProfileOpen}
-                    setIsProfileOpen={setIsProfileOpen}
-                    profileRef={profileRef}
-                />
+                {!focusMode && (
+                    <Header
+                        title={title}
+                        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+                        isProfileOpen={isProfileOpen}
+                        setIsProfileOpen={setIsProfileOpen}
+                        profileRef={profileRef}
+                    />
+                )}
 
-                <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 flex flex-col">
+                <main
+                    className={cn(
+                        'flex-1 overflow-y-auto overflow-x-hidden flex flex-col',
+                        focusMode ? 'p-2 md:p-3' : 'p-4 md:p-6'
+                    )}
+                >
                     <div className="flex-1 min-w-0 w-full">
                         {(flash?.success || flash?.error) && (
                             <div
@@ -120,7 +132,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {subscription?.banner && (
+                        {!focusMode && subscription?.banner && (
                             <div
                                 className={cn(
                                     'mb-4 rounded-[2px] border px-4 py-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs',
@@ -149,7 +161,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {isTrialing && (
+                        {!focusMode && isTrialing && (
                             <div className="mb-4 rounded-[2px] border border-[#0E5F3F]/25 dark:border-emerald-500/30 bg-[#EAF5F0] dark:bg-[#10221a] px-4 py-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[#333333] dark:text-slate-200">
                                 <div className="flex items-center gap-3">
                                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0E5F3F]/10 text-[#0E5F3F] shrink-0 font-bold text-sm">
@@ -184,7 +196,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </div>
                         )}
 
-                        {!hidePageHeader && (subtitle || actions) && (
+                        {!focusMode && !hidePageHeader && (subtitle || actions) && (
                             <PageHeader
                                 title={title}
                                 description={subtitle}
@@ -198,6 +210,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                         {children}
                     </div>
 
+                    {!focusMode && (
                     <footer className="mt-8 pt-4 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="font-semibold text-slate-500 dark:text-slate-300">
@@ -268,6 +281,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             </Link>
                         </div>
                     </footer>
+                    )}
                 </main>
             </div>
         </div>
