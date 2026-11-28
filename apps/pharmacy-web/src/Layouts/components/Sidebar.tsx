@@ -3,7 +3,6 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     BellRing,
     Boxes,
-    Briefcase,
     ClipboardCheck,
     ClipboardList,
     Contact2,
@@ -29,7 +28,6 @@ import {
     Stethoscope,
     Store,
     UserCog,
-    UserPlus,
     Users,
     Wallet,
     X,
@@ -245,65 +243,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   ]
                 : [];
 
-        const canManageHrm =
-            isSubscriberAdmin ||
-            hasPerm('branch.manage', 'user.manage') ||
-            tenant?.role === 'admin' ||
-            tenant?.role === 'manager';
-
-        const hrmEntries: SidebarEntry[] = canManageHrm
-            ? [
-                  {
-                      category: 'Branch HRM',
-                      group: 'Recruitment & Docs',
-                      icon: UserPlus,
-                      items: [
-                          {
-                              name: 'Recruitment & Interviews',
-                              href: toPath('hrm.recruitment'),
-                              active: route().current('hrm.recruitment*'),
-                          },
-                          {
-                              name: 'Document Store & Tracker',
-                              href: toPath('hrm.documents'),
-                              active: route().current('hrm.documents*'),
-                          },
-                      ],
-                  },
-                  {
-                      category: 'Branch HRM',
-                      group: 'Staff, Duty & Payroll',
-                      icon: Briefcase,
-                      items: [
-                          {
-                              name: 'Employees & Shifts',
-                              href: toPath('hrm.employees'),
-                              active: route().current('hrm.employees*'),
-                          },
-                          {
-                              name: 'Daily Attendance',
-                              href: toPath('hrm.attendance'),
-                              active: route().current('hrm.attendance*'),
-                          },
-                          {
-                              name: 'Punch Machines & Logs',
-                              href: toPath('hrm.devices'),
-                              active: route().current('hrm.devices*'),
-                          },
-                          {
-                              name: 'Leave Requests',
-                              href: toPath('hrm.leaves'),
-                              active: route().current('hrm.leaves*'),
-                          },
-                          {
-                              name: 'Monthly Payroll',
-                              href: toPath('hrm.payroll'),
-                              active: route().current('hrm.payroll*'),
-                          },
-                      ],
-                  },
-              ]
-            : [];
+        const hrmEntries: SidebarEntry[] = [];
 
         const orgItems: SidebarGroupItem['items'] = [
             ...(isSubscriberAdmin
