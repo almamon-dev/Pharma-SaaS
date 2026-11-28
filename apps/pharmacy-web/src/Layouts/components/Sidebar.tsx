@@ -1,9 +1,9 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    Activity,
-    ArrowLeftRight,
+    BellRing,
     Boxes,
+    Briefcase,
     ClipboardCheck,
     ClipboardList,
     Contact2,
@@ -11,7 +11,6 @@ import {
     FilePlus2,
     FileSpreadsheet,
     GitBranch,
-    History,
     Layers,
     LayoutDashboard,
     Lock,
@@ -29,8 +28,8 @@ import {
     Sparkles,
     Stethoscope,
     Store,
-    Truck,
     UserCog,
+    UserPlus,
     Users,
     Wallet,
     X,
@@ -174,122 +173,170 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             },
         ];
     } else {
-        const inventoryEntries: SidebarSingleItem[] = [
-            ...(hasFeature('inventory') &&
+        const inventoryEntries: SidebarEntry[] =
+            hasFeature('inventory') &&
             hasPerm('inventory.view', 'inventory.manage', 'inventory.adjust')
                 ? [
                       {
                           category: 'Inventory & Stock',
-                          name: 'Product Catalog',
-                          href: toPath('catalog.ui'),
-                          active: route().current('catalog.*'),
-                          icon: Pill,
-                      },
-                      {
-                          category: 'Inventory & Stock',
-                          name: 'Inventory & FEFO',
-                          href: toPath('inventory.index'),
-                          active: route().current('inventory.index'),
+                          group: 'Catalog & Stock',
                           icon: Package,
-                      },
-                      {
-                          category: 'Inventory & Stock',
-                          name: 'Batches & Expiry',
-                          href: hasFeature('batch_expiry')
-                              ? toPath('inventory.batches')
-                              : toPath('plans.browse'),
-                          active: route().current('inventory.batches'),
-                          icon: Boxes,
-                          locked: !hasFeature('batch_expiry'),
-                          badge:
-                              hasFeature('batch_expiry') && (tenant?.batchAlertCount ?? 0) > 0
-                                  ? tenant?.batchAlertCount
-                                  : undefined,
-                      },
-                      {
-                          category: 'Inventory & Stock',
-                          name: 'Stock Movements',
-                          href: hasFeature('batch_expiry')
-                              ? toPath('inventory.movements')
-                              : toPath('plans.browse'),
-                          active: route().current('inventory.movements'),
-                          icon: ArrowLeftRight,
-                          locked: !hasFeature('batch_expiry'),
+                          items: [
+                              {
+                                  name: 'Product Catalog',
+                                  href: toPath('catalog.ui'),
+                                  active: route().current('catalog.*'),
+                              },
+                              {
+                                  name: 'Inventory & FEFO',
+                                  href: toPath('inventory.index'),
+                                  active: route().current('inventory.index'),
+                              },
+                              {
+                                  name: 'Batches & Expiry',
+                                  href: hasFeature('batch_expiry')
+                                      ? toPath('inventory.batches')
+                                      : toPath('plans.browse'),
+                                  active: route().current('inventory.batches'),
+                                  locked: !hasFeature('batch_expiry'),
+                                  badge:
+                                      hasFeature('batch_expiry') && (tenant?.batchAlertCount ?? 0) > 0
+                                          ? tenant?.batchAlertCount
+                                          : undefined,
+                              },
+                              {
+                                  name: 'Stock Movements',
+                                  href: hasFeature('batch_expiry')
+                                      ? toPath('inventory.movements')
+                                      : toPath('plans.browse'),
+                                  active: route().current('inventory.movements'),
+                                  locked: !hasFeature('batch_expiry'),
+                              },
+                          ],
                       },
                   ]
-                : []),
-        ];
+                : [];
 
-        const crmEntries: SidebarSingleItem[] = [
-            ...(hasFeature('crm') && hasPerm('crm.view', 'crm.manage')
+        const crmEntries: SidebarEntry[] =
+            hasFeature('crm') && hasPerm('crm.view', 'crm.manage')
                 ? [
                       {
                           category: 'CRM & Partners',
-                          name: 'Customers (Patients)',
-                          href: toPath('crm.customers'),
-                          active: route().current('crm.customers*'),
+                          group: 'Patients & Partners',
                           icon: Contact2,
-                      },
-                      {
-                          category: 'CRM & Partners',
-                          name: 'Suppliers Directory',
-                          href: toPath('crm.suppliers'),
-                          active: route().current('crm.suppliers*'),
-                          icon: Truck,
+                          items: [
+                              {
+                                  name: 'Customers (Patients)',
+                                  href: toPath('crm.customers'),
+                                  active: route().current('crm.customers*'),
+                              },
+                              {
+                                  name: 'Refills & Follow-ups',
+                                  href: toPath('crm.followups'),
+                                  active: route().current('crm.followups*'),
+                              },
+                              {
+                                  name: 'Suppliers Directory',
+                                  href: toPath('crm.suppliers'),
+                                  active: route().current('crm.suppliers*'),
+                              },
+                          ],
                       },
                   ]
-                : []),
-        ];
+                : [];
 
-        const organizationEntries: SidebarEntry[] = [
+        const canManageHrm =
+            isSubscriberAdmin ||
+            hasPerm('branch.manage', 'user.manage') ||
+            tenant?.role === 'admin' ||
+            tenant?.role === 'manager';
+
+        const hrmEntries: SidebarEntry[] = canManageHrm
+            ? [
+                  {
+                      category: 'Branch HRM',
+                      group: 'Recruitment & Docs',
+                      icon: UserPlus,
+                      items: [
+                          {
+                              name: 'Recruitment & Interviews',
+                              href: toPath('hrm.recruitment'),
+                              active: route().current('hrm.recruitment*'),
+                          },
+                          {
+                              name: 'Document Store & Tracker',
+                              href: toPath('hrm.documents'),
+                              active: route().current('hrm.documents*'),
+                          },
+                      ],
+                  },
+                  {
+                      category: 'Branch HRM',
+                      group: 'Staff, Duty & Payroll',
+                      icon: Briefcase,
+                      items: [
+                          {
+                              name: 'Employees & Shifts',
+                              href: toPath('hrm.employees'),
+                              active: route().current('hrm.employees*'),
+                          },
+                          {
+                              name: 'Daily Attendance',
+                              href: toPath('hrm.attendance'),
+                              active: route().current('hrm.attendance*'),
+                          },
+                          {
+                              name: 'Punch Machines & Logs',
+                              href: toPath('hrm.devices'),
+                              active: route().current('hrm.devices*'),
+                          },
+                          {
+                              name: 'Leave Requests',
+                              href: toPath('hrm.leaves'),
+                              active: route().current('hrm.leaves*'),
+                          },
+                          {
+                              name: 'Monthly Payroll',
+                              href: toPath('hrm.payroll'),
+                              active: route().current('hrm.payroll*'),
+                          },
+                      ],
+                  },
+              ]
+            : [];
+
+        const orgItems: SidebarGroupItem['items'] = [
             ...(isSubscriberAdmin
                 ? [
                       {
-                          category: 'Organization',
                           name: 'Business Tenants',
                           href: toPath('tenants.index'),
                           active: route().current('tenants.*'),
-                          icon: Store,
                       },
                   ]
                 : []),
             ...(isSubscriberAdmin || (hasFeature('branches') && hasPerm('branches.manage', 'branch.manage'))
                 ? [
                       {
-                          category: 'Organization',
                           name: 'Branches',
                           href: toPath('branches.index'),
                           active: route().current('branches.*'),
-                          icon: GitBranch,
                       },
                   ]
                 : []),
-            ...(isSubscriberAdmin || (hasFeature('team_rbac') && hasPerm('team.manage', 'user.manage', 'role.manage'))
-                ? [
-                      {
-                          category: 'Organization',
-                          name: 'Staff Directory',
-                          href: toPath('team.index'),
-                          active: route().current('team.index') && (typeof window === 'undefined' || !window.location.search.includes('tab=')),
-                          icon: Users,
-                      },
-                      {
-                          category: 'Organization',
-                          name: 'Roles & Permissions',
-                          href: `${toPath('team.index')}?tab=matrix`,
-                          active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=matrix'),
-                          icon: ShieldCheck,
-                      },
-                      {
-                          category: 'Organization',
-                          name: 'Activity & Audit Log',
-                          href: `${toPath('team.index')}?tab=activity`,
-                          active: route().current('team.*') && typeof window !== 'undefined' && window.location.search.includes('tab=activity'),
-                          icon: History,
-                      },
-                  ]
-                : []),
+
         ];
+
+        const organizationEntries: SidebarEntry[] = orgItems.length
+            ? [
+                  {
+                      category: 'Organization',
+                      group: 'Workspace & Team',
+                      icon: GitBranch,
+                      items: orgItems,
+                  },
+              ]
+            : [];
 
         const canManageCounters = isSubscriberAdmin || hasPerm('branch.manage') || tenant?.role === 'admin' || tenant?.role === 'manager';
         const isSalesmanOnly = tenant?.role === 'salesman' && !isSubscriberAdmin && !canManageCounters;
@@ -402,6 +449,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 },
                 {
                     category: 'Main Menu',
+                    name: 'Refills & Follow-ups',
+                    href: toPath('crm.followups'),
+                    active: route().current('crm.followups*'),
+                    icon: BellRing,
+                },
+                {
+                    category: 'Main Menu',
                     name: 'Collections & Dues',
                     href: toPath('sales.collections.index'),
                     active: route().current('sales.collections.*'),
@@ -441,105 +495,104 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             ...(hasFeature('pos') && (hasPerm('sales_orders.create', 'sales_orders.view_own') || tenant?.role === 'salesman' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
                 ? [
                       {
-                          category: 'Sales',
-                          name: 'New Sales Order',
-                          href: toPath('sales.orders.create'),
-                          active: route().current('sales.orders.create'),
+                          category: 'Sales & Cashier',
+                          group: 'Sales Orders',
                           icon: FilePlus2,
-                      },
-                      {
-                          category: 'Sales',
-                          name: 'My Orders & Tracking',
-                          href: toPath('sales.orders.my-orders'),
-                          active: route().current('sales.orders.my-orders'),
-                          icon: ClipboardList,
-                      },
-                      {
-                          category: 'Sales',
-                          name: 'Collections & Dues',
-                          href: toPath('sales.collections.index'),
-                          active: route().current('sales.collections.*'),
-                          icon: Wallet,
-                      },
-                      {
-                          category: 'Sales',
-                          name: 'Returns',
-                          href: toPath('sales.returns.index'),
-                          active: route().current('sales.returns.*'),
-                          icon: RotateCcw,
-                      },
-                  ]
-                : []),
-            ...(hasFeature('pos') && (hasPerm('sales_orders.process', 'payments.receive') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
-                ? [
-                      {
-                          category: 'Cashier & POS',
-                          name: 'Cashier Station',
-                          href: toPath('cashier.dashboard'),
-                          active: route().current('cashier.dashboard'),
-                          icon: ReceiptText,
+                          items: [
+                              {
+                                  name: 'New Sales Order',
+                                  href: toPath('sales.orders.create'),
+                                  active: route().current('sales.orders.create'),
+                              },
+                              {
+                                  name: 'My Orders & Tracking',
+                                  href: toPath('sales.orders.my-orders'),
+                                  active: route().current('sales.orders.my-orders'),
+                              },
+                              {
+                                  name: 'Collections & Dues',
+                                  href: toPath('sales.collections.index'),
+                                  active: route().current('sales.collections.*'),
+                              },
+                              {
+                                  name: 'Returns',
+                                  href: toPath('sales.returns.index'),
+                                  active: route().current('sales.returns.*'),
+                              },
+                          ],
                       },
                   ]
                 : []),
-            ...(hasFeature('pos') && (hasPerm('pos.sell', 'cash_counters.view') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager')
-                ? [
-                      ...(hasPerm('pos.sell') && tenant?.role !== 'salesman'
-                          ? [
+            ...(() => {
+                if (!hasFeature('pos')) return [];
+                const cashierSubItems: SidebarGroupItem['items'] = [];
+                if (hasPerm('sales_orders.process', 'payments.receive') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager') {
+                    cashierSubItems.push({
+                        name: 'Cashier Station',
+                        href: toPath('cashier.dashboard'),
+                        active: route().current('cashier.dashboard'),
+                    });
+                }
+                if ((hasPerm('pos.sell') && tenant?.role !== 'salesman') || tenant?.role === 'cashier' || isSubscriberAdmin || tenant?.role === 'admin' || tenant?.role === 'manager') {
+                    if (hasPerm('pos.sell') && tenant?.role !== 'salesman') {
+                        cashierSubItems.push({
+                            name: 'Point of Sale (Direct)',
+                            href: toPath('pos.index'),
+                            active: route().current('pos.*'),
+                        });
+                    }
+                    if (hasPerm('cash_counters.view', 'cash_register.open') || tenant?.role === 'cashier' || canManageCounters) {
+                        if (canManageCounters) {
+                            cashierSubItems.push(
                                 {
-                                    category: 'Cashier & POS',
-                                    name: 'Point of Sale (Direct)',
-                                    href: toPath('pos.index'),
-                                    active: route().current('pos.*'),
-                                    icon: ShoppingCart,
+                                    name: 'Counter Terminals',
+                                    href: toPath('counters.index'),
+                                    active: route().current('counters.index'),
                                 },
-                            ]
-                          : []),
-                      ...(hasPerm('cash_counters.view', 'cash_register.open') || tenant?.role === 'cashier' || canManageCounters
-                          ? canManageCounters
-                              ? [
-                                    {
-                                        category: 'Cashier & POS',
-                                        name: 'Counter Terminals',
-                                        href: toPath('counters.index'),
-                                        active: route().current('counters.index'),
-                                        icon: Store,
-                                    },
-                                    {
-                                        category: 'Cashier & POS',
-                                        name: 'Live Queue Monitor',
-                                        href: toPath('counters.monitoring'),
-                                        active: route().current('counters.monitoring'),
-                                        icon: Activity,
-                                    },
-                                ]
-                              : [
-                                    {
-                                        category: 'Cashier & POS',
-                                        name: 'My Terminal Shift',
-                                        href: toPath('counters.index'),
-                                        active: route().current('counters.index'),
-                                        icon: Store,
-                                    },
-                                ]
-                          : []),
-                  ]
-                : []),
+                                {
+                                    name: 'Live Queue Monitor',
+                                    href: toPath('counters.monitoring'),
+                                    active: route().current('counters.monitoring'),
+                                }
+                            );
+                        } else {
+                            cashierSubItems.push({
+                                name: 'My Terminal Shift',
+                                href: toPath('counters.index'),
+                                active: route().current('counters.index'),
+                            });
+                        }
+                    }
+                }
+                if (!cashierSubItems.length) return [];
+                return [
+                    {
+                        category: 'Sales & Cashier',
+                        group: 'Cashier & POS',
+                        icon: ShoppingCart,
+                        items: cashierSubItems,
+                    },
+                ];
+            })(),
             ...(canManageCounters
                 ? [
                       {
                           category: 'Pharmacy Clinical',
-                          name: 'Pharmacist Dashboard',
-                          href: toPath('pharmacist.dashboard'),
-                          active: route().current('pharmacist.dashboard'),
+                          group: 'Clinical Desk',
                           icon: Stethoscope,
-                      },
-                      {
-                          category: 'Pharmacy Clinical',
-                          name: 'Prescription Queue',
-                          href: toPath('pharmacist.prescriptions'),
-                          active: route().current('pharmacist.prescriptions*'),
-                          icon: ClipboardCheck,
-                          badge: pendingRxCount,
+                          items: [
+                              {
+                                  name: 'Pharmacist Dashboard',
+                                  href: toPath('pharmacist.dashboard'),
+                                  active: route().current('pharmacist.dashboard'),
+                              },
+                              {
+                                  name: 'Prescription Queue',
+                                  href: toPath('pharmacist.prescriptions'),
+                                  active: route().current('pharmacist.prescriptions*'),
+                                  badge: pendingRxCount,
+                              },
+                          ],
                       },
                   ]
                 : []),
@@ -754,56 +807,59 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 return accountingGroups.filter((g) => g.items.length > 0);
             })(),
             ...crmEntries,
+            ...hrmEntries,
             ...organizationEntries,
             ...(isSubscriberAdmin
                 ? [
                       {
-                          category: 'Billing & Plans',
-                          name: 'Feature Access',
-                          href: toPath('features.index'),
-                          active: route().current('features.*'),
-                          icon: Sparkles,
-                      },
-                      {
-                          category: 'Billing & Plans',
-                          name: 'Feature Pricing',
-                          href: toPath('pricing.index'),
-                          active: route().current('pricing.*'),
-                          icon: Sparkles,
-                      },
-                      {
-                          category: 'Billing & Plans',
-                          name: 'Browse Plans',
-                          href: toPath('plans.index'),
-                          active: route().current('plans.*'),
-                          icon: Layers,
-                      },
-                      {
-                          category: 'Billing & Plans',
-                          name: 'Billing & Subscription',
-                          href: toPath('subscription.index'),
-                          active: route().current('subscription.*'),
+                          category: 'Billing & Settings',
+                          group: 'Plans & Billing',
                           icon: CreditCard,
-                      },
-                  ]
-                : []),
-            ...(hasPerm('settings.manage')
-                ? [
-                      {
-                          category: 'Settings & Account',
-                          name: 'Business Settings',
-                          href: toPath('settings.business'),
-                          active: route().current('settings.business*'),
-                          icon: Settings,
+                          items: [
+                              {
+                                  name: 'Feature Access',
+                                  href: toPath('features.index'),
+                                  active: route().current('features.*'),
+                              },
+                              {
+                                  name: 'Feature Pricing',
+                                  href: toPath('pricing.index'),
+                                  active: route().current('pricing.*'),
+                              },
+                              {
+                                  name: 'Browse Plans',
+                                  href: toPath('plans.index'),
+                                  active: route().current('plans.*'),
+                              },
+                              {
+                                  name: 'Billing & Subscription',
+                                  href: toPath('subscription.index'),
+                                  active: route().current('subscription.*'),
+                              },
+                          ],
                       },
                   ]
                 : []),
             {
-                category: 'Settings & Account',
-                name: 'Profile & Security',
-                href: toPath('settings.profile'),
-                active: route().current('settings.profile*'),
-                icon: UserCog,
+                category: 'Billing & Settings',
+                group: 'Account & Business',
+                icon: Settings,
+                items: [
+                    ...(hasPerm('settings.manage')
+                        ? [
+                              {
+                                  name: 'Business Settings',
+                                  href: toPath('settings.business'),
+                                  active: route().current('settings.business*'),
+                              },
+                          ]
+                        : []),
+                    {
+                        name: 'Profile & Security',
+                        href: toPath('settings.profile'),
+                        active: route().current('settings.profile*'),
+                    },
+                ],
             },
         ];
         }
